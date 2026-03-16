@@ -136,6 +136,7 @@ TrustMesh/
     ├── mvp-design.md               # 总览
     ├── data-model.md               # 数据模型
     ├── api-design.md               # API 设计
+    ├── message-protocol.md         # NATS 消息传输规范
     ├── agent-engine.md             # Agent 引擎
     ├── frontend-design.md          # 前端设计
     └── project-structure.md        # 本文件
@@ -149,28 +150,30 @@ TrustMesh/
 - docker-compose 配置 MongoDB + NATS
 - MongoDB 连接 + 集合初始化 + 索引创建
 - NATS 连接 + Publisher 封装
-- 认证中间件（JWT + Agent Key）
+- 认证中间件（JWT + NATS Agent 凭证）
+- Agent 管理基础模型与 `node_id` 唯一约束
+- Agent 心跳上报与在线状态判定
 - 前端路由 + MainLayout + Sidebar
 
-### 阶段 2：项目与任务 CRUD
+### 阶段 2：需求进入 PM
 
-- 后端 Project + Task CRUD API（含 Todo）
-- 前端项目列表 + 看板视图
-- TaskSheet 任务详情（含 TodoList）
+- 后端 Project + Conversation API
+- 用户发送需求消息前，校验项目 PM Agent 在线
+- 用户发送需求消息后，通过 NATS 通知项目 PM Agent
+- 前端项目列表 + 对话入口 + 基础看板
 
-### 阶段 3：PM Agent 与对话
+### 阶段 3：PM 创建任务
 
-- Conversation API（对话 CRUD + 消息收发）
-- PM Agent 专用 API（创建任务、管理 Todo、指派）
-- NATS 通知集成（对话消息 → PM Agent）
-- 前端 ConversationPage（对话界面 + 任务预览）
+- PM Agent 通过 NATS 发布 `task.create`
+- 后端订阅 `task.create`，写入 Task + Todos
+- 服务端按 Todo 的 assignee 发布 `todo.assigned`
 
 ### 阶段 4：Agent 执行体系
 
-- Agent 注册管理 API
-- Agent 执行 API（claim/progress/complete/fail + Todo 更新）
-- NATS 通知集成（任务指派 → Agent，任务完成 → PM Agent）
-- 前端 Agent 管理页 + 任务指派交互
+- Agent 注册管理 API（按 `node_id` 添加、编辑名称/role/描述/能力）
+- Agent 执行协议（todo.progress / todo.complete / todo.fail）
+- NATS 通知集成（Todo 指派 → Agent，执行结果 → 后端）
+- 前端 Agent 管理页 + 任务详情结果展示
 
 ### 阶段 5：活动流与打磨
 
@@ -197,28 +200,38 @@ TrustMesh/
 ### Agent 全走 NATS
 
 - Agent 与后端的所有通信统一通过 NATS，不调用 REST API
-- **Publish**：Agent 发布动作（领取、提交、回复等），后端订阅处理
+- **Publish**：PM 发布任务，执行 Agent 发布 Todo 进度/结果
 - **Subscribe**：Agent 接收通知（新任务、状态变更等），后端发布
 - **Request-Reply**：Agent 查询数据（任务详情、待办列表等），后端响应
 - REST API 只服务前端 UI
 - Agent 侧只需一个 NATS 连接，实现更简单、更解耦
 - 一切通信经过后端中转，保证数据一致性和可追溯性
+- 本节中的 `task.create`、`todo.assigned` 等均为动作简称，完整 subject 见 [message-protocol.md](./message-protocol.md)
 
 ### PM Agent 角色
 
 - 每个项目绑定一个 PM Agent，负责需求沟通 → 任务规划 → 指派分发 → 结果汇总
 - 用户不直接创建任务，而是通过与 PM Agent 对话来驱动
-- PM Agent 有独立的 API 端点和更高权限
+- PM Agent 通过 NATS 的 `task.create` 消息创建任务并拆分 Todo
 
-### 简单任务 vs 复杂任务
+### Todo 作为最小执行单元
 
-- **简单任务**：`todos` 为空数组，直接指派给一个 Agent 完成
-- **复杂任务**：`todos` 包含待办清单，Agent 按 Todo 逐项执行
-- Todo 嵌入 Task 文档，原子性更新
+- MVP 中所有任务都包含 Todo 列表
+- 简单任务用一个 Todo 表示，复杂任务用多个 Todo 表示
+- 执行 Agent 只处理 Todo，Task 状态由服务端聚合
 
-### 多态指派
+### 指派策略
 
-使用 `assignee_type` + `assignee_id` 组合。概念统一，查询简单。在 service 层做验证。
+每个 Todo 显式绑定一个执行 Agent：`assignee_agent_id` + `assignee_node_id`。服务端按 Todo 分派并校验回传身份。
+
+### Agent 管理策略
+
+- 用户先在平台内按 `node_id` 添加 Agent，建立平台记录与 NATS 节点的映射。
+- `node_id` 是 Agent 的稳定身份标识，用于 NATS 收发和服务端鉴权。
+- 用户可编辑 Agent 的展示与能力信息：名称、role、描述、capabilities、config。
+- `capabilities` 为 PM Agent 规划任务时提供候选匹配信息。
+- `role=pm` 表示该 Agent 可作为项目经理 Agent。
+- Agent 在线状态由心跳驱动，项目 PM 不在线时禁止用户发起需求。
 
 ### Agent 是外部进程
 
