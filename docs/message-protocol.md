@@ -64,7 +64,20 @@ NATS subject 统一使用四段式：
 - 不在 subject 中放业务主键，如 `taskId`、`conversationId`
 - 业务主键一律放进 payload
 
-### 3.3 三类命名空间
+### 3.3 与 NATS 交互模式对应
+
+为避免将 `rpc` 误解为另一种“发布消息”方式，这里明确协议命名空间与 NATS 原生交互模式的对应关系：
+
+- `agent.*`：基于 NATS `publish/subscribe`，用于 Agent 向服务器提交业务动作
+- `notify.*`：基于 NATS `publish/subscribe`，用于服务器向目标 Agent 推送通知
+- `rpc.*`：基于 NATS `request/reply`，用于 Agent 向服务器发起查询或同步请求，并等待 reply
+
+补充说明：
+- 从协议语义看，当前主要使用两类交互模式：`publish/subscribe` 与 `request/reply`
+- `queue group` 属于订阅侧的消费分发方式，不是本文当前协议暴露给业务方的独立消息类型
+- 本文当前不定义基于 `queue group` 的额外 subject 约定
+
+### 3.4 三类命名空间
 
 #### `agent`
 
