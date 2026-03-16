@@ -91,6 +91,7 @@ MVP 优先实现一个从需求提出到任务完成的最小闭环：
 |------|------|
 | [数据模型](./data-model.md) | 实体关系、MongoDB 文档结构、索引设计 |
 | [API 设计](./api-design.md) | 全部 API 端点、认证方式 |
+| [REST API 详细接口文档](./api-reference.md) | 前端对接用的请求参数、响应结构、字段说明 |
 | [消息传输规范](./message-protocol.md) | NATS subject、消息结构、权限与链路规范 |
 | [Agent 引擎](./agent-engine.md) | PM 工作流、Agent 执行流程、NATS 通知机制 |
 | [前端设计](./frontend-design.md) | 页面规划、组件树、UI 方案 |

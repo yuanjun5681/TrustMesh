@@ -17,6 +17,8 @@
 
 ## 一、REST API（前端使用）
 
+详细字段、请求参数与响应示例见 [REST API 详细接口文档](./api-reference.md)。
+
 ### 认证方式
 
 `Authorization: Bearer <JWT>`
