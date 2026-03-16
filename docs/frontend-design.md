@@ -72,10 +72,34 @@ App
 
 ## Agent 管理交互
 
-- 新增 Agent：用户在 `AgentConfigDialog` 中填写 `node_id`、名称、role、描述、capabilities、type、config。
-- 编辑 Agent：允许修改名称、role、描述、capabilities、config；`node_id` 在编辑态只读展示。
+- 新增 Agent：用户在 `AgentConfigDialog` 中填写 `node_id`、名称、role、描述、capabilities。
+- 编辑 Agent：允许修改名称、role、描述、capabilities；`node_id` 在编辑态只读展示。
 - Agent 卡片展示字段：`name`、`role`、`node_id`、`capabilities`、`status`、`description`。
-- 项目创建或编辑 PM Agent 绑定时，从当前用户已添加的 Agent 列表中选择。
+- 项目创建时，从当前用户已添加的 Agent 列表中选择 PM Agent；MVP 不支持在项目编辑页更换 PM Agent。
+
+## ConversationPage 数据流
+
+- 页面进入时先调用 `GET /api/v1/projects/:projectId/conversations`，读取当前用户在该项目下的对话列表，并优先选中最近一个 `status=active` 的对话。
+- 如果不存在活跃对话，输入框第一次提交时调用 `POST /api/v1/projects/:projectId/conversations`，由后端同时创建对话并写入首条用户需求消息。
+- 如果已存在活跃对话，后续发送消息调用 `POST /api/v1/conversations/:id/messages`。
+- 选中某个对话后，页面调用 `GET /api/v1/conversations/:id` 获取完整消息历史、对话状态和关联任务摘要。
+- PM Agent 的回复不会经由前端发送；前端只负责读取由后端回写到 `conversations.messages` 的 `pm_agent` 消息。
+
+## ConversationPage 轮询策略
+
+- MVP 不使用 WebSocket，`ConversationPage` 需要轮询 `GET /api/v1/conversations/:id` 获取 PM 回复和状态变化。
+- 当对话为 `active` 且页面处于前台时，建议每 2-3 秒轮询一次当前对话详情。
+- 页面失焦、切后台或网络较差时，建议降频到 10-15 秒；离开聊天页后停止轮询。
+- 用户发送消息成功后，应立即触发一次详情刷新，而不是等待下一次轮询周期。
+- 当对话状态变为 `resolved` 时，停止高频轮询消息，保留对关联任务摘要的展示，并引导用户跳转到任务详情或看板页查看执行进度。
+
+## ConversationPage 交互约定
+
+- `MessageList` 按 `messages.created_at` 升序展示，区分 `user` 和 `pm_agent` 两种气泡样式。
+- 发送中消息可以先本地乐观插入，待接口成功后用服务端返回的消息列表或详情结果校正。
+- `PlanPreview` 仅在对话已关联 Task 时展示，数据来自 `GET /api/v1/conversations/:id` 返回的任务摘要。
+- 若 `GET /api/v1/conversations/:id` 显示对话已 `resolved`，输入框进入只读态，并提示“该需求已沉淀为任务”。
+- 如果项目 PM Agent 离线，聊天页不允许新建对话或继续发送消息，并直接展示后端返回的业务错误。
 
 ## 异常态
 
