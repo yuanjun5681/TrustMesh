@@ -88,10 +88,7 @@ MVP 中所有任务都由 PM Agent 创建，并且包含 Todo 列表。即使是
   "description": "string (Markdown)",
   "status": "string",                 // "pending" | "in_progress" | "done" | "failed"
   "priority": "string",               // "low" | "medium" | "high" | "urgent"
-  "created_by_type": "string",        // "user" | "pm_agent"
-  "created_by_id": "ObjectId",
   "pm_agent_id": "ObjectId ref:agents",
-  "due_date": "datetime | null",
 
   "todos": [
     {
@@ -105,7 +102,13 @@ MVP 中所有任务都由 PM Agent 创建，并且包含 Todo 列表。即使是
       "result": {
         "summary": "string",
         "output": "string",
-        "artifacts": [],
+        "artifact_refs": [
+          {
+            "artifact_id": "string",
+            "kind": "string",         // "file" | "link" | "log" | "report"
+            "label": "string"
+          }
+        ],
         "metadata": {}
       },
       "created_at": "datetime",
@@ -115,17 +118,22 @@ MVP 中所有任务都由 PM Agent 创建，并且包含 Todo 列表。即使是
     }
   ],
 
+  "artifacts": [
+    {
+      "id": "string",
+      "source_todo_id": "string | null",
+      "kind": "string",               // "file" | "link" | "log" | "report"
+      "title": "string",
+      "uri": "string",
+      "mime_type": "string | null",
+      "metadata": {}
+    }
+  ],
+
   "result": {
     "summary": "string",
-    "todo_results": [
-      {
-        "todo_id": "string",
-        "agent_id": "ObjectId",
-        "status": "string",
-        "summary": "string",
-        "output": "string"
-      }
-    ]
+    "final_output": "string",
+    "metadata": {}
   },
 
   "version": 1,
@@ -138,11 +146,14 @@ MVP 中所有任务都由 PM Agent 创建，并且包含 Todo 列表。即使是
 - `conversation_id` 必填，且一个 `Conversation` 最多只能生成一个 `Task`。
 - 一旦 Task 创建完成，`Conversation` 与 `Task` 关系视为 1:1。
 - `project_id` 必须与 `conversation_id` 对应 Conversation 的 `project_id` 一致。
+- `pm_agent_id` 表示创建该 Task 的 PM Agent，且必须与对应 Project 绑定的 PM Agent 一致。
 
 结果落库约定：
-- 执行 Agent 通过 `todo.complete` 上报的完整 `result`，原样保存到 `todos[].result`。
-- `tasks.result` 只保存任务级聚合结果，作为看板和详情页的摘要视图，不重复保存完整 artifacts。
-- 如需展示完整单个 Todo 成果，应优先读取对应 `todos[].result`。
+- 执行 Agent 通过 `todo.complete` 上报的执行结果，保存到 `todos[].result`，作为 Todo 级执行真相源。
+- `todos[].result.artifact_refs` 只保存交付物引用，不保存大体积交付物内容。
+- `tasks.artifacts` 统一管理任务最终交付物，可追溯到 `source_todo_id`。
+- `tasks.result` 只保存任务级最终摘要与汇总结论，不重复保存每个 Todo 的详细结果。
+- 用户侧优先查看 `tasks.result` 和 `tasks.artifacts`；排查执行细节时再读取对应 `todos[].result`。
 
 ### task_events
 
@@ -155,11 +166,19 @@ MVP 中所有任务都由 PM Agent 创建，并且包含 Todo 列表。即使是
   "event_type": "string",             // "task_created" | "task_status_changed"
                                        // | "todo_assigned" | "todo_started"
                                        // | "todo_progress" | "todo_completed"
-                                       // | "todo_failed" | "conversation_message"
-  "payload": {},
+                                       // | "todo_failed"
+                                       // | "task_comment"
+  "content": "string | null",
+  "metadata": {},
   "created_at": "datetime"
 }
 ```
+
+说明：
+- Task 评论建议作为 `task_events` 中的 `task_comment` 事件保存。
+- 评论中如需引用交付物，应引用 `tasks.artifacts[].id`，不重复保存附件实体。
+- `content` 用于时间线展示的人类可读文案。
+- `metadata` 用于结构化扩展字段，例如 `todo_id`、状态变更前后值、`artifact_ids` 等。
 
 ### agent_sessions
 

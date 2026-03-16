@@ -168,7 +168,8 @@ db.tasks.findOneAndUpdate(
 ### Agent 执行结果
 
 - `todo.complete.result` 的协议结构以 [message-protocol.md](./message-protocol.md) 为准。
-- 服务端保存完整 Todo 结果，并聚合生成任务级摘要结果。
+- 服务端保存 Todo 级执行结果，并聚合生成任务级摘要结果。
+- Todo 结果中的交付物以引用形式保存；面向用户展示的最终交付物统一收敛到 Task 级管理。
 
 ## 后端 NATS 处理层
 

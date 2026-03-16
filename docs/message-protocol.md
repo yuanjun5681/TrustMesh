@@ -347,7 +347,13 @@ Payload:
   "result": {
     "summary": "登录接口已完成",
     "output": "实现了注册、登录、JWT 校验",
-    "artifacts": [],
+    "artifact_refs": [
+      {
+        "artifact_id": "artifact_login_api",
+        "kind": "report",
+        "label": "登录接口实现说明"
+      }
+    ],
     "metadata": {
       "model": "gpt-5",
       "duration_ms": 1200
