@@ -7,6 +7,19 @@ import { useAuthStore } from '@/stores/authStore'
 import * as authApi from '@/api/auth'
 import { ApiRequestError } from '@/api/client'
 
+const MIN_PASSWORD_LENGTH = 8
+
+function getRegisterErrorMessage(error: ApiRequestError) {
+  if (error.code !== 'VALIDATION_ERROR') {
+    return error.message
+  }
+  const passwordError = typeof error.details.password === 'string' ? error.details.password : null
+  if (passwordError) {
+    return `密码${passwordError}`
+  }
+  return error.message
+}
+
 export function RegisterPage() {
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
@@ -19,13 +32,17 @@ export function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setError(`密码至少需要 ${MIN_PASSWORD_LENGTH} 位`)
+      return
+    }
     setLoading(true)
     try {
       const res = await authApi.register({ email, name, password })
       setAuth(res.data.token, res.data.user)
       navigate('/projects')
     } catch (err) {
-      if (err instanceof ApiRequestError) setError(err.message)
+      if (err instanceof ApiRequestError) setError(getRegisterErrorMessage(err))
       else setError('注册失败，请重试')
     } finally {
       setLoading(false)
@@ -75,10 +92,11 @@ export function RegisterPage() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="设置密码"
+                  placeholder={`设置密码（至少 ${MIN_PASSWORD_LENGTH} 位）`}
                   required
-                  minLength={6}
+                  minLength={MIN_PASSWORD_LENGTH}
                 />
+                <p className="text-xs text-muted-foreground">密码至少需要 {MIN_PASSWORD_LENGTH} 位</p>
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button type="submit" className="w-full" disabled={loading}>

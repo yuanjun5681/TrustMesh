@@ -372,7 +372,7 @@ export type TaskEvent = { /* 对应 2.16 */ }
 |------|------|------|------|
 | `email` | `string` | 是 | 登录邮箱，唯一 |
 | `name` | `string` | 是 | 用户名称 |
-| `password` | `string` | 是 | 明文密码，由后端加密存储 |
+| `password` | `string` | 是 | 明文密码，由后端加密存储，至少 8 位 |
 
 请求示例：
 
