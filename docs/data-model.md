@@ -10,8 +10,6 @@ Conversation 1───1 Task           (一次需求对话最终沉淀为一个
 Project 1───N Task                (项目包含任务)
 Task ◇───N TodoItem               (任务内嵌 Todo 列表)
 Task 1───N TaskEvent              (任务活动流)
-Agent 1───N AgentSession          (Agent 执行会话，可选)
-AgentSession N───1 Task           (会话关联任务)
 ```
 
 ## 文档模型定义（MongoDB）
@@ -180,22 +178,6 @@ MVP 中所有任务都由 PM Agent 创建，并且包含 Todo 列表。即使是
 - `content` 用于时间线展示的人类可读文案。
 - `metadata` 用于结构化扩展字段，例如 `todo_id`、状态变更前后值、`artifact_ids` 等。
 
-### agent_sessions
-
-```json
-{
-  "_id": "ObjectId",
-  "agent_id": "ObjectId ref:agents",
-  "task_id": "ObjectId ref:tasks",
-  "todo_id": "string",
-  "status": "string",                 // "running" | "completed" | "failed" | "cancelled"
-  "started_at": "datetime",
-  "finished_at": "datetime | null",
-  "logs": [{}],
-  "error": "string | null"
-}
-```
-
 ### conversations（用户与 PM Agent 对话）
 
 ```json
@@ -247,10 +229,6 @@ db.tasks.createIndex({ status: 1 })
 
 // task_events
 db.task_events.createIndex({ task_id: 1, created_at: 1 })
-
-// agent_sessions
-db.agent_sessions.createIndex({ agent_id: 1 })
-db.agent_sessions.createIndex({ task_id: 1 })
 
 // conversations
 db.conversations.createIndex({ project_id: 1, user_id: 1 })
