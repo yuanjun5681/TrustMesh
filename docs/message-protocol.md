@@ -209,7 +209,7 @@ rpc.{callerNodeId}.{domain}.{action}
 | `rpc.{nodeId}.task.get` | 获取任务详情 | 所有 Agent | 所有 Agent |
 | `rpc.{nodeId}.todo.assigned` | 获取当前 Agent 的待执行 Todo | 所有 Agent | 所有 Agent |
 | `rpc.{nodeId}.project.summary` | 获取项目摘要 | PM Agent | `role=pm` |
-| `rpc.{nodeId}.task.by_conversation` | 获取某对话关联任务 | PM Agent | `role=pm` |
+| `rpc.{nodeId}.task.by_conversation` | 获取某对话对应的唯一任务 | PM Agent | `role=pm` |
 | `rpc.{nodeId}.agent.list` | 获取候选执行 Agent | PM Agent | `role=pm` |
 
 ## 七、Payload 规范
@@ -285,6 +285,10 @@ Payload:
   ]
 }
 ```
+
+约束：
+- 同一个 `conversation_id` 只能成功创建一个 `Task`。
+- 若该 `Conversation` 已存在对应 Task，服务器必须拒绝重复 `task.create`。
 
 ### 7.4 Todo 指派通知
 
@@ -381,7 +385,7 @@ Payload:
    - status=online
 3. 服务器发布 notify.{pmNodeId}.conversation.message
 4. PM Agent 分析需求，发布 agent.{pmNodeId}.task.create
-5. 服务器写入 Task 和 Todos
+5. 服务器校验该 Conversation 尚未关联 Task，然后写入唯一 Task 和 Todos
 6. 服务器按 Todo assignee 发布 notify.{assigneeNodeId}.todo.assigned
 7. 执行 Agent 拉取 rpc.{nodeId}.task.get 或直接开始执行
 8. 执行 Agent 发布 todo.progress / todo.complete / todo.fail

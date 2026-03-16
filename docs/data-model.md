@@ -5,12 +5,13 @@
 ```
 User 1───N Project                (用户创建项目)
 Project 1───1 Agent(PM)           (每个项目绑定一个项目经理 Agent)
+Project 1───N Conversation        (用户与项目经理的对话)
+Conversation 1───1 Task           (一次需求对话最终沉淀为一个任务)
 Project 1───N Task                (项目包含任务)
 Task ◇───N TodoItem               (任务内嵌 Todo 列表)
 Task 1───N TaskEvent              (任务活动流)
 Agent 1───N AgentSession          (Agent 执行会话，可选)
 AgentSession N───1 Task           (会话关联任务)
-Project 1───N Conversation        (用户与项目经理的对话)
 ```
 
 ## 文档模型定义（MongoDB）
@@ -37,13 +38,6 @@ Project 1───N Conversation        (用户与项目经理的对话)
   "description": "string",
   "role": "string",                    // "pm" | "developer" | "reviewer" | "custom"
   "capabilities": ["string"],          // 例如 "backend", "frontend", "qa", "oauth"
-  "type": "string",                    // "llm" | "script" | "webhook"
-  "config": {
-    "model": "string",
-    "system_prompt": "string",
-    "tools": ["string"],
-    "temperature": 0.7
-  },
   "node_id": "string",                // Agent 所在节点 ID，平台内唯一
   "status": "string",                 // "online" | "offline" | "busy"
   "last_seen_at": "datetime | null",
@@ -59,7 +53,7 @@ Project 1───N Conversation        (用户与项目经理的对话)
 - Agent 通过心跳维持在线状态；服务端根据最近一次 `heartbeat_at` 推导 `status`。
 - `role=pm` 表示该 Agent 可作为项目经理 Agent，被项目绑定后承担需求规划职责。
 - 用户创建 Agent 时必须提供 `node_id`。
-- 用户可编辑字段：`name`、`role`、`description`、`capabilities`、`config`。
+- 用户可编辑字段：`name`、`role`、`description`、`capabilities`。
 - 非系统迁移场景下不允许直接修改 `node_id`，避免已存在任务与 NATS 身份映射失效。
 
 ### projects
@@ -72,7 +66,6 @@ Project 1───N Conversation        (用户与项目经理的对话)
   "status": "string",                 // "active" | "archived"
   "owner_id": "ObjectId ref:users",
   "pm_agent_id": "ObjectId ref:agents",
-  "pm_agent_node_id": "string",
   "created_at": "datetime",
   "updated_at": "datetime"
 }
@@ -84,7 +77,7 @@ Project 1───N Conversation        (用户与项目经理的对话)
 
 ### tasks（核心模型）
 
-MVP 中所有任务都由 PM Agent 创建，并且包含 Todo 列表。即使是简单任务，也用单个 Todo 表示，统一执行模型。
+MVP 中所有任务都由 PM Agent 创建，并且包含 Todo 列表。即使是简单任务，也用单个 Todo 表示，统一执行模型。业务上一次 `Conversation` 最终只对应一个 `Task`。
 
 ```json
 {
@@ -140,6 +133,11 @@ MVP 中所有任务都由 PM Agent 创建，并且包含 Todo 列表。即使是
   "updated_at": "datetime"
 }
 ```
+
+约束：
+- `conversation_id` 必填，且一个 `Conversation` 最多只能生成一个 `Task`。
+- 一旦 Task 创建完成，`Conversation` 与 `Task` 关系视为 1:1。
+- `project_id` 必须与 `conversation_id` 对应 Conversation 的 `project_id` 一致。
 
 结果落库约定：
 - 执行 Agent 通过 `todo.complete` 上报的完整 `result`，原样保存到 `todos[].result`。
@@ -200,6 +198,10 @@ MVP 中所有任务都由 PM Agent 创建，并且包含 Todo 列表。即使是
 }
 ```
 
+约束：
+- 一个 `Conversation` 归属一个 `Project`。
+- 一个 `Conversation` 在生命周期内最多只关联一个 `Task`；Task 创建前允许暂时不存在对应任务。
+
 ## 索引设计
 
 ```javascript
@@ -219,7 +221,7 @@ db.projects.createIndex({ pm_agent_id: 1 })
 
 // tasks
 db.tasks.createIndex({ project_id: 1, status: 1 })
-db.tasks.createIndex({ conversation_id: 1 })
+db.tasks.createIndex({ conversation_id: 1 }, { unique: true })
 db.tasks.createIndex({ pm_agent_id: 1 })
 db.tasks.createIndex({ "todos.assignee_agent_id": 1, "todos.status": 1 })
 db.tasks.createIndex({ status: 1 })

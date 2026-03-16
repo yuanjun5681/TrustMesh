@@ -50,6 +50,11 @@ MVP 优先实现一个从需求提出到任务完成的最小闭环：
 
 这条闭环是当前文档的主线。人类用户在 MVP 中主要负责提需求、查看任务状态和查看执行结果，不直接创建或拆分任务。
 
+关系约束：
+- 一个 `Conversation` 最终只对应一个 `Task`。
+- 一个 `Task` 只归属一个 `Conversation`。
+- 同一 `Conversation` 不允许重复创建多个 Task。
+
 说明：
 - 本文中的 `task.create`、`todo.assigned`、`todo.complete` 等名称均为动作简称。
 - 完整 NATS subject 以 [消息传输规范](./message-protocol.md) 为准。

@@ -53,6 +53,10 @@ POST   /api/v1/conversations/:id/messages                  发送消息（用户
 
 > 用户发送消息后，后端写入 DB，然后通过 NATS 发布 `notify.{pmNodeId}.conversation.message` 通知 PM Agent。
 
+关系约束：
+- 一个 `Conversation` 最终只对应一个 `Task`。
+- PM Agent 针对同一 `Conversation` 只能成功创建一次任务；重复创建应返回业务错误。
+
 发送前校验：
 - 项目必须已绑定 PM Agent。
 - 该 PM Agent 的 `role` 必须为 `pm`。
@@ -142,7 +146,7 @@ DELETE /api/v1/agents/:id             删除 Agent
 2. 后端先校验项目绑定的 PM Agent 为 `role=pm` 且当前在线。
 3. 校验通过后，后端写入 Conversation，并发布 → notify.{pmNodeId}.conversation.message。
 4. PM Agent 分析需求后，发布 → agent.{pmNodeId}.task.create。
-5. 后端校验 role=pm，写入 Task + Todos。
+5. 后端校验 role=pm，并校验该 Conversation 尚未生成 Task；通过后写入唯一 Task + Todos。
 6. 后端遍历 todos，逐个发布 → notify.{assigneeNodeId}.todo.assigned。
 7. 执行 Agent 收到通知，必要时通过 rpc.{assigneeNodeId}.task.get 拉取任务详情。
 8. 执行 Agent 通过 `todo.progress` / `todo.complete` / `todo.fail` 回传执行结果。
