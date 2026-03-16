@@ -1,0 +1,22 @@
+services:
+  mongo:
+    image: mongodb/mongodb-community-server:7.0-ubuntu2204
+    container_name: trustmesh-mongo
+    restart: unless-stopped
+    command: ["--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - trustmesh-mongo-data:/data/db
+
+  nats:
+    image: nats:2.10-alpine
+    container_name: trustmesh-nats
+    restart: unless-stopped
+    command: ["-m", "8222"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+
+volumes:
+  trustmesh-mongo-data:

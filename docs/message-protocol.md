@@ -59,6 +59,8 @@ NATS subject 统一使用四段式：
 - 全部使用小写字母
 - 单词之间使用 `.` 分段
 - 复合动作使用下划线，例如 `by_conversation`
+- `nodeId` 不允许包含 `.`
+- `nodeId` 推荐使用 `[a-z0-9-]+`
 - 不在 subject 中放业务主键，如 `taskId`、`conversationId`
 - 业务主键一律放进 payload
 
@@ -110,7 +112,7 @@ rpc.{callerNodeId}.{domain}.{action}
 
 ## 四、通用消息结构
 
-### 4.1 Publish / Request 信封
+### 4.1 Agent Publish / RPC Request 信封
 
 所有 `agent.*` 和 `rpc.*` 消息统一使用以下结构：
 
@@ -125,10 +127,39 @@ rpc.{callerNodeId}.{domain}.{action}
 
 约束：
 - `node_id` 必须与 subject 中的 `{nodeId}` 一致
-- `id` 用作消息唯一标识和幂等键
-- `timestamp` 为发送方生成时间
+- `id` 为发送方生成的消息请求 ID，同时用作链路追踪 ID
+- `timestamp` 为发送方生成时间，使用 UTC RFC3339
+- `payload` 必须为 JSON object；无业务参数时使用 `{}`，不使用 `null`
 
-### 4.2 Reply 结构
+补充说明：
+- 当前 MVP 中，`id` 已进入协议，但尚未在服务端做“所有动作统一去重”
+- 发送方不得假设“同一 `id` 重发一定被后端自动忽略”
+- 当前具备业务级幂等或冲突保护的动作：
+  - `task.create`：由 `conversation_id` 唯一约束保证同一对话只能创建一个 Task
+  - `todo.complete` / `todo.fail`：Todo 已进入终态后再次提交将被拒绝
+  - `todo.progress`：语义为追加进度事件，重复发送会产生重复事件，发送方应自行去重或避免无意义重试
+
+### 4.2 Notify 消息结构
+
+所有 `notify.*` 消息当前直接发送业务 payload，不再包一层 envelope。
+
+示例：
+
+```json
+{
+  "task_id": "task_123",
+  "todo_id": "todo_1",
+  "status": "in_progress",
+  "message": "接口已完成参数校验"
+}
+```
+
+约束：
+- `notify.*` payload 必须直接包含消费方恢复上下文所需的业务主键
+- 若通知表达“状态变化”，则 payload 必须包含变化后的最新状态，而不是只发送动作名
+- 当前 `notify.*` 不携带统一的 `id` / `timestamp`；需要强一致恢复时，Agent 应以数据库查询 RPC 结果为准
+
+### 4.3 RPC Reply 结构
 
 所有 RPC reply 使用统一结构：
 
@@ -142,9 +173,47 @@ rpc.{callerNodeId}.{domain}.{action}
 
 失败时：
 - `success=false`
-- `error` 为稳定错误码或错误信息
+- `error` 必须为稳定错误码，不使用临时自然语言
+
+常见错误码：
+
+| 错误码 | 说明 |
+|------|------|
+| `BAD_ENVELOPE` | 外层 envelope 非法，例如 JSON 错误、缺少 `node_id`、`node_id` 与 subject 不一致 |
+| `BAD_PAYLOAD` | payload 结构不合法或缺少必填字段 |
+| `UNSUPPORTED_RPC` | 服务端未实现该 RPC |
+| `VALIDATION_ERROR` | 业务参数校验失败 |
+| `FORBIDDEN` | 当前 Agent 无权限执行该操作 |
+| `NOT_FOUND` | 目标资源不存在，或当前 Agent 无权访问该资源 |
+| `PM_AGENT_OFFLINE` | 项目绑定 PM Agent 离线 |
+| `CONVERSATION_TASK_EXISTS` | 对话已经关联 Task |
+| `CONVERSATION_RESOLVED` | 对话已关闭，不允许继续处理 |
+| `TODO_FINALIZED` | Todo 已结束，不再接受进度更新 |
+| `TODO_ALREADY_DONE` | Todo 已完成 |
+| `TODO_ALREADY_FAILED` | Todo 已失败 |
+
+### 4.4 投递语义与顺序约束
+
+- 当前协议基于 Core NATS，不依赖 JetStream 持久化
+- `notify.*` 为在线推送语义，目标 Agent 离线时不保证补投
+- 跨 subject 不保证全局顺序，例如 `notify.{nodeId}.task.updated` 与 `notify.{nodeId}.todo.updated` 可能先后到达
+- 服务端数据库状态是唯一真相源；Agent 收到通知后如需强一致上下文，应补拉 RPC，例如 `rpc.{nodeId}.task.get`
+- Agent 重启恢复的标准入口是 `rpc.{nodeId}.todo.assigned`，而不是依赖离线期间漏掉的通知重放
 
 ## 五、身份与权限规则
+
+### 5.0 连接认证前提
+
+- 协议默认前提：Backend 和 Agent 都通过已认证的 NATS 连接接入
+- Agent 连接在 NATS 权限层只应被允许：
+  - publish `agent.{selfNodeId}.>`
+  - publish `rpc.{selfNodeId}.>`
+  - subscribe `notify.{selfNodeId}.>`
+- Backend 连接在 NATS 权限层只应被允许：
+  - subscribe `agent.*.*.*`
+  - subscribe `rpc.*.*.*`
+  - publish `notify.*`
+- NATS 连接鉴权和 subject ACL 是第一层安全边界；服务端收到消息后的 `nodeId -> Agent` 映射和 `role` 校验是第二层业务边界
 
 ### 5.1 身份映射
 
@@ -253,7 +322,29 @@ Payload:
 }
 ```
 
-### 7.3 PM 创建任务
+### 7.3 PM 回复用户对话
+
+Subject:
+
+```text
+agent.{pmNodeId}.conversation.reply
+```
+
+Payload:
+
+```json
+{
+  "conversation_id": "conv_123",
+  "content": "我会先拆解需求并安排执行"
+}
+```
+
+约束：
+- 仅 `role=pm` 的 Agent 可以发送
+- `conversation_id` 必须属于该 PM 绑定的项目
+- 若对话已进入 `resolved`，服务器必须拒绝
+
+### 7.4 PM 创建任务
 
 Subject:
 
@@ -290,7 +381,51 @@ Payload:
 - 同一个 `conversation_id` 只能成功创建一个 `Task`。
 - 若该 `Conversation` 已存在对应 Task，服务器必须拒绝重复 `task.create`。
 
-### 7.4 Todo 指派通知
+### 7.5 Task 创建完成通知
+
+Subject:
+
+```text
+notify.{pmNodeId}.task.created
+```
+
+Payload:
+
+```json
+{
+  "task_id": "task_123",
+  "project_id": "proj_123",
+  "conversation_id": "conv_123",
+  "title": "实现用户登录"
+}
+```
+
+说明：
+- 该消息表示服务器已经成功落库并生成 Task
+- 该消息不是“创建请求回执”的唯一真相；真实状态仍应以 DB / RPC 查询结果为准
+
+### 7.6 Task 状态更新通知
+
+Subject:
+
+```text
+notify.{pmNodeId}.task.updated
+```
+
+Payload:
+
+```json
+{
+  "task_id": "task_123",
+  "status": "in_progress"
+}
+```
+
+说明：
+- 当前用于向 PM Agent 通知任务聚合状态变化
+- `status` 当前取值为 `pending`、`in_progress`、`done`、`failed`
+
+### 7.7 Todo 指派通知
 
 Subject:
 
@@ -309,7 +444,37 @@ Payload:
 }
 ```
 
-### 7.5 Todo 进度
+说明：
+- 执行 Agent 如需完整上下文，应继续请求 `rpc.{nodeId}.task.get`
+
+### 7.8 Todo 状态更新通知
+
+Subject:
+
+```text
+notify.{nodeId}.todo.updated
+```
+
+Payload:
+
+```json
+{
+  "task_id": "task_123",
+  "todo_id": "todo_1",
+  "status": "in_progress",
+  "message": "接口已完成参数校验，开始接入 JWT"
+}
+```
+
+说明：
+- 接收方可能是 Todo assignee，也可能是 PM Agent
+- `status` 当前取值为 `pending`、`in_progress`、`done`、`failed`
+- `message` 为可选展示字段：
+  - 当来源为 `todo.progress` 时，通常携带进度文本
+  - 当来源为 `todo.complete` 时，当前实现可写为 `completed`
+  - 当来源为 `todo.fail` 时，当前实现可写为失败原因
+
+### 7.9 Todo 进度
 
 Subject:
 
@@ -330,7 +495,7 @@ Payload:
 约定：
 - 服务器收到某 Todo 的第一条 `todo.progress` 时，将该 Todo 状态从 `pending` 推进为 `in_progress`
 
-### 7.6 Todo 完成
+### 7.10 Todo 完成
 
 Subject:
 
@@ -362,7 +527,7 @@ Payload:
 }
 ```
 
-### 7.7 Todo 失败
+### 7.11 Todo 失败
 
 Subject:
 
@@ -379,6 +544,195 @@ Payload:
   "error": "Google OAuth 凭证缺失"
 }
 ```
+
+### 7.12 RPC: 获取任务详情
+
+Subject:
+
+```text
+rpc.{nodeId}.task.get
+```
+
+Request Payload:
+
+```json
+{
+  "task_id": "task_123"
+}
+```
+
+Success Reply:
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "task_123",
+    "project_id": "proj_123",
+    "conversation_id": "conv_123",
+    "title": "实现用户登录",
+    "status": "in_progress",
+    "todos": []
+  }
+}
+```
+
+说明：
+- `data` 返回完整 Task 详情对象
+- 返回字段以平台 `TaskDetail` 领域模型为准
+
+### 7.13 RPC: 获取当前 Agent 的待执行 Todo
+
+Subject:
+
+```text
+rpc.{nodeId}.todo.assigned
+```
+
+Request Payload:
+
+```json
+{}
+```
+
+Success Reply:
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "task_id": "task_123",
+        "project_id": "proj_123",
+        "conversation_id": "conv_123",
+        "task_title": "实现用户登录",
+        "task_status": "pending",
+        "todo": {
+          "id": "todo_1",
+          "title": "实现后端登录接口",
+          "status": "pending"
+        }
+      }
+    ]
+  }
+}
+```
+
+说明：
+- 用于 Agent 启动恢复和断线重连后的补拉
+- `items` 中每一项返回一个被分配给当前 Agent 且尚未结束的 Todo
+
+### 7.14 RPC: 获取项目摘要
+
+Subject:
+
+```text
+rpc.{pmNodeId}.project.summary
+```
+
+Request Payload:
+
+```json
+{
+  "project_id": "proj_123"
+}
+```
+
+Success Reply:
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "proj_123",
+    "name": "Demo Project",
+    "status": "active",
+    "task_count": 3,
+    "done_task_count": 1
+  }
+}
+```
+
+说明：
+- 仅 `role=pm` 且绑定该项目的 PM Agent 可调用
+- `data` 返回完整 `ProjectSummary` 结构
+
+### 7.15 RPC: 根据对话查询唯一任务
+
+Subject:
+
+```text
+rpc.{pmNodeId}.task.by_conversation
+```
+
+Request Payload:
+
+```json
+{
+  "conversation_id": "conv_123"
+}
+```
+
+Success Reply:
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "task_123",
+    "conversation_id": "conv_123",
+    "status": "done"
+  }
+}
+```
+
+说明：
+- 仅 `role=pm` 且该对话属于其绑定项目时可调用
+- `data` 返回完整 Task 详情对象
+
+### 7.16 RPC: 获取候选执行 Agent
+
+Subject:
+
+```text
+rpc.{pmNodeId}.agent.list
+```
+
+Request Payload:
+
+```json
+{
+  "project_id": "proj_123"
+}
+```
+
+其中：
+- `project_id` 为可选
+- 若传入，则用于基于项目上下文筛选同一用户下可见的候选 Agent
+
+Success Reply:
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": "agent_backend_1",
+        "name": "Backend Agent",
+        "role": "developer",
+        "node_id": "node-backend-001",
+        "status": "online"
+      }
+    ]
+  }
+}
+```
+
+说明：
+- 仅 `role=pm` 的 Agent 可调用
+- `items` 返回候选 Agent 列表；返回字段以平台 `Agent` 领域模型为准
 
 ## 八、端到端链路
 
