@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -256,16 +255,8 @@ func TestCreateConversationPublishesInitialPMBrief(t *testing.T) {
 	if !ok {
 		t.Fatalf("content is not string: %#v", message["content"])
 	}
-	for _, expected := range []string{
-		"任务：实现一个带邮箱密码登录和退出能力的认证功能",
-		"使用 `trustmesh` skill 创建 1 个 Task，并拆成边界清晰、可独立验收的 Todos。",
-		"使用 `trustmesh` skill 发送 `conversation.reply` 回复用户。",
-		"候选执行 Agent：",
-		"Backend Agent | node_id=node-dev-001 | role=developer | status=online | capabilities=backend, auth",
-	} {
-		if !strings.Contains(content, expected) {
-			t.Fatalf("content missing %q\ncontent=%s", expected, content)
-		}
+	if content != "实现一个带邮箱密码登录和退出能力的认证功能" {
+		t.Fatalf("content should be raw user input, got: %s", content)
 	}
 
 	candidateAgents, ok := message["candidate_agents"].([]any)
@@ -283,7 +274,7 @@ func TestCreateConversationPublishesInitialPMBrief(t *testing.T) {
 	if pmBrief["must_clarify_before_task_create"] != true {
 		t.Fatalf("pm_brief must_clarify_before_task_create missing: %#v", pmBrief)
 	}
-	if pmBrief["must_use_skill"] != "trustmesh" {
+	if pmBrief["must_use_skill"] != "tm-task-plan" {
 		t.Fatalf("pm_brief must_use_skill missing: %#v", pmBrief)
 	}
 }

@@ -220,7 +220,7 @@ message:
   "pm_brief": {
     "objective": "明确任务目标和业务目的；在需求清晰前持续澄清；仅在需求满足执行条件后拆解任务并派发给其他 Agent。",
     "must_clarify_before_task_create": true,
-    "must_use_skill": "trustmesh"
+    "must_use_skill": "tm-task-plan"
   },
   "candidate_agents": [
     {
