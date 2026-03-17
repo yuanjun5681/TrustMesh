@@ -59,22 +59,26 @@ If you still cannot determine the right target node from current context, ask th
 
 ## Core Rules
 
-1. Use `clawsynapse publish` for every outbound protocol message.
-2. Keep the business payload in `--message` as a valid JSON string.
-3. If the incoming message has `session=...`, always include `--session-key` with the same value.
-4. For a new thread without an incoming session, prefer a stable business ID such as `conversation_id` or `task_id` as the `--session-key`.
-5. Keep the payload exact. Do not rename fields or add undocumented ones.
-6. Use `clawsynapse --json publish` when you need the returned `messageId`.
+1. **CRITICAL — Never send to yourself.** When replying to an incoming message, `--target` MUST be the `from` value from the incoming `[clawsynapse from=<senderNodeId> ...]` header. This applies to ALL message types (`conversation.reply`, `todo.progress`, `todo.complete`, `todo.fail`, `task.create`, etc.). Your own node ID appears in the `to` field — never use that as the target.
+2. Use `clawsynapse publish` for every outbound protocol message.
+3. Keep the business payload in `--message` as a valid JSON string.
+4. If the incoming message has `session=...`, always include `--session-key` with the same value.
+5. For a new thread without an incoming session, prefer a stable business ID such as `conversation_id` or `task_id` as the `--session-key`.
+6. Keep the payload exact. Do not rename fields or add undocumented ones.
+7. Use `clawsynapse --json publish` when you need the returned `messageId`.
 
 ## Basic Command Patterns
 
 ### Reply to an incoming message
 
-Extract `from` from the incoming header and use it as `TARGET_NODE`:
+Extract `from` from the incoming header and use it as `TARGET_NODE`.
+
+**Example:** if the incoming header is `[clawsynapse from=node-platform to=node-2 session=conv_123]`, then `TARGET_NODE="node-platform"`. Do NOT use your own node ID (`node-2` in this example).
 
 ```bash
-# REPLY_TO = the "from" value in the incoming [clawsynapse from=... ] header
-TARGET_NODE="trustmesh"  # ← replace with actual "from" value from incoming header
+# TARGET_NODE = the "from" value in the incoming [clawsynapse from=... ] header
+# ⚠️ This must NOT be your own node ID — that would send the message to yourself
+TARGET_NODE="node-platform"  # ← replace with actual "from" value from incoming header
 
 payload="$(jq -nc --arg conversation_id "conv_123" --arg content "我先确认两个边界问题。" '{
   conversation_id: $conversation_id,
@@ -370,14 +374,15 @@ These are examples of message bodies you may receive.
 
 ## Reply Workflow
 
-1. Read the incoming ClawSynapse header.
-2. Extract `from` and `session`.
-3. Build the correct JSON payload for the business message.
-4. Publish with the matching `--type`.
-5. Reuse `session` as `--session-key`.
+1. Read the incoming ClawSynapse header: `[clawsynapse from=<sender> to=<you> session=<key>]`
+2. Set `TARGET_NODE` to the `from` value (the sender). **Never use the `to` value — that is you.**
+3. Set `--session-key` to the `session` value.
+4. Build the correct JSON payload for the business message.
+5. Publish with `--target "$TARGET_NODE"` and the matching `--type`.
 
 ## Guardrails
 
+- **Never use your own node ID as `--target`.** The target is always the remote node (the `from` field of the incoming message). Sending to yourself is the most common mistake — double-check before publishing.
 - Do not reply in plain chat text when the remote side expects a ClawSynapse message.
 - Do not drop `--session-key` on follow-up replies.
 - Do not send malformed JSON in `--message`.
