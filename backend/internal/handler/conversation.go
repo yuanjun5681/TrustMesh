@@ -137,14 +137,19 @@ func (h *ConversationHandler) notifyPM(userID, projectID, conversationID, conten
 	}
 }
 
-func (h *ConversationHandler) buildPMConversationMessage(userID, projectID, conversationID, content string, initial bool) pmConversationMessage {
+func (h *ConversationHandler) buildPMConversationMessage(userID, projectID, conversationID, userContent string, initial bool) pmConversationMessage {
 	payload := pmConversationMessage{
 		ConversationID: conversationID,
 		ProjectID:      projectID,
-		Content:        content,
-		UserContent:    content,
+		UserContent:    userContent,
 		IsInitial:      initial,
 	}
+	if initial {
+		payload.Content = "请使用 /tm-task-plan skill 处理本次需求。首先理解用户需求，澄清不明确之处，待需求明确后再创建任务。"
+	} else {
+		payload.Content = "用户发送了新的消息，请使用 /tm-task-plan skill 继续处理。"
+	}
+
 	if !initial {
 		return payload
 	}

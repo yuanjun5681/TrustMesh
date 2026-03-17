@@ -65,7 +65,7 @@ allowed-tools:
 {
   "conversation_id": "conv_123",
   "project_id": "proj_123",
-  "content": "...",
+  "content": "请使用 /tm-task-plan skill 处理本次需求。首先理解用户需求，澄清不明确之处，待需求明确后再创建任务。",
   "user_content": "我需要一个用户登录功能",
   "is_initial_message": true,
   "project": {
@@ -96,15 +96,15 @@ allowed-tools:
 {
   "conversation_id": "conv_123",
   "project_id": "proj_123",
-  "content": "用户的回复内容",
-  "user_content": "用户的回复内容",
+  "content": "用户发送了新的消息，请使用 /tm-task-plan skill 继续处理。",
+  "user_content": "登录方式只需要邮箱密码，不需要 OAuth",
   "is_initial_message": false
 }
 ```
 
 关键字段说明：
-- `user_content`：始终是用户原始输入
-- `content`：首次消息时与 `user_content` 相同；后续消息也与 `user_content` 相同
+- `content`：系统指令，指引你使用本 skill 处理需求。**不包含用户原始输入。**
+- `user_content`：始终是用户原始输入，以此为准理解需求。
 - `candidate_agents`：仅首次消息携带，是你可以分派 Todo 的执行 Agent 列表
 
 ## 三、发送消息

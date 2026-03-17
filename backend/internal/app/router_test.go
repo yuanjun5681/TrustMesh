@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -255,8 +256,11 @@ func TestCreateConversationPublishesInitialPMBrief(t *testing.T) {
 	if !ok {
 		t.Fatalf("content is not string: %#v", message["content"])
 	}
-	if content != "实现一个带邮箱密码登录和退出能力的认证功能" {
-		t.Fatalf("content should be raw user input, got: %s", content)
+	if content == message["user_content"] {
+		t.Fatalf("content should differ from user_content for initial message, got: %s", content)
+	}
+	if !strings.Contains(content, "tm-task-plan") {
+		t.Fatalf("content should reference tm-task-plan skill, got: %s", content)
 	}
 
 	candidateAgents, ok := message["candidate_agents"].([]any)
