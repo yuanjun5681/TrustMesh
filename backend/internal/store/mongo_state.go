@@ -65,10 +65,6 @@ func (s *Store) enableMongo(cfg config.Config, log *zap.Logger) error {
 }
 
 func (s *Store) Close() error {
-	if s.heartbeatStopCh != nil {
-		close(s.heartbeatStopCh)
-		<-s.heartbeatDoneCh
-	}
 	if !s.mongoEnabled || s.mongoClient == nil {
 		return nil
 	}

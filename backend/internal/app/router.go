@@ -6,17 +6,17 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"trustmesh/backend/internal/auth"
+	"trustmesh/backend/internal/clawsynapse"
 	"trustmesh/backend/internal/config"
 	"trustmesh/backend/internal/handler"
 	"trustmesh/backend/internal/middleware"
-	"trustmesh/backend/internal/nats"
 	"trustmesh/backend/internal/store"
 )
 
 type App struct {
-	Engine *gin.Engine
-	Store  *store.Store
-	NATS   *nats.Service
+	Engine     *gin.Engine
+	Store      *store.Store
+	PeerSyncer *clawsynapse.PeerSyncer
 }
 
 func New(cfg config.Config, log *zap.Logger) (*App, error) {
@@ -31,25 +31,21 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 		return nil, err
 	}
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.TokenTTL)
-	var natsService *nats.Service
-	var publisher *nats.Publisher
-	if cfg.NATSEnabled {
-		connected, err := nats.Start(cfg, log, s)
-		if err != nil {
-			_ = s.Close()
-			return nil, err
-		}
-		natsService = connected
-		publisher = connected.Publisher()
+	clawClient := clawsynapse.NewClient(cfg.ClawSynapseAPIURL, cfg.ClawSynapseTimeout)
+	webhookHandler := clawsynapse.NewWebhookHandler(s, clawClient, cfg.ClawSynapseNodeID, log)
+	peerSyncer := clawsynapse.NewPeerSyncer(clawClient, s, cfg.ClawSynapsePeerSync, log)
+	if peerSyncer != nil {
+		peerSyncer.Start()
 	}
 
 	authHandler := handler.NewAuthHandler(s, jwtManager)
 	agentHandler := handler.NewAgentHandler(s)
 	projectHandler := handler.NewProjectHandler(s)
-	conversationHandler := handler.NewConversationHandler(s, publisher, log)
+	conversationHandler := handler.NewConversationHandler(s, clawClient, log)
 	taskHandler := handler.NewTaskHandler(s)
 
 	engine.GET("/healthz", handler.Health)
+	engine.POST("/webhook/clawsynapse", webhookHandler.HandleWebhook)
 
 	v1 := engine.Group("/api/v1")
 	v1.POST("/auth/register", authHandler.Register)
@@ -79,7 +75,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	authed.GET("/tasks/:id", taskHandler.Get)
 	authed.GET("/tasks/:id/events", taskHandler.ListEvents)
 
-	return &App{Engine: engine, Store: s, NATS: natsService}, nil
+	return &App{Engine: engine, Store: s, PeerSyncer: peerSyncer}, nil
 }
 
 func (a *App) Close() error {
@@ -87,10 +83,8 @@ func (a *App) Close() error {
 		return nil
 	}
 	var errs []error
-	if a.NATS != nil {
-		if err := a.NATS.Close(); err != nil {
-			errs = append(errs, err)
-		}
+	if a.PeerSyncer != nil {
+		a.PeerSyncer.Close()
 	}
 	if a.Store != nil {
 		if err := a.Store.Close(); err != nil {

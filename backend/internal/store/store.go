@@ -36,11 +36,6 @@ type Store struct {
 	taskEvents        map[string][]model.TaskEvent
 	processedMessages map[string]processedMessage
 
-	heartbeatTTL           time.Duration
-	heartbeatSweepInterval time.Duration
-	heartbeatStopCh        chan struct{}
-	heartbeatDoneCh        chan struct{}
-
 	mongoEnabled           bool
 	mongoClient            *mongo.Client
 	mongoUsers             *mongo.Collection
@@ -57,6 +52,11 @@ type Store struct {
 type processedMessage struct {
 	Action     string `bson:"action" json:"action"`
 	ResourceID string `bson:"resource_id" json:"resource_id"`
+}
+
+type AgentPresence struct {
+	NodeID     string
+	LastSeenAt time.Time
 }
 
 func New() *Store {
@@ -165,9 +165,8 @@ func (s *Store) CreateAgent(userID, nodeID, name, role, description string, capa
 		Role:         role,
 		Capabilities: normalizeCapabilities(capabilities),
 		NodeID:       nodeID,
-		Status:       "online",
-		LastSeenAt:   &now,
-		HeartbeatAt:  &now,
+		Status:       "offline",
+		LastSeenAt:   nil,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
@@ -775,10 +774,6 @@ func copyAgent(a *model.Agent) *model.Agent {
 	if a.LastSeenAt != nil {
 		t := *a.LastSeenAt
 		clone.LastSeenAt = &t
-	}
-	if a.HeartbeatAt != nil {
-		t := *a.HeartbeatAt
-		clone.HeartbeatAt = &t
 	}
 	return &clone
 }

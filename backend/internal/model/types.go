@@ -78,7 +78,6 @@ type Agent struct {
 	NodeID       string     `json:"node_id" bson:"node_id"`
 	Status       string     `json:"status" bson:"status"`
 	LastSeenAt   *time.Time `json:"last_seen_at" bson:"last_seen_at"`
-	HeartbeatAt  *time.Time `json:"heartbeat_at" bson:"heartbeat_at"`
 	CreatedAt    time.Time  `json:"created_at" bson:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at" bson:"updated_at"`
 }

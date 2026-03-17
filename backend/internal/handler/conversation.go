@@ -1,22 +1,23 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
-	"trustmesh/backend/internal/nats"
+	"trustmesh/backend/internal/clawsynapse"
 	"trustmesh/backend/internal/store"
 	"trustmesh/backend/internal/transport"
 )
 
 type ConversationHandler struct {
 	store     *store.Store
-	publisher *nats.Publisher
+	publisher *clawsynapse.Client
 	log       *zap.Logger
 }
 
-func NewConversationHandler(s *store.Store, publisher *nats.Publisher, log *zap.Logger) *ConversationHandler {
+func NewConversationHandler(s *store.Store, publisher *clawsynapse.Client, log *zap.Logger) *ConversationHandler {
 	return &ConversationHandler{store: s, publisher: publisher, log: log}
 }
 
@@ -97,11 +98,11 @@ func (h *ConversationHandler) notifyPM(userID, projectID, conversationID, conten
 		h.log.Warn("skip notify conversation.message", zap.String("project_id", projectID), zap.String("code", appErr.Code), zap.String("message", appErr.Message))
 		return
 	}
-	if err := h.publisher.NotifyConversationMessage(pmNodeID, nats.ConversationMessagePayload{
-		ConversationID: conversationID,
-		ProjectID:      projectID,
-		Content:        content,
-	}); err != nil {
+	if _, err := h.publisher.Publish(context.Background(), pmNodeID, "conversation.message", map[string]any{
+		"conversation_id": conversationID,
+		"project_id":      projectID,
+		"content":         content,
+	}, conversationID, nil); err != nil {
 		h.log.Warn("notify conversation.message failed", zap.String("project_id", projectID), zap.String("conversation_id", conversationID), zap.Error(err))
 	}
 }

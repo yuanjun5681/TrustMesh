@@ -10,6 +10,7 @@ import (
 
 	"trustmesh/backend/internal/config"
 	"trustmesh/backend/internal/logger"
+	"trustmesh/backend/internal/store"
 )
 
 func TestHappyPathAuthToConversation(t *testing.T) {
@@ -70,6 +71,9 @@ func TestHappyPathAuthToConversation(t *testing.T) {
 	if agentID == "" {
 		t.Fatal("empty agent id")
 	}
+	application.Store.SyncAgentPresence([]store.AgentPresence{
+		{NodeID: "node-pm-001", LastSeenAt: time.Now().UTC()},
+	}, time.Now().UTC())
 
 	projectResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/projects", token, map[string]any{
 		"name":        "TrustMesh MVP",

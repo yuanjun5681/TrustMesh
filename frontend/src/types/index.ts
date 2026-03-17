@@ -98,7 +98,6 @@ export interface Agent {
   node_id: string
   status: AgentStatus
   last_seen_at: string | null
-  heartbeat_at: string | null
   created_at: string
   updated_at: string
 }

@@ -3,7 +3,8 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8080/api/v1}"
-NATS_URL="${NATS_URL:-nats://127.0.0.1:4222}"
+WEBHOOK_URL="${WEBHOOK_URL:-http://127.0.0.1:8080/webhook/clawsynapse}"
+CLAWSYNAPSE_NODE_ID="${CLAWSYNAPSE_NODE_ID:-trustmesh-server}"
 SUFFIX="$(date +%s)"
 
 require() {
@@ -35,17 +36,21 @@ publish() {
   local node_id="$2"
   local message_id="$3"
   local payload="$4"
-  go run ./scripts/nats_publish \
-    --url "$NATS_URL" \
-    --subject "$subject" \
-    --node-id "$node_id" \
-    --message-id "$message_id" \
-    --payload "$payload"
+  IFS='.' read -r _ _ domain action <<<"$subject"
+  local msg_type="$domain.$action"
+  local webhook_payload
+  webhook_payload="$(jq -nc \
+    --arg nodeId "$CLAWSYNAPSE_NODE_ID" \
+    --arg type "$msg_type" \
+    --arg from "$node_id" \
+    --arg message "$payload" \
+    --arg messageId "$message_id" \
+    '{nodeId:$nodeId,type:$type,from:$from,message:$message,metadata:{messageId:$messageId}}')"
+  curl -sS -X POST "$WEBHOOK_URL" -H "Content-Type: application/json" -d "$webhook_payload" >/dev/null
 }
 
 require curl
 require jq
-require go
 
 register_payload="$(jq -nc --arg email "smoke-$SUFFIX@example.com" '{email:$email,name:"Smoke User",password:"secret123"}')"
 register_resp="$(api POST /auth/register "" "$register_payload")"

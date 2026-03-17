@@ -69,9 +69,9 @@ export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
           ))}
         </div>
 
-        {agent.heartbeat_at && (
+        {agent.last_seen_at && (
           <p className="text-xs text-muted-foreground mt-3">
-            最近心跳: {formatRelativeTime(agent.heartbeat_at)}
+            最近在线: {formatRelativeTime(agent.last_seen_at)}
           </p>
         )}
       </CardContent>

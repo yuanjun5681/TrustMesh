@@ -7,66 +7,7 @@ import (
 	"trustmesh/backend/internal/model"
 )
 
-func TestGetTaskByConversationForPMNode(t *testing.T) {
-	s, _, pm, developer, project, conversation := seedWorkflowState(t)
-
-	task, appErr := s.GetTaskByConversationForPMNode(pm.NodeID, conversation.ID)
-	if appErr != nil {
-		t.Fatalf("unexpected error before task create: %v", appErr)
-	}
-	if task != nil {
-		t.Fatal("expected nil task before task.create")
-	}
-
-	createdTask, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login",
-		Description:    "Support email password login",
-		Todos: []TaskCreateTodoInput{
-			{
-				Title:          "Build backend API",
-				Description:    "Implement auth endpoints",
-				AssigneeNodeID: developer.NodeID,
-			},
-		},
-	})
-	if appErr != nil {
-		t.Fatalf("create task: %v", appErr)
-	}
-
-	loadedTask, appErr := s.GetTaskByConversationForPMNode(pm.NodeID, conversation.ID)
-	if appErr != nil {
-		t.Fatalf("unexpected error after task create: %v", appErr)
-	}
-	if loadedTask == nil {
-		t.Fatal("expected task after task.create")
-	}
-	if loadedTask.ID != createdTask.ID {
-		t.Fatalf("unexpected task id: got %s want %s", loadedTask.ID, createdTask.ID)
-	}
-
-	otherUser, err := s.CreateUser("other@example.com", "Other", "hash")
-	if err != nil {
-		t.Fatalf("create other user: %v", err)
-	}
-	otherPM, err := s.CreateAgent(otherUser.ID, "node-pm-other", "Other PM", "pm", "other", []string{"plan"})
-	if err != nil {
-		t.Fatalf("create other pm: %v", err)
-	}
-
-	_, appErr = s.GetTaskByConversationForPMNode(otherPM.NodeID, conversation.ID)
-	if appErr == nil || appErr.Code != "FORBIDDEN" {
-		t.Fatalf("expected FORBIDDEN for unrelated pm, got %#v", appErr)
-	}
-
-	_, appErr = s.GetTaskByConversationForPMNode(developer.NodeID, conversation.ID)
-	if appErr == nil || appErr.Code != "FORBIDDEN" {
-		t.Fatalf("expected FORBIDDEN for non-pm, got %#v", appErr)
-	}
-}
-
-func TestGetProjectSummaryForPMNode(t *testing.T) {
+func TestSyncAgentPresenceMarksOfflineAndBusy(t *testing.T) {
 	s, _, pm, developer, project, conversation := seedWorkflowState(t)
 
 	_, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
@@ -86,105 +27,14 @@ func TestGetProjectSummaryForPMNode(t *testing.T) {
 		t.Fatalf("create task: %v", appErr)
 	}
 
-	summary, appErr := s.GetProjectSummaryForPMNode(pm.NodeID, project.ID)
-	if appErr != nil {
-		t.Fatalf("get project summary: %v", appErr)
-	}
-	if summary.TaskCount != 1 {
-		t.Fatalf("unexpected task count: %d", summary.TaskCount)
-	}
-	if summary.PendingTaskCount != 1 {
-		t.Fatalf("unexpected pending task count: %d", summary.PendingTaskCount)
-	}
-	if summary.ResolvedConversationCount != 1 {
-		t.Fatalf("unexpected resolved conversation count: %d", summary.ResolvedConversationCount)
-	}
-	if summary.ActiveConversationCount != 0 {
-		t.Fatalf("unexpected active conversation count: %d", summary.ActiveConversationCount)
-	}
-}
-
-func TestListCandidateAgentsForPMNode(t *testing.T) {
-	s, user, pm, developer, project, _ := seedWorkflowState(t)
-
-	reviewer, appErr := s.CreateAgent(user, "node-review-001", "Reviewer", "reviewer", "review", []string{"review"})
-	if appErr != nil {
-		t.Fatalf("create reviewer: %v", appErr)
-	}
-	otherUser, appErr := s.CreateUser("other@example.com", "Other", "hash")
-	if appErr != nil {
-		t.Fatalf("create other user: %v", appErr)
-	}
-	_, appErr = s.CreateAgent(otherUser.ID, "node-ext-001", "External", "developer", "external", []string{"backend"})
-	if appErr != nil {
-		t.Fatalf("create external agent: %v", appErr)
-	}
-
-	items, appErr := s.ListCandidateAgentsForPMNode(pm.NodeID, project.ID)
-	if appErr != nil {
-		t.Fatalf("list candidate agents: %v", appErr)
-	}
-	if len(items) != 3 {
-		t.Fatalf("unexpected candidate count: %d", len(items))
-	}
-
-	foundDeveloper := false
-	foundReviewer := false
-	for _, item := range items {
-		if item.ID == developer.ID {
-			foundDeveloper = true
-		}
-		if item.ID == reviewer.ID {
-			foundReviewer = true
-		}
-	}
-	if !foundDeveloper || !foundReviewer {
-		t.Fatalf("expected developer and reviewer in candidate list: %+v", items)
-	}
-
-	_, appErr = s.ListCandidateAgentsForPMNode(developer.NodeID, project.ID)
-	if appErr == nil || appErr.Code != "FORBIDDEN" {
-		t.Fatalf("expected FORBIDDEN for non-pm, got %#v", appErr)
-	}
-}
-
-func TestReconcileAgentStatusesMarksOffline(t *testing.T) {
-	s, _, pm, developer, project, conversation := seedWorkflowState(t)
-	s.heartbeatTTL = 30 * time.Second
-
-	_, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login",
-		Description:    "Support email password login",
-		Todos: []TaskCreateTodoInput{
-			{
-				Title:          "Build backend API",
-				Description:    "Implement auth endpoints",
-				AssigneeNodeID: developer.NodeID,
-			},
-		},
-	})
-	if appErr != nil {
-		t.Fatalf("create task: %v", appErr)
-	}
-
-	staleAt := time.Now().UTC().Add(-31 * time.Second)
-	s.mu.Lock()
-	pmAgent := s.agents[pm.ID]
-	pmAgent.HeartbeatAt = &staleAt
-	pmAgent.Status = "busy"
-	developerAgent := s.agents[developer.ID]
-	developerAgent.HeartbeatAt = &staleAt
-	developerAgent.Status = "online"
-	s.mu.Unlock()
-
-	updated := s.ReconcileAgentStatuses(time.Now().UTC())
+	updated := s.SyncAgentPresence([]AgentPresence{
+		{NodeID: developer.NodeID, LastSeenAt: time.Now().UTC()},
+	}, time.Now().UTC())
 	if updated != 2 {
 		t.Fatalf("unexpected updated count: %d", updated)
 	}
 
-	projectState, appErr := s.GetProject(pmAgent.UserID, project.ID)
+	projectState, appErr := s.GetProject(s.agents[pm.ID].UserID, project.ID)
 	if appErr != nil {
 		t.Fatalf("get project: %v", appErr)
 	}
@@ -192,12 +42,27 @@ func TestReconcileAgentStatusesMarksOffline(t *testing.T) {
 		t.Fatalf("expected project pm to be offline, got %s", projectState.PMAgent.Status)
 	}
 
-	taskState, appErr := s.GetTask(pmAgent.UserID, s.projectTasks[project.ID][0])
+	taskState, appErr := s.GetTask(s.agents[pm.ID].UserID, s.projectTasks[project.ID][0])
 	if appErr != nil {
 		t.Fatalf("get task: %v", appErr)
 	}
 	if taskState.PMAgent.Status != "offline" {
 		t.Fatalf("expected task pm to be offline, got %s", taskState.PMAgent.Status)
+	}
+	if s.agents[developer.ID].Status != "online" {
+		t.Fatalf("expected developer to stay online before starting work, got %s", s.agents[developer.ID].Status)
+	}
+
+	taskState, appErr = s.UpdateTodoProgressByNode(developer.NodeID, TodoProgressInput{
+		TaskID:  taskState.ID,
+		TodoID:  taskState.Todos[0].ID,
+		Message: "started",
+	})
+	if appErr != nil {
+		t.Fatalf("todo progress: %v", appErr)
+	}
+	if s.agents[developer.ID].Status != "busy" {
+		t.Fatalf("expected developer to be busy after progress, got %s", s.agents[developer.ID].Status)
 	}
 	if taskState.Todos[0].Assignee.NodeID != developer.NodeID {
 		t.Fatalf("unexpected todo assignee node id: %s", taskState.Todos[0].Assignee.NodeID)
@@ -482,6 +347,10 @@ func seedWorkflowState(t *testing.T) (*Store, string, stringAgent, stringAgent, 
 	if appErr != nil {
 		t.Fatalf("create developer: %v", appErr)
 	}
+	s.SyncAgentPresence([]AgentPresence{
+		{NodeID: pm.NodeID, LastSeenAt: time.Now().UTC()},
+		{NodeID: developer.NodeID, LastSeenAt: time.Now().UTC()},
+	}, time.Now().UTC())
 	project, appErr := s.CreateProject(user.ID, "TrustMesh MVP", "demo", pm.ID)
 	if appErr != nil {
 		t.Fatalf("create project: %v", appErr)

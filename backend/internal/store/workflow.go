@@ -2,11 +2,11 @@ package store
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"trustmesh/backend/internal/model"
 	"trustmesh/backend/internal/transport"
 )
@@ -44,32 +44,6 @@ type TodoFailInput struct {
 	Error  string
 }
 
-type AssignedTodoItem struct {
-	TaskID         string     `json:"task_id"`
-	ProjectID      string     `json:"project_id"`
-	ConversationID string     `json:"conversation_id"`
-	TaskTitle      string     `json:"task_title"`
-	TaskStatus     string     `json:"task_status"`
-	Todo           model.Todo `json:"todo"`
-}
-
-type ProjectSummary struct {
-	ID                        string               `json:"id"`
-	Name                      string               `json:"name"`
-	Description               string               `json:"description"`
-	Status                    string               `json:"status"`
-	PMAgent                   model.PMAgentSummary `json:"pm_agent"`
-	ActiveConversationCount   int                  `json:"active_conversation_count"`
-	ResolvedConversationCount int                  `json:"resolved_conversation_count"`
-	TaskCount                 int                  `json:"task_count"`
-	PendingTaskCount          int                  `json:"pending_task_count"`
-	InProgressTaskCount       int                  `json:"in_progress_task_count"`
-	DoneTaskCount             int                  `json:"done_task_count"`
-	FailedTaskCount           int                  `json:"failed_task_count"`
-	CreatedAt                 time.Time            `json:"created_at"`
-	UpdatedAt                 time.Time            `json:"updated_at"`
-}
-
 func (s *Store) GetProjectPMNode(userID, projectID string) (string, *transport.AppError) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -85,103 +59,61 @@ func (s *Store) GetProjectPMNode(userID, projectID string) (string, *transport.A
 	return agent.NodeID, nil
 }
 
-func (s *Store) GetProjectSummaryForPMNode(nodeID, projectID string) (*ProjectSummary, *transport.AppError) {
-	nodeID = strings.TrimSpace(nodeID)
-	projectID = strings.TrimSpace(projectID)
-	if nodeID == "" || projectID == "" {
-		return nil, transport.Validation("invalid rpc payload", map[string]any{"node_id": "required", "project_id": "required"})
+func (s *Store) SyncAgentPresence(items []AgentPresence, now time.Time) int {
+	if now.IsZero() {
+		now = time.Now().UTC()
 	}
 
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	pmAgent, project, err := s.requirePMOnProjectUnsafe(nodeID, projectID)
-	if err != nil {
-		return nil, err
-	}
-
-	var activeConversationCount int
-	var resolvedConversationCount int
-	for _, conversationID := range s.projectConversations[project.ID] {
-		conversation, ok := s.conversations[conversationID]
-		if !ok {
+	seen := make(map[string]time.Time, len(items))
+	for _, item := range items {
+		nodeID := strings.TrimSpace(item.NodeID)
+		if nodeID == "" {
 			continue
 		}
-		switch conversation.Status {
-		case "active":
-			activeConversationCount++
-		case "resolved":
-			resolvedConversationCount++
+		lastSeen := item.LastSeenAt
+		if lastSeen.IsZero() {
+			lastSeen = now
 		}
-	}
-
-	var pendingTaskCount int
-	var inProgressTaskCount int
-	var doneTaskCount int
-	var failedTaskCount int
-	for _, taskID := range s.projectTasks[project.ID] {
-		task, ok := s.tasks[taskID]
-		if !ok {
-			continue
-		}
-		switch task.Status {
-		case "pending":
-			pendingTaskCount++
-		case "in_progress":
-			inProgressTaskCount++
-		case "done":
-			doneTaskCount++
-		case "failed":
-			failedTaskCount++
-		}
-	}
-
-	return &ProjectSummary{
-		ID:                        project.ID,
-		Name:                      project.Name,
-		Description:               project.Description,
-		Status:                    project.Status,
-		PMAgent:                   toPMSummary(pmAgent),
-		ActiveConversationCount:   activeConversationCount,
-		ResolvedConversationCount: resolvedConversationCount,
-		TaskCount:                 len(s.projectTasks[project.ID]),
-		PendingTaskCount:          pendingTaskCount,
-		InProgressTaskCount:       inProgressTaskCount,
-		DoneTaskCount:             doneTaskCount,
-		FailedTaskCount:           failedTaskCount,
-		CreatedAt:                 project.CreatedAt,
-		UpdatedAt:                 project.UpdatedAt,
-	}, nil
-}
-
-func (s *Store) UpdateAgentHeartbeat(nodeID, status string, ts time.Time) (*model.Agent, *transport.AppError) {
-	nodeID = strings.TrimSpace(nodeID)
-	if nodeID == "" {
-		return nil, transport.Validation("invalid node_id", map[string]any{"node_id": "required"})
-	}
-	if status != "online" && status != "busy" {
-		return nil, transport.Validation("invalid heartbeat status", map[string]any{"status": "must be online or busy"})
-	}
-	if ts.IsZero() {
-		ts = time.Now().UTC()
+		seen[nodeID] = lastSeen.UTC()
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	agent, err := s.agentByNodeUnsafe(nodeID)
-	if err != nil {
-		return nil, err
+
+	updated := 0
+	persisted := make(map[string]struct{})
+	for _, agent := range s.agents {
+		lastSeen, online := seen[agent.NodeID]
+		nextStatus := "offline"
+		if online {
+			nextStatus = s.connectedAgentStatusUnsafe(agent.ID)
+		}
+
+		changed := false
+		if online && (agent.LastSeenAt == nil || !agent.LastSeenAt.Equal(lastSeen)) {
+			ts := lastSeen
+			agent.LastSeenAt = &ts
+			changed = true
+		}
+		if agent.Status != nextStatus {
+			agent.Status = nextStatus
+			s.rebuildProjectPMSummariesUnsafe(agent.ID)
+			s.rebuildTaskPMSummariesUnsafe(agent.ID)
+			changed = true
+		}
+		if !changed {
+			continue
+		}
+		agent.UpdatedAt = now
+		if _, ok := persisted[agent.ID]; !ok {
+			if err := s.persistAgentGraphUnsafe(agent.ID); err != nil && s.log != nil {
+				s.log.Warn("failed to persist synced agent status", zap.String("agent_id", agent.ID), zap.Error(err))
+			}
+			persisted[agent.ID] = struct{}{}
+		}
+		updated++
 	}
-	agent.Status = status
-	agent.HeartbeatAt = &ts
-	agent.LastSeenAt = &ts
-	agent.UpdatedAt = time.Now().UTC()
-	s.rebuildProjectPMSummariesUnsafe(agent.ID)
-	s.rebuildTaskPMSummariesUnsafe(agent.ID)
-	if err := s.persistAgentGraphUnsafe(agent.ID); err != nil {
-		return nil, mongoWriteError(err)
-	}
-	return copyAgent(agent), nil
+	return updated
 }
 
 func (s *Store) AppendPMReplyByNode(nodeID, conversationID, content string) (*model.ConversationDetail, *transport.AppError) {
@@ -219,9 +151,13 @@ func (s *Store) AppendPMReplyByNode(nodeID, conversationID, content string) (*mo
 	}
 
 	now := time.Now().UTC()
+	s.markAgentSeenUnsafe(pmAgent.ID, now)
 	conv.Messages = append(conv.Messages, model.ConversationMessage{ID: uuid.NewString(), Role: "pm_agent", Content: content, CreatedAt: now})
 	conv.UpdatedAt = now
 	if err := s.persistConversationUnsafe(conv); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	if err := s.persistAgentGraphUnsafe(pmAgent.ID); err != nil {
 		return nil, mongoWriteError(err)
 	}
 	detail := s.toConversationDetailUnsafe(conv)
@@ -285,6 +221,7 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 	}
 
 	now := time.Now().UTC()
+	s.markAgentSeenUnsafe(pmAgent.ID, now)
 	seenTodoIDs := make(map[string]struct{}, len(in.Todos))
 	todos := make([]model.Todo, 0, len(in.Todos))
 	for i, todoIn := range in.Todos {
@@ -380,6 +317,9 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
 		return nil, mongoWriteError(err)
 	}
+	if err := s.persistAgentGraphUnsafe(pmAgent.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
 	if err := s.persistProcessedMessageUnsafe(processedMessageKey("task.create", nodeID, messageID)); err != nil {
 		return nil, mongoWriteError(err)
 	}
@@ -420,6 +360,7 @@ func (s *Store) UpdateTodoProgressByNode(nodeID string, in TodoProgressInput) (*
 	}
 
 	now := time.Now().UTC()
+	s.markAgentSeenUnsafe(agent.ID, now)
 	if todo.Status == "pending" {
 		todo.Status = "in_progress"
 		todo.StartedAt = &now
@@ -431,6 +372,10 @@ func (s *Store) UpdateTodoProgressByNode(nodeID string, in TodoProgressInput) (*
 
 	s.updateTaskStatusUnsafe(task, now)
 	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.refreshAgentExecutionStatusUnsafe(agent.ID, now)
+	if err := s.persistAgentGraphUnsafe(agent.ID); err != nil {
 		return nil, mongoWriteError(err)
 	}
 	return copyTask(task), nil
@@ -478,6 +423,7 @@ func (s *Store) CompleteTodoByNodeWithMessageID(nodeID, messageID string, in Tod
 	}
 
 	now := time.Now().UTC()
+	s.markAgentSeenUnsafe(agent.ID, now)
 	if todo.StartedAt == nil {
 		todo.StartedAt = &now
 	}
@@ -499,6 +445,10 @@ func (s *Store) CompleteTodoByNodeWithMessageID(nodeID, messageID string, in Tod
 	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
 		return nil, mongoWriteError(err)
 	}
+	s.refreshAgentExecutionStatusUnsafe(agent.ID, now)
+	if err := s.persistAgentGraphUnsafe(agent.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
 	if err := s.persistProcessedMessageUnsafe(processedMessageKey("todo.complete", nodeID, messageID)); err != nil {
 		return nil, mongoWriteError(err)
 	}
@@ -506,6 +456,10 @@ func (s *Store) CompleteTodoByNodeWithMessageID(nodeID, messageID string, in Tod
 }
 
 func (s *Store) FailTodoByNode(nodeID string, in TodoFailInput) (*model.TaskDetail, *transport.AppError) {
+	return s.FailTodoByNodeWithMessageID(nodeID, "", in)
+}
+
+func (s *Store) FailTodoByNodeWithMessageID(nodeID, messageID string, in TodoFailInput) (*model.TaskDetail, *transport.AppError) {
 	in.TaskID = strings.TrimSpace(in.TaskID)
 	in.TodoID = strings.TrimSpace(in.TodoID)
 	in.Error = strings.TrimSpace(in.Error)
@@ -515,6 +469,10 @@ func (s *Store) FailTodoByNode(nodeID string, in TodoFailInput) (*model.TaskDeta
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if task, ok := s.findProcessedTaskUnsafe(processedMessageKey("todo.fail", nodeID, messageID)); ok {
+		return task, nil
+	}
 
 	agent, err := s.agentByNodeUnsafe(nodeID)
 	if err != nil {
@@ -540,6 +498,7 @@ func (s *Store) FailTodoByNode(nodeID string, in TodoFailInput) (*model.TaskDeta
 	}
 
 	now := time.Now().UTC()
+	s.markAgentSeenUnsafe(agent.ID, now)
 	if todo.StartedAt == nil {
 		todo.StartedAt = &now
 	}
@@ -552,152 +511,18 @@ func (s *Store) FailTodoByNode(nodeID string, in TodoFailInput) (*model.TaskDeta
 	s.addTaskEventUnsafe(task.ID, "agent", agent.ID, "todo_failed", &failed, map[string]any{"todo_id": todo.ID, "error": in.Error}, now)
 
 	s.updateTaskStatusUnsafe(task, now)
+	s.rememberProcessedMessageUnsafe(processedMessageKey("todo.fail", nodeID, messageID), "todo.fail", task.ID)
 	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
 		return nil, mongoWriteError(err)
 	}
-	return copyTask(task), nil
-}
-
-func (s *Store) GetTaskForNode(nodeID, taskID string) (*model.TaskDetail, *transport.AppError) {
-	nodeID = strings.TrimSpace(nodeID)
-	taskID = strings.TrimSpace(taskID)
-	if nodeID == "" || taskID == "" {
-		return nil, transport.Validation("invalid rpc payload", map[string]any{"node_id": "required", "task_id": "required"})
+	s.refreshAgentExecutionStatusUnsafe(agent.ID, now)
+	if err := s.persistAgentGraphUnsafe(agent.ID); err != nil {
+		return nil, mongoWriteError(err)
 	}
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	agent, err := s.agentByNodeUnsafe(nodeID)
-	if err != nil {
-		return nil, err
-	}
-	task, ok := s.tasks[taskID]
-	if !ok || task.UserID != agent.UserID {
-		return nil, transport.NotFound("task not found")
-	}
-	if !canAccessTaskUnsafe(agent.ID, task) {
-		return nil, transport.Forbidden("agent has no access to this task")
+	if err := s.persistProcessedMessageUnsafe(processedMessageKey("todo.fail", nodeID, messageID)); err != nil {
+		return nil, mongoWriteError(err)
 	}
 	return copyTask(task), nil
-}
-
-func (s *Store) GetTaskByConversationForPMNode(nodeID, conversationID string) (*model.TaskDetail, *transport.AppError) {
-	nodeID = strings.TrimSpace(nodeID)
-	conversationID = strings.TrimSpace(conversationID)
-	if nodeID == "" || conversationID == "" {
-		return nil, transport.Validation("invalid rpc payload", map[string]any{"node_id": "required", "conversation_id": "required"})
-	}
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	pmAgent, err := s.requirePMAgentUnsafe(nodeID)
-	if err != nil {
-		return nil, err
-	}
-
-	conversation, ok := s.conversations[conversationID]
-	if !ok {
-		return nil, transport.NotFound("conversation not found")
-	}
-	project, ok := s.projects[conversation.ProjectID]
-	if !ok {
-		return nil, transport.NotFound("project not found")
-	}
-	if project.PMAgentID != pmAgent.ID {
-		return nil, transport.Forbidden("pm agent is not bound to this project")
-	}
-
-	taskID, ok := s.conversationTasks[conversationID]
-	if !ok {
-		return nil, nil
-	}
-	task, ok := s.tasks[taskID]
-	if !ok {
-		return nil, nil
-	}
-	return copyTask(task), nil
-}
-
-func (s *Store) ListAssignedTodosForNode(nodeID string) ([]AssignedTodoItem, *transport.AppError) {
-	nodeID = strings.TrimSpace(nodeID)
-	if nodeID == "" {
-		return nil, transport.Validation("invalid node_id", map[string]any{"node_id": "required"})
-	}
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	agent, err := s.agentByNodeUnsafe(nodeID)
-	if err != nil {
-		return nil, err
-	}
-
-	items := make([]AssignedTodoItem, 0)
-	for _, task := range s.tasks {
-		if task.UserID != agent.UserID {
-			continue
-		}
-		for _, todo := range task.Todos {
-			if todo.Assignee.AgentID != agent.ID {
-				continue
-			}
-			if todo.Status == "done" || todo.Status == "failed" {
-				continue
-			}
-			items = append(items, AssignedTodoItem{
-				TaskID:         task.ID,
-				ProjectID:      task.ProjectID,
-				ConversationID: task.ConversationID,
-				TaskTitle:      task.Title,
-				TaskStatus:     task.Status,
-				Todo:           copyTodo(todo),
-			})
-		}
-	}
-	sort.Slice(items, func(i, j int) bool { return items[i].Todo.CreatedAt.Before(items[j].Todo.CreatedAt) })
-	return items, nil
-}
-
-func (s *Store) ListCandidateAgentsForPMNode(nodeID, projectID string) ([]model.Agent, *transport.AppError) {
-	nodeID = strings.TrimSpace(nodeID)
-	projectID = strings.TrimSpace(projectID)
-	if nodeID == "" {
-		return nil, transport.Validation("invalid rpc payload", map[string]any{"node_id": "required"})
-	}
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	pmAgent, err := s.requirePMAgentUnsafe(nodeID)
-	if err != nil {
-		return nil, err
-	}
-	if projectID != "" {
-		project, ok := s.projects[projectID]
-		if !ok {
-			return nil, transport.NotFound("project not found")
-		}
-		if project.PMAgentID != pmAgent.ID {
-			return nil, transport.Forbidden("pm agent is not bound to this project")
-		}
-	}
-
-	items := make([]model.Agent, 0)
-	for _, agent := range s.agents {
-		if agent.UserID != pmAgent.UserID {
-			continue
-		}
-		items = append(items, *copyAgent(agent))
-	}
-	sort.Slice(items, func(i, j int) bool {
-		if items[i].Status != items[j].Status {
-			return items[i].Status < items[j].Status
-		}
-		return items[i].Name < items[j].Name
-	})
-	return items, nil
 }
 
 func (s *Store) agentByNodeUnsafe(nodeID string) (*model.Agent, *transport.AppError) {
@@ -710,32 +535,6 @@ func (s *Store) agentByNodeUnsafe(nodeID string) (*model.Agent, *transport.AppEr
 		return nil, transport.NotFound("agent not found")
 	}
 	return agent, nil
-}
-
-func (s *Store) requirePMAgentUnsafe(nodeID string) (*model.Agent, *transport.AppError) {
-	agent, err := s.agentByNodeUnsafe(nodeID)
-	if err != nil {
-		return nil, err
-	}
-	if agent.Role != "pm" {
-		return nil, transport.Forbidden("only pm agent can access this rpc")
-	}
-	return agent, nil
-}
-
-func (s *Store) requirePMOnProjectUnsafe(nodeID, projectID string) (*model.Agent, *model.Project, *transport.AppError) {
-	pmAgent, err := s.requirePMAgentUnsafe(nodeID)
-	if err != nil {
-		return nil, nil, err
-	}
-	project, ok := s.projects[projectID]
-	if !ok {
-		return nil, nil, transport.NotFound("project not found")
-	}
-	if project.PMAgentID != pmAgent.ID {
-		return nil, nil, transport.Forbidden("pm agent is not bound to this project")
-	}
-	return pmAgent, project, nil
 }
 
 func processedMessageKey(action, nodeID, messageID string) string {
@@ -798,6 +597,44 @@ func (s *Store) updateTaskStatusUnsafe(task *model.TaskDetail, now time.Time) {
 		msg := fmt.Sprintf("task status changed: %s -> %s", prev, next)
 		s.addTaskEventUnsafe(task.ID, "system", "system", "task_status_changed", &msg, map[string]any{"from": prev, "to": next}, now)
 	}
+}
+
+func (s *Store) connectedAgentStatusUnsafe(agentID string) string {
+	for _, task := range s.tasks {
+		for _, todo := range task.Todos {
+			if todo.Assignee.AgentID == agentID && todo.Status == "in_progress" {
+				return "busy"
+			}
+		}
+	}
+	return "online"
+}
+
+func (s *Store) markAgentSeenUnsafe(agentID string, now time.Time) {
+	agent, ok := s.agents[agentID]
+	if !ok {
+		return
+	}
+	ts := now.UTC()
+	agent.LastSeenAt = &ts
+	agent.Status = s.connectedAgentStatusUnsafe(agentID)
+	agent.UpdatedAt = now
+	s.rebuildProjectPMSummariesUnsafe(agentID)
+	s.rebuildTaskPMSummariesUnsafe(agentID)
+}
+
+func (s *Store) refreshAgentExecutionStatusUnsafe(agentID string, now time.Time) {
+	agent, ok := s.agents[agentID]
+	if !ok {
+		return
+	}
+	if agent.Status == "offline" {
+		return
+	}
+	agent.Status = s.connectedAgentStatusUnsafe(agentID)
+	agent.UpdatedAt = now
+	s.rebuildProjectPMSummariesUnsafe(agentID)
+	s.rebuildTaskPMSummariesUnsafe(agentID)
 }
 
 func aggregateTaskStatus(task model.TaskDetail) string {
@@ -956,23 +793,4 @@ func findTodoIndex(task *model.TaskDetail, todoID string) int {
 		}
 	}
 	return -1
-}
-
-func canAccessTaskUnsafe(agentID string, task *model.TaskDetail) bool {
-	if task.PMAgentID == agentID {
-		return true
-	}
-	for _, todo := range task.Todos {
-		if todo.Assignee.AgentID == agentID {
-			return true
-		}
-	}
-	return false
-}
-
-func copyTodo(todo model.Todo) model.Todo {
-	out := todo
-	out.Result.Metadata = copyMap(todo.Result.Metadata)
-	out.Result.ArtifactRefs = append([]model.TodoResultArtifactRef(nil), todo.Result.ArtifactRefs...)
-	return out
 }
