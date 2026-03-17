@@ -1,6 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
 import * as tasksApi from '@/api/tasks'
-import type { ListProjectTasksQuery } from '@/types'
+import type { ListProjectTasksQuery, TaskDetail } from '@/types'
+
+function normalizeTaskDetail(task: TaskDetail): TaskDetail {
+  return {
+    ...task,
+    todos: task.todos ?? [],
+    artifacts: task.artifacts ?? [],
+  }
+}
 
 export function useTasks(projectId: string | undefined, query?: ListProjectTasksQuery) {
   return useQuery({
@@ -19,7 +27,7 @@ export function useTask(id: string | undefined) {
     queryKey: ['tasks', 'detail', id],
     queryFn: async () => {
       const res = await tasksApi.getTask(id!)
-      return res.data
+      return normalizeTaskDetail(res.data)
     },
     enabled: !!id,
     refetchInterval: 3000,

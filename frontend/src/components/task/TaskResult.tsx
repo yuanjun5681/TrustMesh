@@ -16,8 +16,9 @@ interface TaskResultViewProps {
 }
 
 export function TaskResultView({ result, artifacts }: TaskResultViewProps) {
+  const safeArtifacts = artifacts ?? []
   const hasResult = result.summary || result.final_output
-  const hasArtifacts = artifacts.length > 0
+  const hasArtifacts = safeArtifacts.length > 0
 
   if (!hasResult && !hasArtifacts) {
     return <p className="py-8 text-center text-sm text-muted-foreground">任务尚未产出结果</p>
@@ -50,7 +51,7 @@ export function TaskResultView({ result, artifacts }: TaskResultViewProps) {
         <div>
           <h4 className="text-sm font-medium mb-2">交付物</h4>
           <div className="space-y-2">
-            {artifacts.map((artifact) => {
+            {safeArtifacts.map((artifact) => {
               const Icon = kindIcons[artifact.kind]
               return (
                 <Card key={artifact.id}>
