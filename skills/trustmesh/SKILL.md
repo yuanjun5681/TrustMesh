@@ -70,14 +70,19 @@ If you still cannot determine the right target node from current context, ask th
 
 ### Reply to an incoming message
 
+Extract `from` from the incoming header and use it as `TARGET_NODE`:
+
 ```bash
+# REPLY_TO = the "from" value in the incoming [clawsynapse from=... ] header
+TARGET_NODE="trustmesh"  # ← replace with actual "from" value from incoming header
+
 payload="$(jq -nc --arg conversation_id "conv_123" --arg content "我先确认两个边界问题。" '{
   conversation_id: $conversation_id,
   content: $content
 }')"
 
 clawsynapse publish \
-  --target node-2 \
+  --target "$TARGET_NODE" \
   --type conversation.reply \
   --session-key conv_123 \
   --message "$payload"
@@ -86,6 +91,9 @@ clawsynapse publish \
 ### Start a new protocol message thread
 
 ```bash
+# TARGET = the node you want to reach (from peers list or task context)
+TARGET_NODE="trustmesh"  # ← replace with actual target node from task context or peers
+
 payload="$(jq -nc --arg task_id "task_123" --arg todo_id "todo_1" --arg message "开始执行" '{
   task_id: $task_id,
   todo_id: $todo_id,
@@ -93,7 +101,7 @@ payload="$(jq -nc --arg task_id "task_123" --arg todo_id "todo_1" --arg message 
 }')"
 
 clawsynapse publish \
-  --target node-platform \
+  --target "$TARGET_NODE" \
   --type todo.progress \
   --session-key task_123 \
   --message "$payload"
@@ -103,7 +111,7 @@ clawsynapse publish \
 
 ```bash
 clawsynapse --json publish \
-  --target node-platform \
+  --target "$TARGET_NODE" \
   --type todo.progress \
   --session-key task_123 \
   --message "$payload"
