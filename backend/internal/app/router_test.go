@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -107,6 +109,182 @@ func TestHappyPathAuthToConversation(t *testing.T) {
 	taskData := decodeBody(t, taskResp)
 	if nestedFloat(taskData, "meta", "count") != 0 {
 		t.Fatalf("unexpected task count: %v", nestedFloat(taskData, "meta", "count"))
+	}
+}
+
+func TestCreateConversationPublishesInitialPMBrief(t *testing.T) {
+	log, err := logger.New("error")
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	defer func() { _ = log.Sync() }()
+
+	var (
+		mu              sync.Mutex
+		publishRequests []map[string]any
+	)
+
+	clawServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/publish":
+			defer r.Body.Close()
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode publish payload: %v", err)
+			}
+			mu.Lock()
+			publishRequests = append(publishRequests, payload)
+			mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"code":"OK","message":"ok","data":{"targetNode":"node-pm-001","messageId":"msg-1"},"ts":1}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer clawServer.Close()
+
+	application, err := New(config.Config{
+		Port:               "0",
+		JWTSecret:          "test-secret",
+		TokenTTL:           time.Hour,
+		LogLevel:           "error",
+		AllowAllCORS:       true,
+		ReadTimeout:        3 * time.Second,
+		WriteTimeout:       3 * time.Second,
+		ShutdownGrace:      3 * time.Second,
+		ClawSynapseAPIURL:  clawServer.URL,
+		ClawSynapseTimeout: time.Second,
+	}, log)
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
+	defer func() {
+		if closeErr := application.Close(); closeErr != nil {
+			t.Fatalf("close app: %v", closeErr)
+		}
+	}()
+
+	testServer := httptest.NewServer(application.Engine)
+	defer testServer.Close()
+
+	registerResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/auth/register", "", map[string]any{
+		"email":    "brief@example.com",
+		"name":     "Brief User",
+		"password": "StrongPass123!",
+	})
+	token := nestedString(decodeBody(t, registerResp), "data", "token")
+
+	pmResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/agents", token, map[string]any{
+		"node_id":      "node-pm-001",
+		"name":         "PM Agent",
+		"role":         "pm",
+		"description":  "PM",
+		"capabilities": []string{"plan"},
+	})
+	pmID := nestedString(decodeBody(t, pmResp), "data", "id")
+
+	devResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/agents", token, map[string]any{
+		"node_id":      "node-dev-001",
+		"name":         "Backend Agent",
+		"role":         "developer",
+		"description":  "backend",
+		"capabilities": []string{"backend", "auth"},
+	})
+	_ = nestedString(decodeBody(t, devResp), "data", "id")
+
+	reviewerResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/agents", token, map[string]any{
+		"node_id":      "node-review-001",
+		"name":         "Reviewer Agent",
+		"role":         "reviewer",
+		"description":  "review",
+		"capabilities": []string{"review", "qa"},
+	})
+	_ = nestedString(decodeBody(t, reviewerResp), "data", "id")
+
+	application.Store.SyncAgentPresence([]store.AgentPresence{
+		{NodeID: "node-pm-001", LastSeenAt: time.Now().UTC()},
+		{NodeID: "node-dev-001", LastSeenAt: time.Now().UTC()},
+		{NodeID: "node-review-001", LastSeenAt: time.Now().UTC()},
+	}, time.Now().UTC())
+
+	projectResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/projects", token, map[string]any{
+		"name":        "TrustMesh MVP",
+		"description": "multi-agent task orchestration",
+		"pm_agent_id": pmID,
+	})
+	projectID := nestedString(decodeBody(t, projectResp), "data", "id")
+
+	conversationResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/projects/"+projectID+"/conversations", token, map[string]any{
+		"content": "实现一个带邮箱密码登录和退出能力的认证功能",
+	})
+	if conversationResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create conversation status=%d", conversationResp.StatusCode)
+	}
+
+	mu.Lock()
+	if len(publishRequests) != 1 {
+		t.Fatalf("expected 1 publish request, got %d", len(publishRequests))
+	}
+	publishReq := publishRequests[0]
+	mu.Unlock()
+
+	if publishReq["targetNode"] != "node-pm-001" {
+		t.Fatalf("unexpected targetNode: %v", publishReq["targetNode"])
+	}
+	if publishReq["type"] != "conversation.message" {
+		t.Fatalf("unexpected publish type: %v", publishReq["type"])
+	}
+
+	rawMessage, ok := publishReq["message"].(string)
+	if !ok || rawMessage == "" {
+		t.Fatalf("publish message missing: %#v", publishReq["message"])
+	}
+
+	var message map[string]any
+	if err := json.Unmarshal([]byte(rawMessage), &message); err != nil {
+		t.Fatalf("unmarshal publish message: %v", err)
+	}
+
+	if message["is_initial_message"] != true {
+		t.Fatalf("expected is_initial_message=true, got %#v", message["is_initial_message"])
+	}
+	if message["user_content"] != "实现一个带邮箱密码登录和退出能力的认证功能" {
+		t.Fatalf("unexpected user_content: %#v", message["user_content"])
+	}
+
+	content, ok := message["content"].(string)
+	if !ok {
+		t.Fatalf("content is not string: %#v", message["content"])
+	}
+	for _, expected := range []string{
+		"任务：实现一个带邮箱密码登录和退出能力的认证功能",
+		"使用 `trustmesh` skill 创建 1 个 Task，并拆成边界清晰、可独立验收的 Todos。",
+		"使用 `trustmesh` skill 发送 `conversation.reply` 回复用户。",
+		"候选执行 Agent：",
+		"Backend Agent | node_id=node-dev-001 | role=developer | status=online | capabilities=backend, auth",
+	} {
+		if !strings.Contains(content, expected) {
+			t.Fatalf("content missing %q\ncontent=%s", expected, content)
+		}
+	}
+
+	candidateAgents, ok := message["candidate_agents"].([]any)
+	if !ok || len(candidateAgents) != 2 {
+		t.Fatalf("unexpected candidate_agents: %#v", message["candidate_agents"])
+	}
+
+	pmBrief, ok := message["pm_brief"].(map[string]any)
+	if !ok {
+		t.Fatalf("pm_brief missing: %#v", message["pm_brief"])
+	}
+	if pmBrief["objective"] == "" {
+		t.Fatalf("pm_brief objective missing: %#v", pmBrief)
+	}
+	if pmBrief["must_clarify_before_task_create"] != true {
+		t.Fatalf("pm_brief must_clarify_before_task_create missing: %#v", pmBrief)
+	}
+	if pmBrief["must_use_skill"] != "trustmesh" {
+		t.Fatalf("pm_brief must_use_skill missing: %#v", pmBrief)
 	}
 }
 

@@ -210,9 +210,37 @@ message:
 {
   "conversation_id": "conv_123",
   "project_id": "proj_123",
-  "content": "我需要一个用户登录功能"
+  "content": "你正在处理 TrustMesh 项目的首次需求澄清。\n\n任务：我需要一个用户登录功能\n目的：分析任务需求；若存在不明确项，先向用户提问澄清。只有在需求最终明确后，才拆解任务并派发给其他 Agent。\n...",
+  "user_content": "我需要一个用户登录功能",
+  "is_initial_message": true,
+  "project": {
+    "name": "TrustMesh MVP",
+    "description": "multi-agent task orchestration"
+  },
+  "pm_brief": {
+    "objective": "明确任务目标和业务目的；在需求清晰前持续澄清；仅在需求满足执行条件后拆解任务并派发给其他 Agent。",
+    "must_clarify_before_task_create": true,
+    "must_use_skill": "trustmesh"
+  },
+  "candidate_agents": [
+    {
+      "id": "agent_dev_1",
+      "name": "Backend Agent",
+      "node_id": "node-backend-001",
+      "role": "developer",
+      "status": "online",
+      "capabilities": ["backend", "auth"]
+    }
+  ]
 }
 ```
+
+约定：
+- `content` 在首次对话时是增强后的 PM 提示词，包含任务、目的、澄清规则、TrustMesh Skill 使用要求和候选 Agent 上下文；后续追加消息可继续发送用户原始内容。
+- `user_content` 始终保留用户原始输入，供 PM Agent 区分系统引导与用户需求。
+- `is_initial_message=true` 表示这是该 `Conversation` 的首条需求消息；PM Agent 应优先做需求澄清，而不是立即创建 `task.create`。
+- `pm_brief` 只保留最小结构化信号，避免与 `content` 中的自然语言提示重复。
+- `candidate_agents` 提供当前用户下可供派发的非 PM Agent 列表；PM Agent 应结合 `role`、`status` 和 `capabilities` 做分派。
 
 ### 6.2 PM 回复用户对话
 
