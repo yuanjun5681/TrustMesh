@@ -74,7 +74,7 @@ App
 
 - 新增 Agent：用户在 `AgentConfigDialog` 中填写 `node_id`、名称、role、描述、capabilities。
 - 编辑 Agent：允许修改名称、role、描述、capabilities；`node_id` 在编辑态只读展示。
-- Agent 卡片展示字段：`name`、`role`、`node_id`、`capabilities`、`status`、`description`。
+- Agent 卡片展示字段：`name`、`role`、`node_id`（ClawSynapse nodeId）、`capabilities`、`status`、`description`。
 - 项目创建时，从当前用户已添加的 Agent 列表中选择 PM Agent；MVP 不支持在项目编辑页更换 PM Agent。
 
 ## ConversationPage 数据流
@@ -103,6 +103,6 @@ App
 
 ## 异常态
 
-- 如果项目 PM Agent 离线，`ConversationPage` 禁止发送需求，并展示明确提示。
+- 如果项目 PM Agent 离线（不在 ClawSynapse peers 列表中），`ConversationPage` 禁止发送需求，并展示明确提示。
 - `ProjectListPage` 和项目头部需要展示 PM Agent 当前在线状态。
-- `AgentListPage` 需要展示最近心跳时间，便于用户判断节点是否正常在线。
+- `AgentListPage` 需要展示 Agent 最近在线时间（`last_seen_at`），便于用户判断节点是否正常在线。Agent 在线状态由 ClawSynapse 节点发现机制维护。

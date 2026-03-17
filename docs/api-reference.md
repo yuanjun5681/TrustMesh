@@ -225,10 +225,9 @@ export interface ApiListResponse<T> {
 | `description` | `string` | 描述 |
 | `role` | `"pm" \| "developer" \| "reviewer" \| "custom"` | Agent 角色 |
 | `capabilities` | `string[]` | 能力标签列表 |
-| `node_id` | `string` | 节点唯一标识 |
-| `status` | `"online" \| "offline" \| "busy"` | 在线状态 |
+| `node_id` | `string` | ClawSynapse 节点唯一标识 |
+| `status` | `"online" \| "offline" \| "busy"` | 在线状态（由 ClawSynapse 节点发现机制维护） |
 | `last_seen_at` | `string \| null` | 最近在线时间 |
-| `heartbeat_at` | `string \| null` | 最近心跳时间 |
 | `created_at` | `string` | 创建时间 |
 | `updated_at` | `string` | 更新时间 |
 
@@ -372,7 +371,7 @@ export type TaskEvent = { /* 对应 2.16 */ }
 |------|------|------|------|
 | `email` | `string` | 是 | 登录邮箱，唯一 |
 | `name` | `string` | 是 | 用户名称 |
-| `password` | `string` | 是 | 明文密码，由后端加密存储 |
+| `password` | `string` | 是 | 明文密码，由后端加密存储，至少 8 位 |
 
 请求示例：
 

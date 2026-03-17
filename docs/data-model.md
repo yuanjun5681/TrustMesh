@@ -39,7 +39,6 @@ Task 1───N TaskEvent              (任务活动流)
   "node_id": "string",                // Agent 所在节点 ID，平台内唯一
   "status": "string",                 // "online" | "offline" | "busy"
   "last_seen_at": "datetime | null",
-  "heartbeat_at": "datetime | null",
   "owner_id": "ObjectId ref:users",
   "created_at": "datetime",
   "updated_at": "datetime"
@@ -47,12 +46,12 @@ Task 1───N TaskEvent              (任务活动流)
 ```
 
 约束：
-- `node_id` 全局唯一，用来把 NATS 主题中的节点身份映射到平台内 Agent 记录。
-- Agent 通过心跳维持在线状态；服务端根据最近一次 `heartbeat_at` 推导 `status`。
+- `node_id` 全局唯一，对应该 Agent 的 ClawSynapse nodeId，用于消息路由和身份映射。
+- Agent 在线状态由 ClawSynapse 的节点发现机制（`discovery.announce`）维护；TrustMesh 后端通过 `GET /v1/peers` 定期同步，更新 `status` 和 `last_seen_at`。
 - `role=pm` 表示该 Agent 可作为项目经理 Agent，被项目绑定后承担需求规划职责。
 - 用户创建 Agent 时必须提供 `node_id`。
 - 用户可编辑字段：`name`、`role`、`description`、`capabilities`。
-- 非系统迁移场景下不允许直接修改 `node_id`，避免已存在任务与 NATS 身份映射失效。
+- 非系统迁移场景下不允许直接修改 `node_id`，避免已存在任务与 ClawSynapse 身份映射失效。
 
 ### projects
 
@@ -71,7 +70,7 @@ Task 1───N TaskEvent              (任务活动流)
 
 约束：
 - `pm_agent_id` 对应的 Agent 必须满足 `role=pm`。
-- 只有当项目 PM Agent 当前在线时，才允许创建 Conversation 或发送用户需求消息。
+- 只有当项目 PM Agent 当前在线时（在 ClawSynapse peers 列表中可见），才允许创建 Conversation 或发送用户需求消息。
 
 ### tasks（核心模型）
 
