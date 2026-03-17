@@ -14,20 +14,23 @@
 - Task 查询接口（列表/详情/事件）
 - 统一错误结构与错误码
 - `zap` 日志：启动日志 + 请求日志 + panic recovery
-- NATS 最小闭环接入（可选启用）
-  - 订阅 `agent.*.*.*`：`heartbeat` / `conversation.reply` / `task.create` / `todo.progress` / `todo.complete` / `todo.fail`
-  - 订阅 `rpc.*.*.*`：`task.get` / `todo.assigned` / `project.summary` / `task.by_conversation` / `agent.list`
-  - 发布 `notify.*`：`conversation.message` / `task.created` / `task.updated` / `todo.assigned` / `todo.updated`
+- NATS 最小闭环接入（旧版，待迁移到 ClawSynapse）
 
-## 当前实现说明
+## 架构迁移说明
 
-- 当前版本默认启用 MongoDB 状态持久化（关闭方式：`MONGO_ENABLED=false`）。
-- 当前存储实现是 Mongo 分集合持久化 + 内存索引模型。
-- 启动时会自动创建基础索引，并从 `users`、`agents`、`projects`、`conversations`、`tasks`、`task_events`、`processed_messages` 集合恢复状态。
-- Agent 在线状态由心跳 + 后台超时扫描共同决定，超过 `HEARTBEAT_TTL` 会转为 `offline`。
-- `task.create` 和 `todo.complete` 已基于 NATS envelope `id` 做严格幂等去重。
-- PM Agent 在线约束已实现（`offline` 时禁止创建/追加对话）。
-- 已支持 PM 通过 NATS `agent.{pmNodeId}.task.create` 创建 Task/Todo 并驱动分派。
+当前代码中的 NATS 直连实现（`internal/nats/`）将迁移到 ClawSynapse 集成模式：
+
+- **发送消息**：从直连 NATS publish 改为调用 `clawsynapsed` Local API（`POST /v1/publish`）
+- **接收消息**：从直连 NATS subscribe 改为 WebhookAdapter 推送到 `POST /webhook/clawsynapse`
+- **Agent 在线状态**：从自定义心跳机制改为 ClawSynapse 节点发现（`GET /v1/peers` 同步）
+- **消息格式**：不再需要关心 ClawSynapse 内部 Envelope 格式，只需使用 `POST /v1/publish` 的简单请求字段（`targetNode`、`type`、`message`、`metadata`）
+
+迁移后的模块结构：
+- `internal/nats/` → `internal/clawsynapse/`
+  - `client.go`：clawsynapsed Local API 客户端（`POST /v1/publish`、`GET /v1/peers`）
+  - `webhook.go`：WebhookAdapter 消息处理（接收消息）
+  - `types.go`：WebhookPayload、PublishRequest 等类型定义
+  - `sync.go`：peers 列表定期同步
 
 ## 运行
 
@@ -44,7 +47,7 @@ go run ./cmd/server
 
 ## 本地依赖
 
-在仓库根目录启动 MongoDB + NATS：
+在仓库根目录启动 MongoDB + NATS + clawsynapsed：
 
 ```bash
 docker compose up -d
@@ -54,6 +57,7 @@ docker compose up -d
 - MongoDB: `127.0.0.1:27017`
 - NATS: `127.0.0.1:4222`
 - NATS monitoring: `127.0.0.1:8222`
+- clawsynapsed Local API: `127.0.0.1:18080`
 
 停止：
 
@@ -69,28 +73,7 @@ docker compose down
 bash ./scripts/smoke-task-flow.sh
 ```
 
-该脚本会实际执行：
-- REST 注册用户
-- REST 创建 PM / Developer Agent
-- REST 创建 Project / Conversation
-- NATS 发布 `task.create`
-- NATS 发布 `todo.complete`
-- REST 回查 Task 聚合结果
-
-执行进度/失败态脚本：
-
-```bash
-bash ./scripts/smoke-progress-fail-flow.sh
-```
-
-该脚本会实际执行：
-- REST 注册用户
-- REST 创建 PM / Developer Agent
-- REST 创建 Project / Conversation
-- NATS 发布 `task.create`
-- NATS 发布 `todo.progress`
-- NATS 发布 `todo.fail`
-- REST 回查 Task 状态与事件流
+> 注意：烟雾测试脚本当前仍使用旧版 NATS 直连方式，待 ClawSynapse 迁移完成后更新。
 
 ## 关键环境变量
 
@@ -99,25 +82,18 @@ bash ./scripts/smoke-progress-fail-flow.sh
 - `TOKEN_TTL`（默认 `24h`）
 - `LOG_LEVEL`（默认 `info`）
 - `ALLOW_ALL_CORS`（默认 `true`）
-- `HEARTBEAT_TTL`（默认 `30s`）
-- `HEARTBEAT_SWEEP_INTERVAL`（默认 `5s`）
 - `MONGO_ENABLED`（默认 `true`）
 - `MONGO_URI`（默认 `mongodb://127.0.0.1:27017`）
 - `MONGO_DATABASE`（默认 `trustmesh`）
 - `MONGO_TIMEOUT`（默认 `5s`）
 - `NATS_ENABLED`（默认 `true`）
 - `NATS_URL`（默认 `nats://127.0.0.1:4222`）
-- `NATS_CLIENT_NAME`（默认 `trustmesh-backend`）
-- `NATS_TIMEOUT`（默认 `3s`）
+- `CLAWSYNAPSE_API_URL`（默认 `http://127.0.0.1:18080`，clawsynapsed Local API 地址）
+- `CLAWSYNAPSE_NODE_ID`（TrustMesh 节点的 ClawSynapse nodeId）
+- `CLAWSYNAPSE_PEER_SYNC_INTERVAL`（默认 `10s`，peers 列表同步间隔）
 
 ## 健康检查
 
 ```bash
 curl http://localhost:8080/healthz
-```
-
-## NATS 启动示例
-
-```bash
-NATS_ENABLED=true NATS_URL=nats://127.0.0.1:4222 go run ./cmd/server
 ```
