@@ -719,6 +719,7 @@ func aggregateTaskArtifacts(todos []model.Todo) []model.TaskArtifact {
 		if todo.Status != "done" {
 			continue
 		}
+		transfersByID := indexTodoTransfers(todo.Result.Metadata)
 		for i, ref := range todo.Result.ArtifactRefs {
 			baseID := strings.TrimSpace(ref.ArtifactID)
 			if baseID == "" {
@@ -726,17 +727,44 @@ func aggregateTaskArtifacts(todos []model.Todo) []model.TaskArtifact {
 			}
 			artifactID := uniqueTaskArtifactID(baseID, usedIDs)
 			sourceTodoID := todo.ID
+			metadata := map[string]any{
+				"source": "todo_result_ref",
+			}
+			uri := ""
+			var mimeType *string
+			if transfer, ok := transfersByID[baseID]; ok {
+				metadata["transfer"] = transfer
+				metadata["transfer_id"] = baseID
+				metadata["ref_only"] = false
+				uri = "transfer://" + baseID
+				if v := stringValue(transfer["fileName"]); v != "" {
+					metadata["file_name"] = v
+				} else if v := stringValue(transfer["file_name"]); v != "" {
+					metadata["file_name"] = v
+				}
+				if v := stringValue(transfer["localPath"]); v != "" {
+					metadata["local_path"] = v
+				} else if v := stringValue(transfer["local_path"]); v != "" {
+					metadata["local_path"] = v
+				}
+				if v := stringValue(transfer["mime_type"]); v != "" {
+					mime := v
+					mimeType = &mime
+				} else if v := stringValue(transfer["mimeType"]); v != "" {
+					mime := v
+					mimeType = &mime
+				}
+			} else {
+				metadata["ref_only"] = true
+			}
 			artifacts = append(artifacts, model.TaskArtifact{
 				ID:           artifactID,
 				SourceTodoID: &sourceTodoID,
 				Kind:         strings.TrimSpace(ref.Kind),
 				Title:        strings.TrimSpace(ref.Label),
-				URI:          "",
-				MimeType:     nil,
-				Metadata: map[string]any{
-					"source":   "todo_result_ref",
-					"ref_only": true,
-				},
+				URI:          uri,
+				MimeType:     mimeType,
+				Metadata:     metadata,
 			})
 		}
 	}
@@ -831,6 +859,41 @@ func uniqueTaskArtifactID(baseID string, usedIDs map[string]int) string {
 		return baseID
 	}
 	return fmt.Sprintf("%s-%d", baseID, count+1)
+}
+
+func indexTodoTransfers(metadata map[string]any) map[string]map[string]any {
+	out := make(map[string]map[string]any)
+	if len(metadata) == 0 {
+		return out
+	}
+	rawTransfers, ok := metadata["transfers"]
+	if !ok {
+		return out
+	}
+	items, ok := rawTransfers.([]any)
+	if !ok {
+		return out
+	}
+	for _, item := range items {
+		transfer, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		transferID := strings.TrimSpace(stringValue(transfer["transfer_id"]))
+		if transferID == "" {
+			transferID = strings.TrimSpace(stringValue(transfer["transferId"]))
+		}
+		if transferID == "" {
+			continue
+		}
+		out[transferID] = copyMap(transfer)
+	}
+	return out
+}
+
+func stringValue(v any) string {
+	s, _ := v.(string)
+	return s
 }
 
 func findTodoIndex(task *model.TaskDetail, todoID string) int {

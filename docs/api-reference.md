@@ -263,7 +263,7 @@ export interface ApiListResponse<T> {
 | `result.summary` | `string` | Todo 执行摘要 |
 | `result.output` | `string` | Todo 输出文本 |
 | `result.artifact_refs` | [`TodoResultArtifactRef[]`](#210-todoresultartifactref) | Todo 关联的交付物引用 |
-| `result.metadata` | `object` | 结构化扩展信息 |
+| `result.metadata` | `object` | 结构化扩展信息；文件上传时可在 `metadata.transfers` 中附带 `transfer_id`、`size`、`checksum` 等信息 |
 | `created_at` | `string` | 创建时间 |
 
 ### 2.12 TaskArtifact
@@ -274,9 +274,9 @@ export interface ApiListResponse<T> {
 | `source_todo_id` | `string \| null` | 来源 Todo ID |
 | `kind` | `"file" \| "link" \| "log" \| "report"` | 交付物类型 |
 | `title` | `string` | 标题 |
-| `uri` | `string` | 文件路径、URL 或对象地址 |
+| `uri` | `string` | 文件路径、URL、对象地址，或 `transfer://<transferId>` 形式的传输引用 |
 | `mime_type` | `string \| null` | MIME 类型 |
-| `metadata` | `object` | 扩展元信息 |
+| `metadata` | `object` | 扩展元信息；transfer 型文件会包含 `transfer_id` 与 `transfer` 元数据 |
 
 ### 2.13 TaskResult
 
@@ -823,6 +823,27 @@ export type TaskEvent = { /* 对应 2.16 */ }
 
 - `200 OK`
 - `data.items` 为 [`TaskEvent[]`](#216-taskevent)
+
+### 6.4 查询任务交付物对应的 Transfer
+
+`GET /api/v1/tasks/:id/artifacts/:artifactId/transfer`
+
+路径参数：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `id` | `string` | 任务 ID |
+| `artifactId` | `string` | 交付物 ID |
+
+说明：
+
+- 仅当该交付物由文件传输生成时可用
+- 服务端会基于交付物中的 `transfer_id` 向 ClawSynapse 查询传输详情
+
+响应：
+
+- `200 OK`
+- `data` 为 transfer 详情对象，字段以 ClawSynapse `GET /v1/transfer/{transferId}` 返回为准
 
 ## 七、Agent 接口
 

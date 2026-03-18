@@ -80,12 +80,12 @@ type taskUpdatedPayload struct {
 }
 
 type todoAssignedPayload struct {
-	TaskID      string             `json:"task_id"`
-	TodoID      string             `json:"todo_id"`
-	Title       string             `json:"title"`
-	Description string             `json:"description"`
-	Content     string             `json:"content"`
-	ExecBrief   *todoExecBrief     `json:"exec_brief,omitempty"`
+	TaskID      string         `json:"task_id"`
+	TodoID      string         `json:"todo_id"`
+	Title       string         `json:"title"`
+	Description string         `json:"description"`
+	Content     string         `json:"content"`
+	ExecBrief   *todoExecBrief `json:"exec_brief,omitempty"`
 }
 
 type todoExecBrief struct {
@@ -222,6 +222,7 @@ func (h *WebhookHandler) handleTodoComplete(c *gin.Context, webhook WebhookPaylo
 		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid todo.complete message"))
 		return
 	}
+	h.enrichTodoResultTransfers(c.Request.Context(), &payload.Result)
 
 	task, appErr := h.store.CompleteTodoByNodeWithMessageID(webhook.From, messageIDFromMetadata(webhook.Metadata), store.TodoCompleteInput{
 		TaskID: payload.TaskID,
@@ -256,6 +257,109 @@ func (h *WebhookHandler) handleTodoFail(c *gin.Context, webhook WebhookPayload) 
 
 	h.publishTaskAndTodoUpdates(task, payload.TodoID, payload.Error)
 	transport.WriteData(c, http.StatusOK, task)
+}
+
+func (h *WebhookHandler) enrichTodoResultTransfers(ctx context.Context, result *model.TodoResult) {
+	if h == nil || h.client == nil || result == nil {
+		return
+	}
+
+	transfersByID, orderedIDs := normalizeTransfers(result.Metadata)
+	for _, ref := range result.ArtifactRefs {
+		if strings.TrimSpace(ref.Kind) != "file" {
+			continue
+		}
+		transferID := strings.TrimSpace(ref.ArtifactID)
+		if transferID == "" {
+			continue
+		}
+		if _, ok := transfersByID[transferID]; !ok {
+			transfersByID[transferID] = map[string]any{"transfer_id": transferID}
+			orderedIDs = append(orderedIDs, transferID)
+		}
+	}
+
+	if len(transfersByID) == 0 {
+		return
+	}
+
+	for _, transferID := range orderedIDs {
+		transfer, ok := transfersByID[transferID]
+		if !ok {
+			continue
+		}
+		detail, err := h.client.GetTransfer(ctx, transferID)
+		if err != nil {
+			if h.log != nil {
+				h.log.Warn("failed to enrich transfer details", zap.String("transfer_id", transferID), zap.Error(err))
+			}
+			continue
+		}
+		for key, value := range detail {
+			transfer[key] = value
+		}
+		if _, ok := transfer["transfer_id"]; !ok {
+			transfer["transfer_id"] = transferID
+		}
+	}
+
+	if result.Metadata == nil {
+		result.Metadata = map[string]any{}
+	}
+	items := make([]any, 0, len(orderedIDs))
+	for _, transferID := range orderedIDs {
+		if transfer, ok := transfersByID[transferID]; ok {
+			items = append(items, transfer)
+		}
+	}
+	result.Metadata["transfers"] = items
+}
+
+func normalizeTransfers(metadata map[string]any) (map[string]map[string]any, []string) {
+	out := make(map[string]map[string]any)
+	orderedIDs := make([]string, 0)
+	if len(metadata) == 0 {
+		return out, orderedIDs
+	}
+
+	rawTransfers, ok := metadata["transfers"]
+	if !ok {
+		return out, orderedIDs
+	}
+	items, ok := rawTransfers.([]any)
+	if !ok {
+		return out, orderedIDs
+	}
+	for _, item := range items {
+		transfer, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		transferID := strings.TrimSpace(transferIDFromMap(transfer))
+		if transferID == "" {
+			continue
+		}
+		copyTransfer := make(map[string]any, len(transfer))
+		for key, value := range transfer {
+			copyTransfer[key] = value
+		}
+		out[transferID] = copyTransfer
+		orderedIDs = append(orderedIDs, transferID)
+	}
+	return out, orderedIDs
+}
+
+func transferIDFromMap(transfer map[string]any) string {
+	if transfer == nil {
+		return ""
+	}
+	if v, ok := transfer["transfer_id"].(string); ok && strings.TrimSpace(v) != "" {
+		return strings.TrimSpace(v)
+	}
+	if v, ok := transfer["transferId"].(string); ok && strings.TrimSpace(v) != "" {
+		return strings.TrimSpace(v)
+	}
+	return ""
 }
 
 func (h *WebhookHandler) publishTaskCreated(task *model.TaskDetail) {

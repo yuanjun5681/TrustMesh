@@ -422,11 +422,24 @@ message:
     ],
     "metadata": {
       "model": "gpt-5",
-      "duration_ms": 1200
+      "duration_ms": 1200,
+      "transfers": [
+        {
+          "transfer_id": "tf_login_api_pdf",
+          "size": 2048,
+          "checksum": "sha256:abc123",
+          "bucket": "deliverables",
+          "purpose": "todo_deliverable"
+        }
+      ]
     }
   }
 }
 ```
+
+约定：
+- 如果 `artifact_refs[].kind = "file"`，推荐在 `result.metadata.transfers` 中附带对应 `transfer_id`
+- TrustMesh 会把这些传输信息聚合到任务级 `artifacts`，供前端继续查询文件详情
 
 ### 6.10 Todo 失败
 

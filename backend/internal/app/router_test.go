@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +15,7 @@ import (
 
 	"trustmesh/backend/internal/config"
 	"trustmesh/backend/internal/logger"
+	"trustmesh/backend/internal/model"
 	"trustmesh/backend/internal/store"
 )
 
@@ -639,6 +642,278 @@ func TestTaskStreamPushesUpdatedSnapshot(t *testing.T) {
 	}
 }
 
+func TestGetTaskArtifactTransfer(t *testing.T) {
+	log, err := logger.New("error")
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	defer func() { _ = log.Sync() }()
+
+	clawServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/transfer/tf_report_123":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"code":"transfer.ok","message":"ok","data":{"transfer":{"transfer_id":"tf_report_123","download_url":"https://files.example.com/tf_report_123","size":2048}},"ts":1}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer clawServer.Close()
+
+	application, err := New(config.Config{
+		Port:               "0",
+		JWTSecret:          "test-secret",
+		TokenTTL:           time.Hour,
+		LogLevel:           "error",
+		AllowAllCORS:       true,
+		ReadTimeout:        3 * time.Second,
+		WriteTimeout:       3 * time.Second,
+		ShutdownGrace:      3 * time.Second,
+		ClawSynapseAPIURL:  clawServer.URL,
+		ClawSynapseTimeout: time.Second,
+	}, log)
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
+	defer func() {
+		if closeErr := application.Close(); closeErr != nil {
+			t.Fatalf("close app: %v", closeErr)
+		}
+	}()
+
+	testServer := httptest.NewServer(application.Engine)
+	defer testServer.Close()
+
+	registerResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/auth/register", "", map[string]any{
+		"email":    "transfer@example.com",
+		"name":     "Transfer User",
+		"password": "StrongPass123!",
+	})
+	registerData := decodeBody(t, registerResp)
+	token := nestedString(registerData, "data", "token")
+	userID := nestedString(registerData, "data", "user", "id")
+
+	pm, appErr := application.Store.CreateAgent(userID, "node-pm-001", "PM Agent", "pm", "pm", []string{"plan"})
+	if appErr != nil {
+		t.Fatalf("create pm: %v", appErr)
+	}
+	dev, appErr := application.Store.CreateAgent(userID, "node-dev-001", "Developer", "developer", "dev", []string{"backend"})
+	if appErr != nil {
+		t.Fatalf("create dev: %v", appErr)
+	}
+	application.Store.SyncAgentPresence([]store.AgentPresence{
+		{NodeID: pm.NodeID, LastSeenAt: time.Now().UTC()},
+		{NodeID: dev.NodeID, LastSeenAt: time.Now().UTC()},
+	}, time.Now().UTC())
+
+	project, appErr := application.Store.CreateProject(userID, "Transfers", "demo", pm.ID)
+	if appErr != nil {
+		t.Fatalf("create project: %v", appErr)
+	}
+	conversation, appErr := application.Store.CreateConversation(userID, project.ID, "Need file")
+	if appErr != nil {
+		t.Fatalf("create conversation: %v", appErr)
+	}
+	task, appErr := application.Store.CreateTaskByPMNode(pm.NodeID, store.TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: conversation.ID,
+		Title:          "Deliver report",
+		Description:    "Upload final report",
+		Todos: []store.TaskCreateTodoInput{
+			{
+				ID:             "todo-1",
+				Title:          "Upload report",
+				Description:    "Send report PDF",
+				AssigneeNodeID: dev.NodeID,
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("create task: %v", appErr)
+	}
+	task, appErr = application.Store.CompleteTodoByNode(dev.NodeID, store.TodoCompleteInput{
+		TaskID: task.ID,
+		TodoID: "todo-1",
+		Result: todoResultWithTransfer(),
+	})
+	if appErr != nil {
+		t.Fatalf("complete todo: %v", appErr)
+	}
+
+	if len(task.Artifacts) != 1 {
+		t.Fatalf("expected 1 artifact, got %d", len(task.Artifacts))
+	}
+	resp := doJSON(t, testServer.Client(), "GET", testServer.URL+"/api/v1/tasks/"+task.ID+"/artifacts/"+task.Artifacts[0].ID+"/transfer", token, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("get transfer status=%d", resp.StatusCode)
+	}
+	data := decodeBody(t, resp)
+	if nestedString(data, "data", "transfer_id") != "tf_report_123" {
+		t.Fatalf("unexpected transfer response: %#v", data)
+	}
+	if nestedString(data, "data", "download_url") != "https://files.example.com/tf_report_123" {
+		t.Fatalf("unexpected download_url: %#v", data)
+	}
+}
+
+func TestGetTaskArtifactContent(t *testing.T) {
+	log, err := logger.New("error")
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	defer func() { _ = log.Sync() }()
+
+	application, err := New(config.Config{
+		Port:          "0",
+		JWTSecret:     "test-secret",
+		TokenTTL:      time.Hour,
+		LogLevel:      "error",
+		AllowAllCORS:  true,
+		ReadTimeout:   3 * time.Second,
+		WriteTimeout:  3 * time.Second,
+		ShutdownGrace: 3 * time.Second,
+	}, log)
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
+	defer func() {
+		if closeErr := application.Close(); closeErr != nil {
+			t.Fatalf("close app: %v", closeErr)
+		}
+	}()
+
+	testServer := httptest.NewServer(application.Engine)
+	defer testServer.Close()
+
+	registerResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/auth/register", "", map[string]any{
+		"email":    "artifact-content@example.com",
+		"name":     "Artifact Content User",
+		"password": "StrongPass123!",
+	})
+	registerData := decodeBody(t, registerResp)
+	token := nestedString(registerData, "data", "token")
+	userID := nestedString(registerData, "data", "user", "id")
+
+	pm, appErr := application.Store.CreateAgent(userID, "node-pm-001", "PM Agent", "pm", "pm", []string{"plan"})
+	if appErr != nil {
+		t.Fatalf("create pm: %v", appErr)
+	}
+	dev, appErr := application.Store.CreateAgent(userID, "node-dev-001", "Developer", "developer", "dev", []string{"backend"})
+	if appErr != nil {
+		t.Fatalf("create dev: %v", appErr)
+	}
+	application.Store.SyncAgentPresence([]store.AgentPresence{
+		{NodeID: pm.NodeID, LastSeenAt: time.Now().UTC()},
+		{NodeID: dev.NodeID, LastSeenAt: time.Now().UTC()},
+	}, time.Now().UTC())
+
+	project, appErr := application.Store.CreateProject(userID, "Artifacts", "demo", pm.ID)
+	if appErr != nil {
+		t.Fatalf("create project: %v", appErr)
+	}
+	conversation, appErr := application.Store.CreateConversation(userID, project.ID, "Need content")
+	if appErr != nil {
+		t.Fatalf("create conversation: %v", appErr)
+	}
+	task, appErr := application.Store.CreateTaskByPMNode(pm.NodeID, store.TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: conversation.ID,
+		Title:          "Deliver document",
+		Description:    "Upload markdown guide",
+		Todos: []store.TaskCreateTodoInput{
+			{
+				ID:             "todo-1",
+				Title:          "Write guide",
+				Description:    "Create markdown file",
+				AssigneeNodeID: dev.NodeID,
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("create task: %v", appErr)
+	}
+
+	tmpFile, err := os.CreateTemp(t.TempDir(), "guide-*.md")
+	if err != nil {
+		t.Fatalf("create temp file: %v", err)
+	}
+	content := "# Git guide\n\nhello"
+	if _, err := tmpFile.WriteString(content); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("close temp file: %v", err)
+	}
+
+	task, appErr = application.Store.CompleteTodoByNode(dev.NodeID, store.TodoCompleteInput{
+		TaskID: task.ID,
+		TodoID: "todo-1",
+		Result: model.TodoResult{
+			Summary: "Guide uploaded",
+			Output:  "Uploaded markdown guide",
+			ArtifactRefs: []model.TodoResultArtifactRef{
+				{
+					ArtifactID: "tf_markdown_1",
+					Kind:       "file",
+					Label:      "Git guide",
+				},
+			},
+			Metadata: map[string]any{
+				"transfers": []any{
+					map[string]any{
+						"transfer_id": "tf_markdown_1",
+						"fileName":    "git-guide.md",
+						"localPath":   tmpFile.Name(),
+						"mimeType":    "text/markdown",
+					},
+				},
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("complete todo: %v", appErr)
+	}
+
+	resp := doJSON(t, testServer.Client(), "GET", testServer.URL+"/api/v1/tasks/"+task.ID+"/artifacts/"+task.Artifacts[0].ID+"/content", token, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("get content status=%d", resp.StatusCode)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read content body: %v", err)
+	}
+	if string(body) != content {
+		t.Fatalf("unexpected content body: %s", string(body))
+	}
+	if !strings.Contains(resp.Header.Get("Content-Disposition"), `filename="git-guide.md"`) {
+		t.Fatalf("unexpected content disposition: %s", resp.Header.Get("Content-Disposition"))
+	}
+}
+
+func todoResultWithTransfer() model.TodoResult {
+	return model.TodoResult{
+		Summary: "Report uploaded",
+		Output:  "Uploaded the final PDF report",
+		ArtifactRefs: []model.TodoResultArtifactRef{
+			{
+				ArtifactID: "tf_report_123",
+				Kind:       "file",
+				Label:      "Final report PDF",
+			},
+		},
+		Metadata: map[string]any{
+			"transfers": []any{
+				map[string]any{
+					"transfer_id": "tf_report_123",
+					"size":        2048,
+					"checksum":    "sha256:abc123",
+				},
+			},
+		},
+	}
+}
+
 func doJSON(t *testing.T, client *http.Client, method, url, token string, payload any) *http.Response {
 	t.Helper()
 	var body bytes.Buffer
@@ -781,5 +1056,21 @@ func nestedFloat(m map[string]any, keys ...string) float64 {
 	if !ok {
 		return -1
 	}
+	return v
+}
+
+func nestedMap(m map[string]any, keys ...string) map[string]any {
+	cur := any(m)
+	for _, key := range keys {
+		obj, ok := cur.(map[string]any)
+		if !ok {
+			return nil
+		}
+		cur, ok = obj[key]
+		if !ok {
+			return nil
+		}
+	}
+	v, _ := cur.(map[string]any)
 	return v
 }

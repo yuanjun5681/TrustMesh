@@ -65,7 +65,7 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
 
                 <TabsContent value="result">
                   <ScrollArea className="max-h-[calc(100vh-280px)]">
-                    <TaskResultView result={task.result} artifacts={task.artifacts} />
+                    <TaskResultView taskId={task.id} result={task.result} artifacts={task.artifacts} />
                   </ScrollArea>
                 </TabsContent>
               </Tabs>

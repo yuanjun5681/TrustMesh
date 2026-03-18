@@ -5,6 +5,7 @@ import type {
   TaskListItem,
   TaskDetail,
   TaskEvent,
+  TransferDetail,
   ListProjectTasksQuery,
 } from '@/types'
 
@@ -26,4 +27,12 @@ export async function listTaskEvents(id: string) {
 
 export async function dispatchTodo(taskId: string, todoId: string) {
   return api.post(`tasks/${taskId}/todos/${todoId}/dispatch`).json<ApiResponse<TaskDetail>>()
+}
+
+export async function getTaskArtifactTransfer(taskId: string, artifactId: string) {
+  return api.get(`tasks/${taskId}/artifacts/${artifactId}/transfer`).json<ApiResponse<TransferDetail>>()
+}
+
+export async function getTaskArtifactContent(taskId: string, artifactId: string) {
+  return api.get(`tasks/${taskId}/artifacts/${artifactId}/content`).blob()
 }

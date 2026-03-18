@@ -161,6 +161,10 @@ export interface TaskArtifact {
   metadata: Record<string, unknown>
 }
 
+export interface TransferDetail {
+  [key: string]: unknown
+}
+
 export interface TaskResult {
   summary: string
   final_output: string

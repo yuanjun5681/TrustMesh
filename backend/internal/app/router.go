@@ -43,6 +43,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	projectHandler := handler.NewProjectHandler(s)
 	conversationHandler := handler.NewConversationHandler(s, clawClient, log)
 	taskHandler := handler.NewTaskHandler(s, clawClient, log)
+	transferHandler := handler.NewTransferHandler(s, clawClient)
 
 	engine.GET("/healthz", handler.Health)
 	engine.POST("/webhook/clawsynapse", webhookHandler.HandleWebhook)
@@ -77,6 +78,8 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	authed.GET("/tasks/:id/stream", taskHandler.Stream)
 	authed.GET("/tasks/:id/events", taskHandler.ListEvents)
 	authed.POST("/tasks/:id/todos/:todoId/dispatch", taskHandler.DispatchTodo)
+	authed.GET("/tasks/:id/artifacts/:artifactId/transfer", transferHandler.GetTaskArtifactTransfer)
+	authed.GET("/tasks/:id/artifacts/:artifactId/content", transferHandler.GetTaskArtifactContent)
 
 	return &App{Engine: engine, Store: s, PeerSyncer: peerSyncer}, nil
 }
