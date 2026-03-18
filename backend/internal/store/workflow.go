@@ -81,6 +81,7 @@ func (s *Store) RecordTodoDispatch(userID, taskID, todoID string) (*model.TaskDe
 	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
 		return nil, mongoWriteError(err)
 	}
+	s.publishTaskUnsafe(task.ID)
 	return copyTask(task), nil
 }
 
@@ -200,6 +201,7 @@ func (s *Store) AppendPMReplyByNode(nodeID, conversationID, content string) (*mo
 	if err := s.persistAgentGraphUnsafe(pmAgent.ID); err != nil {
 		return nil, mongoWriteError(err)
 	}
+	s.publishConversationUnsafe(conv.ID)
 	detail := s.toConversationDetailUnsafe(conv)
 	return &detail, nil
 }
@@ -363,6 +365,8 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 	if err := s.persistProcessedMessageUnsafe(processedMessageKey("task.create", nodeID, messageID)); err != nil {
 		return nil, mongoWriteError(err)
 	}
+	s.publishConversationUnsafe(conv.ID)
+	s.publishTaskUnsafe(task.ID)
 
 	return copyTask(task), nil
 }
@@ -418,6 +422,7 @@ func (s *Store) UpdateTodoProgressByNode(nodeID string, in TodoProgressInput) (*
 	if err := s.persistAgentGraphUnsafe(agent.ID); err != nil {
 		return nil, mongoWriteError(err)
 	}
+	s.publishTaskUnsafe(task.ID)
 	return copyTask(task), nil
 }
 
@@ -492,6 +497,7 @@ func (s *Store) CompleteTodoByNodeWithMessageID(nodeID, messageID string, in Tod
 	if err := s.persistProcessedMessageUnsafe(processedMessageKey("todo.complete", nodeID, messageID)); err != nil {
 		return nil, mongoWriteError(err)
 	}
+	s.publishTaskUnsafe(task.ID)
 	return copyTask(task), nil
 }
 
@@ -562,6 +568,7 @@ func (s *Store) FailTodoByNodeWithMessageID(nodeID, messageID string, in TodoFai
 	if err := s.persistProcessedMessageUnsafe(processedMessageKey("todo.fail", nodeID, messageID)); err != nil {
 		return nil, mongoWriteError(err)
 	}
+	s.publishTaskUnsafe(task.ID)
 	return copyTask(task), nil
 }
 

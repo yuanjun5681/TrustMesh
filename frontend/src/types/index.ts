@@ -86,6 +86,10 @@ export interface ConversationDetail {
   updated_at: string
 }
 
+export interface ConversationStreamSnapshot {
+  conversation: ConversationDetail
+}
+
 export type AgentRole = 'pm' | 'developer' | 'reviewer' | 'custom'
 export type AgentStatus = 'online' | 'offline' | 'busy'
 
@@ -215,6 +219,11 @@ export interface TaskEvent {
   content: string | null
   metadata: Record<string, unknown>
   created_at: string
+}
+
+export interface TaskStreamSnapshot {
+  task: TaskDetail
+  events: TaskEvent[]
 }
 
 // ─── 请求类型 ───

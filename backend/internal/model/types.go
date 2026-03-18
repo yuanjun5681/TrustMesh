@@ -68,6 +68,10 @@ type ConversationDetail struct {
 	UpdatedAt  time.Time             `json:"updated_at" bson:"updated_at"`
 }
 
+type ConversationStreamSnapshot struct {
+	Conversation ConversationDetail `json:"conversation"`
+}
+
 type Agent struct {
 	ID           string     `json:"id" bson:"_id"`
 	UserID       string     `json:"-" bson:"user_id"`
@@ -184,6 +188,11 @@ type TaskEvent struct {
 	Content   *string        `json:"content" bson:"content"`
 	Metadata  map[string]any `json:"metadata" bson:"metadata"`
 	CreatedAt time.Time      `json:"created_at" bson:"created_at"`
+}
+
+type TaskStreamSnapshot struct {
+	Task   TaskDetail  `json:"task"`
+	Events []TaskEvent `json:"events"`
 }
 
 // Internal conversation record for mutable state.

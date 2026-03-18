@@ -63,6 +63,22 @@ func (h *TaskHandler) Get(c *gin.Context) {
 	transport.WriteData(c, http.StatusOK, task)
 }
 
+func (h *TaskHandler) Stream(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	updates, unsubscribe, appErr := h.store.SubscribeTask(userID, c.Param("id"))
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+	defer unsubscribe()
+
+	streamEvents(c, updates)
+}
+
 func (h *TaskHandler) ListEvents(c *gin.Context) {
 	userID, ok := currentUserID(c)
 	if !ok {

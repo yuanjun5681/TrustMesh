@@ -19,6 +19,8 @@ import (
 type Store struct {
 	mu sync.RWMutex
 
+	streamMu sync.RWMutex
+
 	users       map[string]*model.User
 	usersByMail map[string]string
 
@@ -47,6 +49,9 @@ type Store struct {
 	mongoProcessedMessages *mongo.Collection
 	mongoTimeout           time.Duration
 	log                    *zap.Logger
+
+	taskSubscribers         map[string]map[chan model.TaskStreamSnapshot]struct{}
+	conversationSubscribers map[string]map[chan model.ConversationStreamSnapshot]struct{}
 }
 
 type processedMessage struct {
@@ -61,18 +66,20 @@ type AgentPresence struct {
 
 func New() *Store {
 	return &Store{
-		users:                make(map[string]*model.User),
-		usersByMail:          make(map[string]string),
-		agents:               make(map[string]*model.Agent),
-		agentByNode:          make(map[string]string),
-		projects:             make(map[string]*model.Project),
-		conversations:        make(map[string]*model.Conversation),
-		projectConversations: make(map[string][]string),
-		tasks:                make(map[string]*model.TaskDetail),
-		projectTasks:         make(map[string][]string),
-		conversationTasks:    make(map[string]string),
-		taskEvents:           make(map[string][]model.TaskEvent),
-		processedMessages:    make(map[string]processedMessage),
+		users:                   make(map[string]*model.User),
+		usersByMail:             make(map[string]string),
+		agents:                  make(map[string]*model.Agent),
+		agentByNode:             make(map[string]string),
+		projects:                make(map[string]*model.Project),
+		conversations:           make(map[string]*model.Conversation),
+		projectConversations:    make(map[string][]string),
+		tasks:                   make(map[string]*model.TaskDetail),
+		projectTasks:            make(map[string][]string),
+		conversationTasks:       make(map[string]string),
+		taskEvents:              make(map[string][]model.TaskEvent),
+		processedMessages:       make(map[string]processedMessage),
+		taskSubscribers:         make(map[string]map[chan model.TaskStreamSnapshot]struct{}),
+		conversationSubscribers: make(map[string]map[chan model.ConversationStreamSnapshot]struct{}),
 	}
 }
 
@@ -436,6 +443,7 @@ func (s *Store) CreateConversation(userID, projectID, content string) (*model.Co
 	if err := s.persistConversationUnsafe(conv); err != nil {
 		return nil, mongoWriteError(err)
 	}
+	s.publishConversationUnsafe(conv.ID)
 
 	detail := s.toConversationDetailUnsafe(conv)
 	return &detail, nil
@@ -515,6 +523,7 @@ func (s *Store) AppendConversationMessage(userID, conversationID, content string
 	if err := s.persistConversationUnsafe(conv); err != nil {
 		return nil, mongoWriteError(err)
 	}
+	s.publishConversationUnsafe(conv.ID)
 	detail := s.toConversationDetailUnsafe(conv)
 	return &detail, nil
 }

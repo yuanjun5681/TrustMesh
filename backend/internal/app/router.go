@@ -69,10 +69,12 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	authed.POST("/projects/:projectId/conversations", conversationHandler.Create)
 	authed.GET("/projects/:projectId/conversations", conversationHandler.ListByProject)
 	authed.GET("/conversations/:id", conversationHandler.Get)
+	authed.GET("/conversations/:id/stream", conversationHandler.Stream)
 	authed.POST("/conversations/:id/messages", conversationHandler.AppendMessage)
 
 	authed.GET("/projects/:projectId/tasks", taskHandler.ListByProject)
 	authed.GET("/tasks/:id", taskHandler.Get)
+	authed.GET("/tasks/:id/stream", taskHandler.Stream)
 	authed.GET("/tasks/:id/events", taskHandler.ListEvents)
 	authed.POST("/tasks/:id/todos/:todoId/dispatch", taskHandler.DispatchTodo)
 

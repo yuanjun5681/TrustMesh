@@ -5,6 +5,7 @@ import { TodoList } from './TodoList'
 import { TaskTimeline } from './TaskTimeline'
 import { TaskResultView } from './TaskResult'
 import { useTask } from '@/hooks/useTasks'
+import { useTaskStream } from '@/hooks/useLiveStreams'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useState } from 'react'
@@ -16,6 +17,8 @@ interface TaskSheetProps {
 
 export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
   const { data: task } = useTask(taskId ?? undefined)
+  const shouldStream = !!taskId && (!task || task.status === 'pending' || task.status === 'in_progress')
+  useTaskStream(taskId ?? undefined, shouldStream)
   const [tab, setTab] = useState('todos')
 
   return (

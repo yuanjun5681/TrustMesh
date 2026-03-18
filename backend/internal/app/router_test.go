@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"net/http"
@@ -441,6 +442,203 @@ func TestDispatchTodoPublishesAssignmentToAssignee(t *testing.T) {
 	}
 }
 
+func TestConversationStreamPushesUpdatedSnapshot(t *testing.T) {
+	log, err := logger.New("error")
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	defer func() { _ = log.Sync() }()
+
+	application, err := New(config.Config{
+		Port:          "0",
+		JWTSecret:     "test-secret",
+		TokenTTL:      time.Hour,
+		LogLevel:      "error",
+		AllowAllCORS:  true,
+		ReadTimeout:   3 * time.Second,
+		WriteTimeout:  3 * time.Second,
+		ShutdownGrace: 3 * time.Second,
+	}, log)
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
+	defer func() {
+		if closeErr := application.Close(); closeErr != nil {
+			t.Fatalf("close app: %v", closeErr)
+		}
+	}()
+
+	testServer := httptest.NewServer(application.Engine)
+	defer testServer.Close()
+
+	registerResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/auth/register", "", map[string]any{
+		"email":    "stream@example.com",
+		"name":     "Stream User",
+		"password": "StrongPass123!",
+	})
+	registerData := decodeBody(t, registerResp)
+	token := nestedString(registerData, "data", "token")
+	userID := nestedString(registerData, "data", "user", "id")
+
+	pm, appErr := application.Store.CreateAgent(userID, "node-pm-001", "PM Agent", "pm", "PM", []string{"plan"})
+	if appErr != nil {
+		t.Fatalf("create pm: %v", appErr)
+	}
+	application.Store.SyncAgentPresence([]store.AgentPresence{
+		{NodeID: pm.NodeID, LastSeenAt: time.Now().UTC()},
+	}, time.Now().UTC())
+
+	project, appErr := application.Store.CreateProject(userID, "Conversation Stream", "demo", pm.ID)
+	if appErr != nil {
+		t.Fatalf("create project: %v", appErr)
+	}
+	conversation, appErr := application.Store.CreateConversation(userID, project.ID, "Need login flow")
+	if appErr != nil {
+		t.Fatalf("create conversation: %v", appErr)
+	}
+
+	streamResp := openSSE(t, testServer.Client(), testServer.URL+"/api/v1/conversations/"+conversation.ID+"/stream", token)
+	defer streamResp.Body.Close()
+	reader := bufio.NewReader(streamResp.Body)
+
+	eventName, initial := readSSEEvent(t, reader)
+	if eventName != "snapshot" {
+		t.Fatalf("unexpected initial event: %s", eventName)
+	}
+	if nestedString(initial, "conversation", "status") != "active" {
+		t.Fatalf("unexpected conversation status: %#v", initial)
+	}
+
+	if _, appErr := application.Store.AppendPMReplyByNode(pm.NodeID, conversation.ID, "先确认一下登录方式"); appErr != nil {
+		t.Fatalf("append pm reply: %v", appErr)
+	}
+
+	_, updated := readSSEEvent(t, reader)
+	conv, ok := updated["conversation"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected conversation payload: %#v", updated)
+	}
+	messages, ok := conv["messages"].([]any)
+	if !ok || len(messages) != 2 {
+		t.Fatalf("unexpected messages: %#v", conv["messages"])
+	}
+	lastMessage, ok := messages[len(messages)-1].(map[string]any)
+	if !ok || lastMessage["content"] != "先确认一下登录方式" {
+		t.Fatalf("unexpected last message: %#v", lastMessage)
+	}
+}
+
+func TestTaskStreamPushesUpdatedSnapshot(t *testing.T) {
+	log, err := logger.New("error")
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	defer func() { _ = log.Sync() }()
+
+	application, err := New(config.Config{
+		Port:          "0",
+		JWTSecret:     "test-secret",
+		TokenTTL:      time.Hour,
+		LogLevel:      "error",
+		AllowAllCORS:  true,
+		ReadTimeout:   3 * time.Second,
+		WriteTimeout:  3 * time.Second,
+		ShutdownGrace: 3 * time.Second,
+	}, log)
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
+	defer func() {
+		if closeErr := application.Close(); closeErr != nil {
+			t.Fatalf("close app: %v", closeErr)
+		}
+	}()
+
+	testServer := httptest.NewServer(application.Engine)
+	defer testServer.Close()
+
+	registerResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/auth/register", "", map[string]any{
+		"email":    "task-stream@example.com",
+		"name":     "Task Stream User",
+		"password": "StrongPass123!",
+	})
+	registerData := decodeBody(t, registerResp)
+	token := nestedString(registerData, "data", "token")
+	userID := nestedString(registerData, "data", "user", "id")
+
+	pm, appErr := application.Store.CreateAgent(userID, "node-pm-001", "PM Agent", "pm", "PM", []string{"plan"})
+	if appErr != nil {
+		t.Fatalf("create pm: %v", appErr)
+	}
+	dev, appErr := application.Store.CreateAgent(userID, "node-dev-001", "Developer", "developer", "Dev", []string{"backend"})
+	if appErr != nil {
+		t.Fatalf("create developer: %v", appErr)
+	}
+	application.Store.SyncAgentPresence([]store.AgentPresence{
+		{NodeID: pm.NodeID, LastSeenAt: time.Now().UTC()},
+		{NodeID: dev.NodeID, LastSeenAt: time.Now().UTC()},
+	}, time.Now().UTC())
+
+	project, appErr := application.Store.CreateProject(userID, "Task Stream", "demo", pm.ID)
+	if appErr != nil {
+		t.Fatalf("create project: %v", appErr)
+	}
+	conversation, appErr := application.Store.CreateConversation(userID, project.ID, "Need login flow")
+	if appErr != nil {
+		t.Fatalf("create conversation: %v", appErr)
+	}
+	task, appErr := application.Store.CreateTaskByPMNode(pm.NodeID, store.TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: conversation.ID,
+		Title:          "Implement login",
+		Description:    "Support email/password login",
+		Todos: []store.TaskCreateTodoInput{
+			{
+				ID:             "todo-1",
+				Title:          "Build backend API",
+				Description:    "Implement auth endpoints",
+				AssigneeNodeID: dev.NodeID,
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("create task: %v", appErr)
+	}
+
+	streamResp := openSSE(t, testServer.Client(), testServer.URL+"/api/v1/tasks/"+task.ID+"/stream", token)
+	defer streamResp.Body.Close()
+	reader := bufio.NewReader(streamResp.Body)
+
+	eventName, initial := readSSEEvent(t, reader)
+	if eventName != "snapshot" {
+		t.Fatalf("unexpected initial event: %s", eventName)
+	}
+	if nestedString(initial, "task", "status") != "pending" {
+		t.Fatalf("unexpected initial task status: %#v", initial)
+	}
+
+	if _, appErr := application.Store.UpdateTodoProgressByNode(dev.NodeID, store.TodoProgressInput{
+		TaskID:  task.ID,
+		TodoID:  "todo-1",
+		Message: "Started implementing auth endpoints",
+	}); appErr != nil {
+		t.Fatalf("update todo progress: %v", appErr)
+	}
+
+	_, updated := readSSEEvent(t, reader)
+	if nestedString(updated, "task", "status") != "in_progress" {
+		t.Fatalf("unexpected updated task status: %#v", updated)
+	}
+	events, ok := updated["events"].([]any)
+	if !ok || len(events) < 3 {
+		t.Fatalf("unexpected task events: %#v", updated["events"])
+	}
+	lastEvent, ok := events[len(events)-1].(map[string]any)
+	if !ok || lastEvent["event_type"] != "task_status_changed" {
+		t.Fatalf("unexpected last event: %#v", lastEvent)
+	}
+}
+
 func doJSON(t *testing.T, client *http.Client, method, url, token string, payload any) *http.Response {
 	t.Helper()
 	var body bytes.Buffer
@@ -464,6 +662,78 @@ func doJSON(t *testing.T, client *http.Client, method, url, token string, payloa
 		t.Fatalf("request failed: %v", err)
 	}
 	return resp
+}
+
+func openSSE(t *testing.T, client *http.Client, url, token string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("new sse request: %v", err)
+	}
+	req.Header.Set("Accept", "text/event-stream")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("open sse request failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("open sse status=%d", resp.StatusCode)
+	}
+	return resp
+}
+
+func readSSEEvent(t *testing.T, reader *bufio.Reader) (string, map[string]any) {
+	t.Helper()
+
+	type result struct {
+		event string
+		data  map[string]any
+		err   error
+	}
+
+	done := make(chan result, 1)
+	go func() {
+		eventName := "message"
+		dataLines := make([]string, 0, 4)
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				done <- result{err: err}
+				return
+			}
+			line = strings.TrimRight(line, "\r\n")
+			if line == "" {
+				break
+			}
+			if strings.HasPrefix(line, "event:") {
+				eventName = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+				continue
+			}
+			if strings.HasPrefix(line, "data:") {
+				dataLines = append(dataLines, strings.TrimSpace(strings.TrimPrefix(line, "data:")))
+			}
+		}
+
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(strings.Join(dataLines, "\n")), &payload); err != nil {
+			done <- result{err: err}
+			return
+		}
+		done <- result{event: eventName, data: payload}
+	}()
+
+	select {
+	case res := <-done:
+		if res.err != nil {
+			t.Fatalf("read sse event: %v", res.err)
+		}
+		return res.event, res.data
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for sse event")
+		return "", nil
+	}
 }
 
 func decodeBody(t *testing.T, resp *http.Response) map[string]any {

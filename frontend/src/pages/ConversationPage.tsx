@@ -9,6 +9,7 @@ import { MessageInput } from '@/components/conversation/MessageInput'
 import { PlanPreview } from '@/components/conversation/PlanPreview'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { useConversations, useConversation, useCreateConversation, useAppendMessage } from '@/hooks/useConversations'
+import { useConversationStream } from '@/hooks/useLiveStreams'
 import { useProject } from '@/hooks/useProjects'
 import { cn, formatRelativeTime } from '@/lib/utils'
 import { ApiRequestError } from '@/api/client'
@@ -30,6 +31,10 @@ export function ConversationPage() {
     activeConversationId ?? undefined,
     selectedConversation?.status === 'active'
   )
+  const shouldStreamConversation =
+    !!activeConversationId &&
+    ((conversation?.status ?? selectedConversation?.status) === 'active' || !conversation)
+  useConversationStream(activeConversationId ?? undefined, shouldStreamConversation)
   const createConversation = useCreateConversation()
   const appendMessage = useAppendMessage()
 

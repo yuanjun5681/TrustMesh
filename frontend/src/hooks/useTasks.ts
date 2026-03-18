@@ -51,7 +51,7 @@ export function useTask(id: string | undefined) {
       }
 
       const task = currentQuery.state.data as TaskDetail | undefined
-      return !task || task.status === 'in_progress' ? 3_000 : false
+      return !task || task.status === 'pending' || task.status === 'in_progress' ? 3_000 : false
     },
     refetchIntervalInBackground: false,
   })
