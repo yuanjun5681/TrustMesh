@@ -60,13 +60,16 @@ allowed-tools:
 }
 ```
 
-### todo.updated payload（状态通知）
+### todo.status_changed payload（状态通知）
 
 ```json
 {
   "task_id": "task_123",
   "todo_id": "todo_1",
   "status": "in_progress",
+  "actor_node_id": "node-dev-001",
+  "cause": "todo.progress",
+  "version": 7,
   "message": "接口已完成参数校验，开始接入 JWT"
 }
 ```

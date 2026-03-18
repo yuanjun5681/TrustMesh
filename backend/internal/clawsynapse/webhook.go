@@ -74,9 +74,12 @@ type taskCreatedPayload struct {
 	Title          string `json:"title"`
 }
 
-type taskUpdatedPayload struct {
-	TaskID string `json:"task_id"`
-	Status string `json:"status"`
+type taskStatusChangedPayload struct {
+	TaskID      string `json:"task_id"`
+	Status      string `json:"status"`
+	ActorNodeID string `json:"actor_node_id,omitempty"`
+	Cause       string `json:"cause,omitempty"`
+	Version     int    `json:"version"`
 }
 
 type todoAssignedPayload struct {
@@ -93,11 +96,14 @@ type todoExecBrief struct {
 	MustUseSkill string `json:"must_use_skill"`
 }
 
-type todoUpdatedPayload struct {
-	TaskID  string `json:"task_id"`
-	TodoID  string `json:"todo_id"`
-	Status  string `json:"status"`
-	Message string `json:"message,omitempty"`
+type todoStatusChangedPayload struct {
+	TaskID      string `json:"task_id"`
+	TodoID      string `json:"todo_id"`
+	Status      string `json:"status"`
+	ActorNodeID string `json:"actor_node_id,omitempty"`
+	Cause       string `json:"cause,omitempty"`
+	Version     int    `json:"version"`
+	Message     string `json:"message,omitempty"`
 }
 
 func NewWebhookHandler(st *store.Store, client *Client, localNodeID string, log *zap.Logger) *WebhookHandler {
@@ -212,7 +218,7 @@ func (h *WebhookHandler) handleTodoProgress(c *gin.Context, webhook WebhookPaylo
 		return
 	}
 
-	h.publishTaskAndTodoUpdates(task, payload.TodoID, payload.Message)
+	h.publishTaskAndTodoStatusChanges(task, payload.TodoID, payload.Message, webhook.From, "todo.progress")
 	transport.WriteData(c, http.StatusOK, task)
 }
 
@@ -234,7 +240,7 @@ func (h *WebhookHandler) handleTodoComplete(c *gin.Context, webhook WebhookPaylo
 		return
 	}
 
-	h.publishTaskAndTodoUpdates(task, payload.TodoID, "completed")
+	h.publishTaskAndTodoStatusChanges(task, payload.TodoID, "completed", webhook.From, "todo.complete")
 	transport.WriteData(c, http.StatusOK, task)
 }
 
@@ -255,7 +261,7 @@ func (h *WebhookHandler) handleTodoFail(c *gin.Context, webhook WebhookPayload) 
 		return
 	}
 
-	h.publishTaskAndTodoUpdates(task, payload.TodoID, payload.Error)
+	h.publishTaskAndTodoStatusChanges(task, payload.TodoID, payload.Error, webhook.From, "todo.fail")
 	transport.WriteData(c, http.StatusOK, task)
 }
 
@@ -371,10 +377,13 @@ func (h *WebhookHandler) publishTaskCreated(task *model.TaskDetail) {
 	}, task.ID)
 }
 
-func (h *WebhookHandler) publishTaskAndTodoUpdates(task *model.TaskDetail, todoID, message string) {
-	h.publish(context.Background(), task.PMAgent.NodeID, "task.updated", taskUpdatedPayload{
-		TaskID: task.ID,
-		Status: task.Status,
+func (h *WebhookHandler) publishTaskAndTodoStatusChanges(task *model.TaskDetail, todoID, message, actorNodeID, cause string) {
+	h.publish(context.Background(), task.PMAgent.NodeID, "task.status_changed", taskStatusChangedPayload{
+		TaskID:      task.ID,
+		Status:      task.Status,
+		ActorNodeID: strings.TrimSpace(actorNodeID),
+		Cause:       strings.TrimSpace(cause),
+		Version:     task.Version,
 	}, task.ID)
 
 	todo := findTodo(task, todoID)
@@ -382,15 +391,20 @@ func (h *WebhookHandler) publishTaskAndTodoUpdates(task *model.TaskDetail, todoI
 		return
 	}
 
-	payload := todoUpdatedPayload{
-		TaskID:  task.ID,
-		TodoID:  todo.ID,
-		Status:  todo.Status,
-		Message: message,
+	payload := todoStatusChangedPayload{
+		TaskID:      task.ID,
+		TodoID:      todo.ID,
+		Status:      todo.Status,
+		ActorNodeID: strings.TrimSpace(actorNodeID),
+		Cause:       strings.TrimSpace(cause),
+		Version:     task.Version,
+		Message:     message,
 	}
-	h.publish(context.Background(), todo.Assignee.NodeID, "todo.updated", payload, task.ID)
-	if task.PMAgent.NodeID != todo.Assignee.NodeID {
-		h.publish(context.Background(), task.PMAgent.NodeID, "todo.updated", payload, task.ID)
+	if task.PMAgent.NodeID != "" {
+		h.publish(context.Background(), task.PMAgent.NodeID, "todo.status_changed", payload, task.ID)
+	}
+	if todo.Assignee.NodeID != "" && todo.Assignee.NodeID != strings.TrimSpace(actorNodeID) && todo.Assignee.NodeID != task.PMAgent.NodeID {
+		h.publish(context.Background(), todo.Assignee.NodeID, "todo.status_changed", payload, task.ID)
 	}
 }
 

@@ -137,9 +137,9 @@ Webhook 响应约定：
 |------|------|------|
 | `conversation.message` | 用户发来需求消息 | PM Agent |
 | `task.created` | PM 创建任务已被服务器确认 | PM Agent |
-| `task.updated` | Task 状态变化 | PM Agent |
+| `task.status_changed` | Task 状态变化 | PM Agent |
 | `todo.assigned` | Todo 已分配 | 执行 Agent |
-| `todo.updated` | Todo 状态变化 | 相关 Agent |
+| `todo.status_changed` | Todo 状态变化 | PM Agent、受影响相关 Agent |
 
 ## 五、身份与权限规则
 
@@ -194,6 +194,14 @@ Webhook 响应约定：
   - 创建新对话
   - 发送需求消息
 - 若 PM 离线，服务器直接拒绝请求，返回 `PM_AGENT_OFFLINE`
+
+### 状态通知范围
+
+- `task.created` 只发给 PM Agent，用于确认任务已被服务端接受并写入真相源
+- `task.status_changed` 只发给 PM Agent，用于感知任务聚合状态变化
+- `todo.status_changed` 默认发给 PM Agent，以及除本次操作者之外的受影响相关 Agent
+- 若某次 Todo 状态变化是 assignee 自己刚刚通过 `todo.progress`、`todo.complete`、`todo.fail` 提交的，TrustMesh 默认不将同义状态事件回推给该 assignee
+- 若 Todo 状态是由手动派发、重派、系统取消、管理员干预等外部动作改变，则可向受影响的执行 Agent 推送 `todo.status_changed`
 
 ## 六、Payload 规范
 
@@ -327,7 +335,7 @@ message:
 
 ### 6.5 Task 状态更新通知
 
-type: `task.updated`
+type: `task.status_changed`
 方向: TrustMesh → PM Agent（通过 `POST /v1/publish`）
 
 message:
@@ -335,9 +343,17 @@ message:
 ```json
 {
   "task_id": "task_123",
-  "status": "in_progress"
+  "status": "in_progress",
+  "actor_node_id": "node-dev-001",
+  "cause": "todo.progress",
+  "version": 3
 }
 ```
+
+约定：
+- `actor_node_id` 表示触发本次状态变化的操作者节点；若为系统动作，可为空字符串或约定的系统标识
+- `cause` 表示变化来源，如 `todo.progress`、`todo.complete`、`todo.fail`、`manual_dispatch`
+- `version` 是服务端任务版本号，用于去重和乱序处理
 
 ### 6.6 Todo 指派通知
 
@@ -367,8 +383,8 @@ message:
 
 ### 6.7 Todo 状态更新通知
 
-type: `todo.updated`
-方向: TrustMesh → 相关 Agent（通过 `POST /v1/publish`）
+type: `todo.status_changed`
+方向: TrustMesh → PM Agent、受影响相关 Agent（通过 `POST /v1/publish`）
 
 message:
 
@@ -377,9 +393,19 @@ message:
   "task_id": "task_123",
   "todo_id": "todo_1",
   "status": "in_progress",
+  "actor_node_id": "node-dev-001",
+  "cause": "todo.progress",
+  "version": 7,
   "message": "接口已完成参数校验，开始接入 JWT"
 }
 ```
+
+约定：
+- `todo.status_changed` 是领域事件，不是命令提交回执
+- 若本次变化是 assignee 自己刚通过 `todo.progress`、`todo.complete`、`todo.fail` 提交的，TrustMesh 默认不向该 assignee 回推此事件
+- `actor_node_id` 表示本次状态变化的操作者节点
+- `cause` 表示变化来源，如 `todo.progress`、`todo.complete`、`todo.fail`、`manual_dispatch`、`system_cancel`
+- `version` 是服务端任务版本号，用于去重和乱序处理
 
 ### 6.8 Todo 进度
 
@@ -475,6 +501,7 @@ message:
 
 - TrustMesh → Agent 的通知为在线推送语义（通过 `POST /v1/publish`），目标 Agent 离线时不保证补投
 - TrustMesh 数据库（MongoDB）是唯一真相源
+- TrustMesh 默认不向“本次命令的直接发起者”回推同义状态事件；仅在状态变化对其构成新信息时才推送
 - 当前具备业务级幂等或冲突保护的动作：
   - `task.create`：由 `conversation_id` 唯一约束保证同一对话只能创建一个 Task
   - `todo.complete` / `todo.fail`：Todo 已进入终态后再次提交将被拒绝
@@ -502,7 +529,8 @@ message:
    type=todo.progress / todo.complete / todo.fail → targetNode={trustmeshNodeId}
 9. TrustMesh 通过 WebhookAdapter 收到结果，更新 Todo 状态并聚合 Task 状态
 10. TrustMesh 向 PM Agent 发送状态通知:
-    POST /v1/publish → targetNode={pmNodeId}, type=task.updated / todo.updated
+    POST /v1/publish → targetNode={pmNodeId}, type=task.status_changed / todo.status_changed
+    若该变更来自外部动作，才按需向受影响执行 Agent 发送 todo.status_changed
 11. 用户通过 REST 查看结果
 ```
 

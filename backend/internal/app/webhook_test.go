@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,9 +20,22 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 	}
 	defer func() { _ = log.Sync() }()
 
+	var (
+		mu              sync.Mutex
+		publishRequests []map[string]any
+	)
+
 	clawServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v1/publish":
+			defer r.Body.Close()
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode publish payload: %v", err)
+			}
+			mu.Lock()
+			publishRequests = append(publishRequests, payload)
+			mu.Unlock()
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"ok":true,"code":"msg.published","message":"ok","data":{"targetNode":"node-dev-001","messageId":"msg-1"},"ts":1}`))
 		case "/v1/transfer/tf_login_guide":
@@ -100,6 +114,10 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 	})
 	conversationID := nestedString(decodeBody(t, conversationResp), "data", "id")
 
+	mu.Lock()
+	initialPublishCount := len(publishRequests)
+	mu.Unlock()
+
 	taskCreateMessage, err := json.Marshal(map[string]any{
 		"project_id":      projectID,
 		"conversation_id": conversationID,
@@ -133,6 +151,21 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 	taskID := nestedString(decodeBody(t, webhookResp), "data", "id")
 	if taskID == "" {
 		t.Fatal("empty task id")
+	}
+
+	mu.Lock()
+	if len(publishRequests) != initialPublishCount+2 {
+		t.Fatalf("expected %d publish requests after task.create, got %d", initialPublishCount+2, len(publishRequests))
+	}
+	taskCreatedReq := publishRequests[initialPublishCount]
+	todoAssignedReq := publishRequests[initialPublishCount+1]
+	mu.Unlock()
+
+	if taskCreatedReq["type"] != "task.created" || taskCreatedReq["targetNode"] != "node-pm-001" {
+		t.Fatalf("unexpected task.created publish request: %#v", taskCreatedReq)
+	}
+	if todoAssignedReq["type"] != "todo.assigned" || todoAssignedReq["targetNode"] != "node-dev-001" {
+		t.Fatalf("unexpected todo.assigned publish request: %#v", todoAssignedReq)
 	}
 
 	todoCompleteMessage, err := json.Marshal(map[string]any{
@@ -173,6 +206,51 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 	})
 	if completeResp.StatusCode != http.StatusOK {
 		t.Fatalf("todo.complete webhook status=%d", completeResp.StatusCode)
+	}
+
+	mu.Lock()
+	if len(publishRequests) != initialPublishCount+4 {
+		t.Fatalf("expected %d publish requests after todo.complete, got %d", initialPublishCount+4, len(publishRequests))
+	}
+	taskStatusReq := publishRequests[initialPublishCount+2]
+	todoStatusReq := publishRequests[initialPublishCount+3]
+	mu.Unlock()
+
+	if taskStatusReq["type"] != "task.status_changed" || taskStatusReq["targetNode"] != "node-pm-001" {
+		t.Fatalf("unexpected task.status_changed publish request: %#v", taskStatusReq)
+	}
+	if todoStatusReq["type"] != "todo.status_changed" || todoStatusReq["targetNode"] != "node-pm-001" {
+		t.Fatalf("unexpected todo.status_changed publish request: %#v", todoStatusReq)
+	}
+
+	rawTaskStatus, ok := taskStatusReq["message"].(string)
+	if !ok || rawTaskStatus == "" {
+		t.Fatalf("task.status_changed message missing: %#v", taskStatusReq["message"])
+	}
+	var taskStatusMessage map[string]any
+	if err := json.Unmarshal([]byte(rawTaskStatus), &taskStatusMessage); err != nil {
+		t.Fatalf("unmarshal task.status_changed message: %v", err)
+	}
+	if taskStatusMessage["actor_node_id"] != "node-dev-001" || taskStatusMessage["cause"] != "todo.complete" {
+		t.Fatalf("unexpected task.status_changed payload: %#v", taskStatusMessage)
+	}
+	if taskStatusMessage["version"] == nil {
+		t.Fatalf("task.status_changed version missing: %#v", taskStatusMessage)
+	}
+
+	rawTodoStatus, ok := todoStatusReq["message"].(string)
+	if !ok || rawTodoStatus == "" {
+		t.Fatalf("todo.status_changed message missing: %#v", todoStatusReq["message"])
+	}
+	var todoStatusMessage map[string]any
+	if err := json.Unmarshal([]byte(rawTodoStatus), &todoStatusMessage); err != nil {
+		t.Fatalf("unmarshal todo.status_changed message: %v", err)
+	}
+	if todoStatusMessage["actor_node_id"] != "node-dev-001" || todoStatusMessage["cause"] != "todo.complete" {
+		t.Fatalf("unexpected todo.status_changed payload: %#v", todoStatusMessage)
+	}
+	if todoStatusMessage["status"] != "done" {
+		t.Fatalf("unexpected todo.status_changed status: %#v", todoStatusMessage)
 	}
 
 	taskResp := doJSON(t, testServer.Client(), "GET", testServer.URL+"/api/v1/tasks/"+taskID, token, nil)
