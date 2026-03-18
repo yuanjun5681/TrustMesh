@@ -1,68 +1,120 @@
-# TrustMesh Backend (Basic MVP Service)
+# TrustMesh Backend
 
-基础 Go 后端服务，参考：
-- `docs/mvp-design.md`
-- `docs/api-reference.md`
+Go 后端服务，负责：
 
-## 已实现
+- JWT 认证
+- Agent / Project / Conversation / Task API
+- `POST /webhook/clawsynapse` 接收 ClawSynapse WebhookAdapter 推送
+- 调用 `clawsynapsed` Local API 发送业务消息
+- 周期性同步 `GET /v1/peers` 更新 Agent 在线状态
 
-- Gin HTTP 服务 + `/api/v1` 路由
-- JWT 认证（注册/登录）
-- Agent CRUD
-- Project CRUD（删除语义为归档）
-- Conversation 创建/列表/详情/追加消息
-- Task 查询接口（列表/详情/事件）
-- 统一错误结构与错误码
-- `zap` 日志：启动日志 + 请求日志 + panic recovery
-- NATS 最小闭环接入（旧版，待迁移到 ClawSynapse）
+参考文档：
 
-## 架构迁移说明
+- [docs/mvp-design.md](/Volumes/UWorks/Projects/TrustMesh/docs/mvp-design.md)
+- [docs/api-reference.md](/Volumes/UWorks/Projects/TrustMesh/docs/api-reference.md)
+- [docs/message-protocol.md](/Volumes/UWorks/Projects/TrustMesh/docs/message-protocol.md)
 
-当前代码中的 NATS 直连实现（`internal/nats/`）将迁移到 ClawSynapse 集成模式：
+## 当前架构
 
-- **发送消息**：从直连 NATS publish 改为调用 `clawsynapsed` Local API（`POST /v1/publish`）
-- **接收消息**：从直连 NATS subscribe 改为 WebhookAdapter 推送到 `POST /webhook/clawsynapse`
-- **Agent 在线状态**：从自定义心跳机制改为 ClawSynapse 节点发现（`GET /v1/peers` 同步）
-- **消息格式**：不再需要关心 ClawSynapse 内部 Envelope 格式，只需使用 `POST /v1/publish` 的简单请求字段（`targetNode`、`type`、`message`、`metadata`）
+后端已经按 ClawSynapse 集成模式编写，不再直接依赖 NATS 客户端：
 
-迁移后的模块结构：
-- `internal/nats/` → `internal/clawsynapse/`
-  - `client.go`：clawsynapsed Local API 客户端（`POST /v1/publish`、`GET /v1/peers`）
-  - `webhook.go`：WebhookAdapter 消息处理（接收消息）
-  - `types.go`：WebhookPayload、PublishRequest 等类型定义
-  - `sync.go`：peers 列表定期同步
+- 发送消息：调用 `clawsynapsed` Local API `POST /v1/publish`
+- 接收消息：由 `clawsynapsed` 的 `WebhookAdapter` 回调 `POST /webhook/clawsynapse`
+- 节点发现：通过 `GET /v1/peers` 同步外部 Agent 在线状态
 
-## 运行
+关键模块：
+
+- [backend/internal/clawsynapse/client.go](/Volumes/UWorks/Projects/TrustMesh/backend/internal/clawsynapse/client.go)
+- [backend/internal/clawsynapse/webhook.go](/Volumes/UWorks/Projects/TrustMesh/backend/internal/clawsynapse/webhook.go)
+- [backend/internal/clawsynapse/sync.go](/Volumes/UWorks/Projects/TrustMesh/backend/internal/clawsynapse/sync.go)
+- [backend/internal/app/router.go](/Volumes/UWorks/Projects/TrustMesh/backend/internal/app/router.go)
+
+## 本地开发
+
+启动基础依赖：
+
+```bash
+docker compose up -d mongo clawsynapse
+```
+
+说明：
+
+- 本仓库不再编排本地 NATS
+- `clawsynapse` 默认连接外部 NATS：`nats://220.168.146.21:9414`
+- 如需覆盖，可在启动前设置 `NATS_SERVERS`
+
+启动后端：
 
 ```bash
 cp .env.example .env
 go run ./cmd/server
 ```
 
-默认监听：`http://localhost:8080`
+默认监听：`http://127.0.0.1:8080`
 
-说明：服务启动时会自动尝试加载 `.env`（也兼容从仓库根目录启动时读取 `backend/.env`）。
-若本地未启动 NATS，可临时设置 `NATS_ENABLED=false` 只跑 REST。
-若本地未启动 MongoDB，可临时设置 `MONGO_ENABLED=false` 使用纯内存模式。
+服务启动时会自动尝试加载 `.env`，也兼容从仓库根目录启动时读取 `backend/.env`。
 
-## 本地依赖
+## Docker Compose 部署
 
-在仓库根目录启动 MongoDB + NATS + clawsynapsed：
+直接在仓库根目录启动整套服务：
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
-默认端口：
-- MongoDB: `127.0.0.1:27017`
-- NATS: `127.0.0.1:4222`
-- NATS monitoring: `127.0.0.1:8222`
-- clawsynapsed Local API: `127.0.0.1:18080`
+这会启动：
 
-停止：
+- `mongo`
+- `backend`
+- `clawsynapse`
+- `frontend`
+
+其中后端容器内默认配置为：
+
+- `MONGO_URI=mongodb://mongo:27017`
+- `CLAWSYNAPSE_API_URL=http://clawsynapse:18080`
+- `CLAWSYNAPSE_NODE_ID=trustmesh-server`
+
+其中 `clawsynapse` 容器默认配置为：
+
+- `NATS_SERVERS=nats://220.168.146.21:9414`
+- `DELIVERABLE_PREFIXES=chat,task,todo,conversation`
+- `TRANSFER_DIR=/var/lib/trustmesh-transfers`
+
+Artifact 文件访问方式：
+
+- `clawsynapse` 将接收到的文件写入共享卷 `trustmesh-transfer-data`
+- `backend` 以只读方式挂载同一目录 `/var/lib/trustmesh-transfers`
+- 后端 artifact 内容接口继续本地打开 `localPath`，但这个路径现在属于共享卷，而不是 `clawsynapse` 私有文件系统
+
+若历史 volume 已按错误权限创建，重建共享卷：
 
 ```bash
 docker compose down
+docker volume rm trustmesh_trustmesh-transfer-data
+docker compose up -d --build
+```
+
+## 关键环境变量
+
+- `PORT`，默认 `8080`
+- `JWT_SECRET`，默认 `trustmesh-dev-secret`
+- `TOKEN_TTL`，默认 `24h`
+- `LOG_LEVEL`，默认 `info`
+- `ALLOW_ALL_CORS`，默认 `true`
+- `MONGO_ENABLED`，默认 `true`
+- `MONGO_URI`，默认 `mongodb://127.0.0.1:27017`
+- `MONGO_DATABASE`，默认 `trustmesh`
+- `MONGO_TIMEOUT`，默认 `5s`
+- `CLAWSYNAPSE_API_URL`，默认 `http://127.0.0.1:18080`
+- `CLAWSYNAPSE_NODE_ID`，TrustMesh 节点的 ClawSynapse `nodeId`
+- `CLAWSYNAPSE_TIMEOUT`，默认 `3s`
+- `CLAWSYNAPSE_PEER_SYNC_INTERVAL`，默认 `10s`
+
+## 健康检查
+
+```bash
+curl http://127.0.0.1:8080/healthz
 ```
 
 ## 烟雾测试
@@ -73,27 +125,8 @@ docker compose down
 bash ./scripts/smoke-task-flow.sh
 ```
 
-> 注意：烟雾测试脚本当前仍使用旧版 NATS 直连方式，待 ClawSynapse 迁移完成后更新。
-
-## 关键环境变量
-
-- `PORT`（默认 `8080`）
-- `JWT_SECRET`（默认 `trustmesh-dev-secret`）
-- `TOKEN_TTL`（默认 `24h`）
-- `LOG_LEVEL`（默认 `info`）
-- `ALLOW_ALL_CORS`（默认 `true`）
-- `MONGO_ENABLED`（默认 `true`）
-- `MONGO_URI`（默认 `mongodb://127.0.0.1:27017`）
-- `MONGO_DATABASE`（默认 `trustmesh`）
-- `MONGO_TIMEOUT`（默认 `5s`）
-- `NATS_ENABLED`（默认 `true`）
-- `NATS_URL`（默认 `nats://127.0.0.1:4222`）
-- `CLAWSYNAPSE_API_URL`（默认 `http://127.0.0.1:18080`，clawsynapsed Local API 地址）
-- `CLAWSYNAPSE_NODE_ID`（TrustMesh 节点的 ClawSynapse nodeId）
-- `CLAWSYNAPSE_PEER_SYNC_INTERVAL`（默认 `10s`，peers 列表同步间隔）
-
-## 健康检查
+或：
 
 ```bash
-curl http://localhost:8080/healthz
+bash ./scripts/smoke-progress-fail-flow.sh
 ```

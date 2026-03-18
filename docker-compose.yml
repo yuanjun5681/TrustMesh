@@ -1,6 +1,8 @@
+name: trustmesh
+
 services:
   mongo:
-    image: mongodb/mongodb-community-server:7.0-ubuntu2204
+    image: mongodb/mongodb-community-server:8.2-ubuntu2204
     container_name: trustmesh-mongo
     restart: unless-stopped
     command: ["--bind_ip_all"]
@@ -9,14 +11,91 @@ services:
     volumes:
       - trustmesh-mongo-data:/data/db
 
-  nats:
-    image: nats:2.10-alpine
-    container_name: trustmesh-nats
+  backend:
+    build:
+      context: ./backend
+    container_name: trustmesh-backend
     restart: unless-stopped
-    command: ["-m", "8222"]
+    depends_on:
+      - mongo
+    environment:
+      PORT: "8080"
+      LOG_LEVEL: info
+      ALLOW_ALL_CORS: "true"
+      JWT_SECRET: trustmesh-dev-secret
+      TOKEN_TTL: 24h
+      MONGO_ENABLED: "true"
+      MONGO_URI: mongodb://mongo:27017
+      MONGO_DATABASE: trustmesh
+      MONGO_TIMEOUT: 5s
+      CLAWSYNAPSE_API_URL: http://clawsynapse:18080
+      CLAWSYNAPSE_NODE_ID: trustmesh-server
+      CLAWSYNAPSE_TIMEOUT: 3s
+      CLAWSYNAPSE_PEER_SYNC_INTERVAL: 10s
     ports:
-      - "4222:4222"
-      - "8222:8222"
+      - "8080:8080"
+    volumes:
+      - trustmesh-transfer-data:/var/lib/trustmesh-transfers:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+
+  clawsynapse:
+    build:
+      context: ./deploy/clawsynapse
+      args:
+        CLAWSYNAPSE_REF: ${CLAWSYNAPSE_REF:-main}
+    container_name: trustmesh-clawsynapse
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NODE_ID: trustmesh-server
+      NATS_SERVERS: ${NATS_SERVERS:-nats://220.168.146.21:9414}
+      LOCAL_API_ADDR: 0.0.0.0:18080
+      TRUST_MODE: open
+      AGENT_ADAPTER: webhook
+      WEBHOOK_URL: http://backend:8080/webhook/clawsynapse
+      DATA_DIR: /var/lib/clawsynapse
+      IDENTITY_KEY_PATH: /var/lib/clawsynapse/identity.key
+      IDENTITY_PUB_PATH: /var/lib/clawsynapse/identity.pub
+      DELIVERABLE_PREFIXES: ${DELIVERABLE_PREFIXES:-chat,task,todo,conversation}
+      TRANSFER_DIR: /var/lib/trustmesh-transfers
+      TRANSFER_TTL: 24h
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+    ports:
+      - "18080:18080"
+    volumes:
+      - trustmesh-clawsynapse-data:/var/lib/clawsynapse
+      - trustmesh-transfer-data:/var/lib/trustmesh-transfers
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:18080/v1/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: trustmesh-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
 
 volumes:
   trustmesh-mongo-data:
+  trustmesh-clawsynapse-data:
+  trustmesh-transfer-data:
