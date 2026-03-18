@@ -69,6 +69,68 @@ func TestSyncAgentPresenceMarksOfflineAndBusy(t *testing.T) {
 	}
 }
 
+func TestAgentUsageAndDeleteConflictDetails(t *testing.T) {
+	s, userID, pm, developer, project, conversation := seedWorkflowState(t)
+
+	_, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: conversation.ID,
+		Title:          "Implement login",
+		Description:    "Support email password login",
+		Todos: []TaskCreateTodoInput{
+			{
+				Title:          "Build backend API",
+				Description:    "Implement auth endpoints",
+				AssigneeNodeID: developer.NodeID,
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("create task: %v", appErr)
+	}
+
+	agents := s.ListAgents(userID)
+	if len(agents) != 2 {
+		t.Fatalf("expected 2 agents, got %d", len(agents))
+	}
+
+	var pmUsage, developerUsage model.AgentUsage
+	for _, agent := range agents {
+		switch agent.ID {
+		case pm.ID:
+			pmUsage = agent.Usage
+		case developer.ID:
+			developerUsage = agent.Usage
+		}
+	}
+
+	if !pmUsage.InUse || pmUsage.ProjectCount != 1 || pmUsage.TaskCount != 1 || pmUsage.TodoCount != 0 || pmUsage.TotalCount != 2 {
+		t.Fatalf("unexpected pm usage: %#v", pmUsage)
+	}
+	if !developerUsage.InUse || developerUsage.ProjectCount != 0 || developerUsage.TaskCount != 0 || developerUsage.TodoCount != 1 || developerUsage.TotalCount != 1 {
+		t.Fatalf("unexpected developer usage: %#v", developerUsage)
+	}
+
+	agent, appErr := s.GetAgent(userID, developer.ID)
+	if appErr != nil {
+		t.Fatalf("get agent: %v", appErr)
+	}
+	if !agent.Usage.InUse || agent.Usage.TodoCount != 1 {
+		t.Fatalf("unexpected get agent usage: %#v", agent.Usage)
+	}
+
+	appErr = s.DeleteAgent(userID, developer.ID)
+	if appErr == nil {
+		t.Fatal("expected delete agent conflict")
+	}
+	if appErr.Code != "AGENT_IN_USE" {
+		t.Fatalf("unexpected delete error code: %s", appErr.Code)
+	}
+	if appErr.Details["project_count"] != 0 || appErr.Details["task_count"] != 0 || appErr.Details["todo_count"] != 1 || appErr.Details["total_count"] != 1 {
+		t.Fatalf("unexpected delete error details: %#v", appErr.Details)
+	}
+}
+
 func TestTaskCreateIdempotencyByMessageID(t *testing.T) {
 	s, _, pm, developer, project, conversation := seedWorkflowState(t)
 
@@ -284,6 +346,87 @@ func TestTaskResultAggregationFromCompletedTodos(t *testing.T) {
 	}
 	if task.Result.Metadata["completed_todo_count"] != 2 {
 		t.Fatalf("expected completed_todo_count=2, got %#v", task.Result.Metadata["completed_todo_count"])
+	}
+}
+
+func TestTaskArtifactAggregationIncludesTransferMetadata(t *testing.T) {
+	s, _, pm, developer, project, conversation := seedWorkflowState(t)
+
+	task, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: conversation.ID,
+		Title:          "Deliver report",
+		Description:    "Upload final report",
+		Todos: []TaskCreateTodoInput{
+			{
+				ID:             "todo-1",
+				Title:          "Upload report",
+				Description:    "Send report PDF",
+				AssigneeNodeID: developer.NodeID,
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("create task: %v", appErr)
+	}
+
+	task, appErr = s.CompleteTodoByNode(developer.NodeID, TodoCompleteInput{
+		TaskID: task.ID,
+		TodoID: "todo-1",
+		Result: model.TodoResult{
+			Summary: "Report uploaded",
+			Output:  "Uploaded the final PDF report",
+			ArtifactRefs: []model.TodoResultArtifactRef{
+				{
+					ArtifactID: "tf_report_123",
+					Kind:       "file",
+					Label:      "Final report PDF",
+				},
+			},
+			Metadata: map[string]any{
+				"transfers": []any{
+					map[string]any{
+						"transfer_id": "tf_report_123",
+						"bucket":      "deliverables",
+						"size":        2048,
+						"checksum":    "sha256:abc123",
+						"mime_type":   "application/pdf",
+						"fileName":    "report.pdf",
+						"localPath":   "/tmp/report.pdf",
+					},
+				},
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("complete todo: %v", appErr)
+	}
+
+	if len(task.Artifacts) != 1 {
+		t.Fatalf("expected 1 artifact, got %d", len(task.Artifacts))
+	}
+	artifact := task.Artifacts[0]
+	if artifact.URI != "transfer://tf_report_123" {
+		t.Fatalf("unexpected artifact uri: %s", artifact.URI)
+	}
+	if artifact.MimeType == nil || *artifact.MimeType != "application/pdf" {
+		t.Fatalf("unexpected mime type: %#v", artifact.MimeType)
+	}
+	if artifact.Metadata["transfer_id"] != "tf_report_123" {
+		t.Fatalf("unexpected transfer_id metadata: %#v", artifact.Metadata["transfer_id"])
+	}
+	if artifact.Metadata["file_name"] != "report.pdf" {
+		t.Fatalf("unexpected file_name metadata: %#v", artifact.Metadata["file_name"])
+	}
+	if artifact.Metadata["local_path"] != "/tmp/report.pdf" {
+		t.Fatalf("unexpected local_path metadata: %#v", artifact.Metadata["local_path"])
+	}
+	transfer, ok := artifact.Metadata["transfer"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected transfer metadata map, got %#v", artifact.Metadata["transfer"])
+	}
+	if transfer["bucket"] != "deliverables" {
+		t.Fatalf("unexpected transfer metadata: %#v", transfer)
 	}
 }
 

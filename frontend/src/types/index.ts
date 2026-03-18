@@ -86,8 +86,20 @@ export interface ConversationDetail {
   updated_at: string
 }
 
+export interface ConversationStreamSnapshot {
+  conversation: ConversationDetail
+}
+
 export type AgentRole = 'pm' | 'developer' | 'reviewer' | 'custom'
 export type AgentStatus = 'online' | 'offline' | 'busy'
+
+export interface AgentUsage {
+  project_count: number
+  task_count: number
+  todo_count: number
+  total_count: number
+  in_use: boolean
+}
 
 export interface Agent {
   id: string
@@ -98,6 +110,7 @@ export interface Agent {
   node_id: string
   status: AgentStatus
   last_seen_at: string | null
+  usage: AgentUsage
   created_at: string
   updated_at: string
 }
@@ -110,7 +123,7 @@ export interface TodoAssignee {
 
 export interface TodoResultArtifactRef {
   artifact_id: string
-  kind: 'file' | 'link' | 'log' | 'report'
+  kind: string
   label: string
 }
 
@@ -141,11 +154,15 @@ export interface Todo {
 export interface TaskArtifact {
   id: string
   source_todo_id: string | null
-  kind: 'file' | 'link' | 'log' | 'report'
+  kind: string
   title: string
   uri: string
   mime_type: string | null
   metadata: Record<string, unknown>
+}
+
+export interface TransferDetail {
+  [key: string]: unknown
 }
 
 export interface TaskResult {
@@ -206,6 +223,11 @@ export interface TaskEvent {
   content: string | null
   metadata: Record<string, unknown>
   created_at: string
+}
+
+export interface TaskStreamSnapshot {
+  task: TaskDetail
+  events: TaskEvent[]
 }
 
 // ─── 请求类型 ───

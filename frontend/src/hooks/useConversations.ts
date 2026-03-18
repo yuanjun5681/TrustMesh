@@ -1,6 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as conversationsApi from '@/api/conversations'
-import type { CreateConversationRequest, AppendConversationMessageRequest } from '@/types'
+import { usePageVisibility } from './usePageVisibility'
+import type {
+  AppendConversationMessageRequest,
+  ConversationDetail,
+  CreateConversationRequest,
+} from '@/types'
 
 export function useConversations(projectId: string | undefined) {
   return useQuery({
@@ -10,10 +15,13 @@ export function useConversations(projectId: string | undefined) {
       return res.data.items
     },
     enabled: !!projectId,
+    staleTime: 30_000,
   })
 }
 
-export function useConversation(id: string | undefined, isActive: boolean) {
+export function useConversation(id: string | undefined, isActiveHint: boolean) {
+  const isPageVisible = usePageVisibility()
+
   return useQuery({
     queryKey: ['conversations', 'detail', id],
     queryFn: async () => {
@@ -21,7 +29,16 @@ export function useConversation(id: string | undefined, isActive: boolean) {
       return res.data
     },
     enabled: !!id,
-    refetchInterval: isActive ? 3000 : false,
+    staleTime: 5_000,
+    refetchInterval: (currentQuery) => {
+      if (!isPageVisible || !id) {
+        return false
+      }
+
+      const conversation = currentQuery.state.data as ConversationDetail | undefined
+      return conversation?.status === 'active' || (!conversation && isActiveHint) ? 3_000 : false
+    },
+    refetchIntervalInBackground: false,
   })
 }
 

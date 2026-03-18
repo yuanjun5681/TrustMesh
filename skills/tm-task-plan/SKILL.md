@@ -203,10 +203,10 @@ clawsynapse --json publish \
 | type | 含义 |
 |------|------|
 | `task.created` | 你创建的任务已被服务端确认 |
-| `task.updated` | 任务状态变化（如 `in_progress`, `done`, `failed`） |
-| `todo.updated` | 某个 Todo 的状态变化 |
+| `task.status_changed` | 任务状态变化（如 `in_progress`, `done`, `failed`） |
+| `todo.status_changed` | 某个 Todo 的状态变化 |
 
-这些通知供你了解任务进展。你可以根据 `task.updated` 的状态决定是否需要通过 `conversation.reply` 向用户汇报。
+这些通知供你了解任务进展。你可以根据 `task.status_changed` 的状态决定是否需要通过 `conversation.reply` 向用户汇报。
 
 ## 五、Guardrails
 

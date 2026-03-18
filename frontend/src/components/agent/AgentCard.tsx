@@ -19,7 +19,17 @@ interface AgentCardProps {
   onDelete: () => void
 }
 
+function formatUsage(agent: Agent) {
+  const parts: string[] = []
+  if (agent.usage.project_count > 0) parts.push(`${agent.usage.project_count} 个项目`)
+  if (agent.usage.task_count > 0) parts.push(`${agent.usage.task_count} 个任务`)
+  if (agent.usage.todo_count > 0) parts.push(`${agent.usage.todo_count} 个 Todo`)
+  return parts.join('、')
+}
+
 export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
+  const usageText = formatUsage(agent)
+
   return (
     <Card className="transition-all hover:shadow-md">
       <CardContent className="p-4">
@@ -49,9 +59,14 @@ export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
                 编辑
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={onDelete} className="text-destructive">
+              <DropdownMenuItem
+                onClick={onDelete}
+                disabled={agent.usage.in_use}
+                className="text-destructive disabled:text-muted-foreground"
+                title={agent.usage.in_use ? `该 Agent 正被 ${usageText} 引用` : '删除 Agent'}
+              >
                 <Trash2 className="h-3.5 w-3.5 mr-2" />
-                删除
+                {agent.usage.in_use ? '删除前需解除引用' : '删除'}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -67,6 +82,17 @@ export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
               {cap}
             </Badge>
           ))}
+        </div>
+
+        <div className="mt-3 flex items-center gap-2">
+          <Badge variant={agent.usage.in_use ? 'destructive' : 'secondary'} className="text-xs">
+            {agent.usage.in_use ? '已被引用' : '可删除'}
+          </Badge>
+          {agent.usage.in_use && (
+            <p className="text-xs text-muted-foreground truncate" title={`被 ${usageText} 引用`}>
+              被 {usageText} 引用
+            </p>
+          )}
         </div>
 
         {agent.last_seen_at && (

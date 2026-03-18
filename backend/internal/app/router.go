@@ -42,7 +42,8 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	agentHandler := handler.NewAgentHandler(s)
 	projectHandler := handler.NewProjectHandler(s)
 	conversationHandler := handler.NewConversationHandler(s, clawClient, log)
-	taskHandler := handler.NewTaskHandler(s)
+	taskHandler := handler.NewTaskHandler(s, clawClient, log)
+	transferHandler := handler.NewTransferHandler(s, clawClient)
 
 	engine.GET("/healthz", handler.Health)
 	engine.POST("/webhook/clawsynapse", webhookHandler.HandleWebhook)
@@ -69,11 +70,16 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	authed.POST("/projects/:projectId/conversations", conversationHandler.Create)
 	authed.GET("/projects/:projectId/conversations", conversationHandler.ListByProject)
 	authed.GET("/conversations/:id", conversationHandler.Get)
+	authed.GET("/conversations/:id/stream", conversationHandler.Stream)
 	authed.POST("/conversations/:id/messages", conversationHandler.AppendMessage)
 
 	authed.GET("/projects/:projectId/tasks", taskHandler.ListByProject)
 	authed.GET("/tasks/:id", taskHandler.Get)
+	authed.GET("/tasks/:id/stream", taskHandler.Stream)
 	authed.GET("/tasks/:id/events", taskHandler.ListEvents)
+	authed.POST("/tasks/:id/todos/:todoId/dispatch", taskHandler.DispatchTodo)
+	authed.GET("/tasks/:id/artifacts/:artifactId/transfer", transferHandler.GetTaskArtifactTransfer)
+	authed.GET("/tasks/:id/artifacts/:artifactId/content", transferHandler.GetTaskArtifactContent)
 
 	return &App{Engine: engine, Store: s, PeerSyncer: peerSyncer}, nil
 }

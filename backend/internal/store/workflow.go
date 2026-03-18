@@ -44,6 +44,47 @@ type TodoFailInput struct {
 	Error  string
 }
 
+func (s *Store) RecordTodoDispatch(userID, taskID, todoID string) (*model.TaskDetail, *transport.AppError) {
+	taskID = strings.TrimSpace(taskID)
+	todoID = strings.TrimSpace(todoID)
+	if taskID == "" || todoID == "" {
+		return nil, transport.Validation("invalid todo dispatch payload", map[string]any{"task_id": "required", "todo_id": "required"})
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[taskID]
+	if !ok || task.UserID != userID {
+		return nil, transport.NotFound("task not found")
+	}
+
+	todoIdx := findTodoIndex(task, todoID)
+	if todoIdx < 0 {
+		return nil, transport.NotFound("todo not found")
+	}
+
+	todo := &task.Todos[todoIdx]
+	if todo.Status != "pending" {
+		return nil, transport.Conflict("TODO_NOT_PENDING", "todo is not pending")
+	}
+
+	now := time.Now().UTC()
+	message := fmt.Sprintf("手动派发给 %s", todo.Assignee.Name)
+	s.addTaskEventUnsafe(task.ID, "user", userID, "todo_assigned", &message, map[string]any{
+		"todo_id":           todo.ID,
+		"assignee_agent_id": todo.Assignee.AgentID,
+		"manual":            true,
+	}, now)
+	task.UpdatedAt = now
+	task.Version++
+	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.publishTaskUnsafe(task.ID)
+	return copyTask(task), nil
+}
+
 func (s *Store) GetProjectPMNode(userID, projectID string) (string, *transport.AppError) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -160,6 +201,7 @@ func (s *Store) AppendPMReplyByNode(nodeID, conversationID, content string) (*mo
 	if err := s.persistAgentGraphUnsafe(pmAgent.ID); err != nil {
 		return nil, mongoWriteError(err)
 	}
+	s.publishConversationUnsafe(conv.ID)
 	detail := s.toConversationDetailUnsafe(conv)
 	return &detail, nil
 }
@@ -323,6 +365,8 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 	if err := s.persistProcessedMessageUnsafe(processedMessageKey("task.create", nodeID, messageID)); err != nil {
 		return nil, mongoWriteError(err)
 	}
+	s.publishConversationUnsafe(conv.ID)
+	s.publishTaskUnsafe(task.ID)
 
 	return copyTask(task), nil
 }
@@ -378,6 +422,7 @@ func (s *Store) UpdateTodoProgressByNode(nodeID string, in TodoProgressInput) (*
 	if err := s.persistAgentGraphUnsafe(agent.ID); err != nil {
 		return nil, mongoWriteError(err)
 	}
+	s.publishTaskUnsafe(task.ID)
 	return copyTask(task), nil
 }
 
@@ -452,6 +497,7 @@ func (s *Store) CompleteTodoByNodeWithMessageID(nodeID, messageID string, in Tod
 	if err := s.persistProcessedMessageUnsafe(processedMessageKey("todo.complete", nodeID, messageID)); err != nil {
 		return nil, mongoWriteError(err)
 	}
+	s.publishTaskUnsafe(task.ID)
 	return copyTask(task), nil
 }
 
@@ -522,6 +568,7 @@ func (s *Store) FailTodoByNodeWithMessageID(nodeID, messageID string, in TodoFai
 	if err := s.persistProcessedMessageUnsafe(processedMessageKey("todo.fail", nodeID, messageID)); err != nil {
 		return nil, mongoWriteError(err)
 	}
+	s.publishTaskUnsafe(task.ID)
 	return copyTask(task), nil
 }
 
@@ -672,6 +719,7 @@ func aggregateTaskArtifacts(todos []model.Todo) []model.TaskArtifact {
 		if todo.Status != "done" {
 			continue
 		}
+		transfersByID := indexTodoTransfers(todo.Result.Metadata)
 		for i, ref := range todo.Result.ArtifactRefs {
 			baseID := strings.TrimSpace(ref.ArtifactID)
 			if baseID == "" {
@@ -679,17 +727,44 @@ func aggregateTaskArtifacts(todos []model.Todo) []model.TaskArtifact {
 			}
 			artifactID := uniqueTaskArtifactID(baseID, usedIDs)
 			sourceTodoID := todo.ID
+			metadata := map[string]any{
+				"source": "todo_result_ref",
+			}
+			uri := ""
+			var mimeType *string
+			if transfer, ok := transfersByID[baseID]; ok {
+				metadata["transfer"] = transfer
+				metadata["transfer_id"] = baseID
+				metadata["ref_only"] = false
+				uri = "transfer://" + baseID
+				if v := stringValue(transfer["fileName"]); v != "" {
+					metadata["file_name"] = v
+				} else if v := stringValue(transfer["file_name"]); v != "" {
+					metadata["file_name"] = v
+				}
+				if v := stringValue(transfer["localPath"]); v != "" {
+					metadata["local_path"] = v
+				} else if v := stringValue(transfer["local_path"]); v != "" {
+					metadata["local_path"] = v
+				}
+				if v := stringValue(transfer["mime_type"]); v != "" {
+					mime := v
+					mimeType = &mime
+				} else if v := stringValue(transfer["mimeType"]); v != "" {
+					mime := v
+					mimeType = &mime
+				}
+			} else {
+				metadata["ref_only"] = true
+			}
 			artifacts = append(artifacts, model.TaskArtifact{
 				ID:           artifactID,
 				SourceTodoID: &sourceTodoID,
 				Kind:         strings.TrimSpace(ref.Kind),
 				Title:        strings.TrimSpace(ref.Label),
-				URI:          "",
-				MimeType:     nil,
-				Metadata: map[string]any{
-					"source":   "todo_result_ref",
-					"ref_only": true,
-				},
+				URI:          uri,
+				MimeType:     mimeType,
+				Metadata:     metadata,
 			})
 		}
 	}
@@ -784,6 +859,41 @@ func uniqueTaskArtifactID(baseID string, usedIDs map[string]int) string {
 		return baseID
 	}
 	return fmt.Sprintf("%s-%d", baseID, count+1)
+}
+
+func indexTodoTransfers(metadata map[string]any) map[string]map[string]any {
+	out := make(map[string]map[string]any)
+	if len(metadata) == 0 {
+		return out
+	}
+	rawTransfers, ok := metadata["transfers"]
+	if !ok {
+		return out
+	}
+	items, ok := rawTransfers.([]any)
+	if !ok {
+		return out
+	}
+	for _, item := range items {
+		transfer, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		transferID := strings.TrimSpace(stringValue(transfer["transfer_id"]))
+		if transferID == "" {
+			transferID = strings.TrimSpace(stringValue(transfer["transferId"]))
+		}
+		if transferID == "" {
+			continue
+		}
+		out[transferID] = copyMap(transfer)
+	}
+	return out
+}
+
+func stringValue(v any) string {
+	s, _ := v.(string)
+	return s
 }
 
 func findTodoIndex(task *model.TaskDetail, todoID string) int {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Plus, MessageSquare, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Plus, MessageSquare, AlertCircle, Sparkles, ListTodo, Bug, Lightbulb } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
@@ -9,6 +9,7 @@ import { MessageInput } from '@/components/conversation/MessageInput'
 import { PlanPreview } from '@/components/conversation/PlanPreview'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { useConversations, useConversation, useCreateConversation, useAppendMessage } from '@/hooks/useConversations'
+import { useConversationStream } from '@/hooks/useLiveStreams'
 import { useProject } from '@/hooks/useProjects'
 import { cn, formatRelativeTime } from '@/lib/utils'
 import { ApiRequestError } from '@/api/client'
@@ -18,23 +19,26 @@ export function ConversationPage() {
   const { data: project } = useProject(projectId)
   const { data: conversations, isLoading } = useConversations(projectId)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [isCreatingNew, setIsCreatingNew] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  const isActive = conversations?.find((c) => c.id === selectedId)?.status === 'active'
-  const { data: conversation } = useConversation(selectedId ?? undefined, isActive)
+  const defaultConversationId =
+    conversations?.find((c) => c.status === 'active')?.id ?? conversations?.[0]?.id ?? null
+  const activeConversationId = isCreatingNew ? null : selectedId ?? defaultConversationId
+  const selectedConversation = conversations?.find((c) => c.id === activeConversationId)
+  const { data: conversation } = useConversation(
+    activeConversationId ?? undefined,
+    selectedConversation?.status === 'active'
+  )
+  const shouldStreamConversation =
+    !!activeConversationId &&
+    ((conversation?.status ?? selectedConversation?.status) === 'active' || !conversation)
+  useConversationStream(activeConversationId ?? undefined, shouldStreamConversation)
   const createConversation = useCreateConversation()
   const appendMessage = useAppendMessage()
 
   const pmOffline = project?.pm_agent.status !== 'online'
-
-  // Auto-select first active conversation
-  useEffect(() => {
-    if (!selectedId && conversations?.length) {
-      const active = conversations.find((c) => c.status === 'active')
-      setSelectedId(active?.id ?? conversations[0].id)
-    }
-  }, [conversations, selectedId])
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -44,13 +48,14 @@ export function ConversationPage() {
   const handleSend = async (content: string) => {
     setError(null)
     try {
-      if (selectedId && isActive) {
-        await appendMessage.mutateAsync({ id: selectedId, input: { content } })
+      if (activeConversationId && (conversation?.status ?? selectedConversation?.status) === 'active') {
+        await appendMessage.mutateAsync({ id: activeConversationId, input: { content } })
       } else {
         const res = await createConversation.mutateAsync({
           projectId: projectId!,
           input: { content },
         })
+        setIsCreatingNew(false)
         setSelectedId(res.data.id)
       }
     } catch (err) {
@@ -77,7 +82,10 @@ export function ConversationPage() {
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            onClick={() => setSelectedId(null)}
+            onClick={() => {
+              setIsCreatingNew(true)
+              setSelectedId(null)
+            }}
             disabled={pmOffline}
           >
             <Plus className="h-4 w-4" />
@@ -100,10 +108,13 @@ export function ConversationPage() {
               {conversations.map((conv) => (
                 <button
                   key={conv.id}
-                  onClick={() => setSelectedId(conv.id)}
+                  onClick={() => {
+                    setIsCreatingNew(false)
+                    setSelectedId(conv.id)
+                  }}
                   className={cn(
                     'w-full rounded-lg p-3 text-left transition-colors hover:bg-sidebar-accent cursor-pointer',
-                    selectedId === conv.id && 'bg-sidebar-accent'
+                    activeConversationId === conv.id && 'bg-sidebar-accent'
                   )}
                 >
                   <div className="flex items-center justify-between mb-1">
@@ -175,20 +186,55 @@ export function ConversationPage() {
               )}
             </div>
           </>
-        ) : (
+        ) : activeConversationId ? (
           <div className="flex flex-1 flex-col items-center justify-center">
             <EmptyState
               icon={MessageSquare}
-              title={selectedId ? '加载中...' : '开始新对话'}
-              description={pmOffline ? 'PM Agent 当前离线，请等待上线后发起对话' : '向 PM Agent 描述你的需求，AI 将帮你规划任务'}
-              action={
-                !pmOffline && !selectedId ? (
-                  <div className="w-full max-w-lg px-4">
+              title="加载中..."
+            />
+          </div>
+        ) : (
+          <div className="flex flex-1 flex-col items-center justify-center px-4">
+            <div className="w-full max-w-xl flex flex-col items-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 mb-5">
+                <Sparkles className="h-7 w-7 text-primary" />
+              </div>
+              <h2 className="text-xl font-semibold mb-2">开始新对话</h2>
+              <p className="text-sm text-muted-foreground mb-8 text-center max-w-sm">
+                {pmOffline
+                  ? 'PM Agent 当前离线，请等待上线后发起对话'
+                  : '向 PM Agent 描述你的需求，AI 将帮你分析并规划任务'}
+              </p>
+
+              {!pmOffline && (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full mb-6">
+                    {[
+                      { icon: ListTodo, label: '规划功能', text: '帮我设计一个用户注册登录模块' },
+                      { icon: Bug, label: '修复问题', text: '排查并修复订单列表分页异常的问题' },
+                      { icon: Lightbulb, label: '技术方案', text: '设计一套消息通知系统的技术方案' },
+                    ].map((example) => (
+                      <button
+                        key={example.label}
+                        onClick={() => handleSend(example.text)}
+                        disabled={createConversation.isPending}
+                        className="group flex flex-col items-start gap-2 rounded-xl border bg-card p-4 text-left transition-all hover:border-primary/30 hover:shadow-sm disabled:opacity-50 cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground group-hover:text-primary transition-colors">
+                          <example.icon className="h-3.5 w-3.5" />
+                          {example.label}
+                        </div>
+                        <span className="text-sm leading-snug">{example.text}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="w-full">
                     <MessageInput onSend={handleSend} disabled={createConversation.isPending} />
                   </div>
-                ) : undefined
-              }
-            />
+                </>
+              )}
+            </div>
           </div>
         )}
       </div>

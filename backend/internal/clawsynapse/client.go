@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -54,6 +55,26 @@ type peersResponse struct {
 	Message string `json:"message"`
 	Data    struct {
 		Items []Peer `json:"items"`
+	} `json:"data"`
+	TS int64 `json:"ts"`
+}
+
+type transfersResponse struct {
+	OK      bool   `json:"ok"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Data    struct {
+		Items []map[string]any `json:"items"`
+	} `json:"data"`
+	TS int64 `json:"ts"`
+}
+
+type transferResponse struct {
+	OK      bool   `json:"ok"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Data    struct {
+		Transfer map[string]any `json:"transfer"`
 	} `json:"data"`
 	TS int64 `json:"ts"`
 }
@@ -143,6 +164,79 @@ func (c *Client) GetPeers(ctx context.Context) ([]Peer, error) {
 	}
 	if !out.OK {
 		return nil, fmt.Errorf("get peers rejected: %s", out.Code)
+	}
+	return out.Data.Items, nil
+}
+
+func (c *Client) GetTransfer(ctx context.Context, transferID string) (map[string]any, error) {
+	if c == nil {
+		return nil, fmt.Errorf("clawsynapse client is disabled")
+	}
+	transferID = strings.TrimSpace(transferID)
+	if transferID == "" {
+		return nil, fmt.Errorf("transfer id is required")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/transfer/"+url.PathEscape(transferID), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("get transfer request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("get transfer returned status 404")
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("get transfer returned status %d", resp.StatusCode)
+	}
+
+	var out transferResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode transfer response: %w", err)
+	}
+	if !out.OK {
+		return nil, fmt.Errorf("get transfer rejected: %s", out.Code)
+	}
+	if out.Data.Transfer == nil {
+		return map[string]any{}, nil
+	}
+	return out.Data.Transfer, nil
+}
+
+func (c *Client) ListTransfers(ctx context.Context) ([]map[string]any, error) {
+	if c == nil {
+		return nil, fmt.Errorf("clawsynapse client is disabled")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/transfers", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("list transfers request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("list transfers returned status %d", resp.StatusCode)
+	}
+
+	var out transfersResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode transfers response: %w", err)
+	}
+	if !out.OK {
+		return nil, fmt.Errorf("list transfers rejected: %s", out.Code)
+	}
+	if out.Data.Items == nil {
+		return []map[string]any{}, nil
 	}
 	return out.Data.Items, nil
 }

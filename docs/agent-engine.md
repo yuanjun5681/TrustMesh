@@ -57,7 +57,7 @@ Agent 接收: 通过本地 clawsynapsed Adapter 投递
   │                      │←── WebhookAdapter ──│   todo.complete   │                    │
   │                      │── 更新 Todo/Task     │                   │                    │
   │                      │── Local API ───────→│── 投递 ──────────→│                    │
-  │                      │   publish           │  task.updated     │  可选汇总/回复       │
+  │                      │   publish           │  task.status_changed / todo.status_changed │  可选汇总/回复       │
   │←── REST 查看状态 ────│                    │                   │                    │
   │                      │                    │                   │                    │
 ```
@@ -260,7 +260,7 @@ func (s *PeerSyncer) SyncOnce(ctx context.Context) error
   │                      │←── WebhookAdapter ─────│  todo.complete   │
   │                      │── 更新 Todo/Task        │                  │
   │                      │── Local API publish ──→│── 投递 ─────────→│ PM Agent
-  │                      │   task.updated         │                  │
+  │                      │   task.status_changed  │                  │
   │                      │                       │                  │
 6.│                      │                       │←── 发送 ──────────│ PM Agent
   │                      │←── WebhookAdapter ─────│  conversation.   │

@@ -10,12 +10,13 @@ interface MessageInputProps {
 
 export function MessageInput({ onSend, disabled, placeholder = '输入你的需求...' }: MessageInputProps) {
   const [value, setValue] = useState('')
+  const [isComposing, setIsComposing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 160) + 'px'
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + 'px'
     }
   }, [value])
 
@@ -27,27 +28,29 @@ export function MessageInput({ onSend, disabled, placeholder = '输入你的需�
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
       e.preventDefault()
       handleSubmit()
     }
   }
 
   return (
-    <div className="flex items-end gap-2 rounded-xl border bg-card p-2 shadow-sm">
+    <div className="flex items-end gap-3 rounded-2xl border bg-card p-3 shadow-sm transition-shadow focus-within:shadow-md focus-within:border-primary/30">
       <textarea
         ref={textareaRef}
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
+        onCompositionStart={() => setIsComposing(true)}
+        onCompositionEnd={() => setIsComposing(false)}
         placeholder={placeholder}
         disabled={disabled}
-        rows={1}
-        className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
+        rows={2}
+        className="flex-1 resize-none bg-transparent px-1 py-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground disabled:opacity-50"
       />
       <Button
         size="icon"
-        className="h-8 w-8 shrink-0 rounded-lg"
+        className="h-9 w-9 shrink-0 rounded-xl"
         onClick={handleSubmit}
         disabled={disabled || !value.trim()}
       >

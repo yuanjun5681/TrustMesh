@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,6 +20,33 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 	}
 	defer func() { _ = log.Sync() }()
 
+	var (
+		mu              sync.Mutex
+		publishRequests []map[string]any
+	)
+
+	clawServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/publish":
+			defer r.Body.Close()
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode publish payload: %v", err)
+			}
+			mu.Lock()
+			publishRequests = append(publishRequests, payload)
+			mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"code":"msg.published","message":"ok","data":{"targetNode":"node-dev-001","messageId":"msg-1"},"ts":1}`))
+		case "/v1/transfer/tf_login_guide":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"code":"transfer.detail","message":"ok","data":{"transfer":{"transferId":"tf_login_guide","fileName":"login-guide.md","localPath":"/tmp/login-guide.md","mimeType":"text/markdown","fileSize":321,"status":"completed"}},"ts":1}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer clawServer.Close()
+
 	application, err := New(config.Config{
 		Port:               "0",
 		JWTSecret:          "test-secret",
@@ -29,7 +57,7 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 		WriteTimeout:       3 * time.Second,
 		ShutdownGrace:      3 * time.Second,
 		ClawSynapseNodeID:  "trustmesh-server",
-		ClawSynapseAPIURL:  "",
+		ClawSynapseAPIURL:  clawServer.URL,
 		ClawSynapseTimeout: time.Second,
 	}, log)
 	if err != nil {
@@ -86,6 +114,10 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 	})
 	conversationID := nestedString(decodeBody(t, conversationResp), "data", "id")
 
+	mu.Lock()
+	initialPublishCount := len(publishRequests)
+	mu.Unlock()
+
 	taskCreateMessage, err := json.Marshal(map[string]any{
 		"project_id":      projectID,
 		"conversation_id": conversationID,
@@ -121,15 +153,41 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 		t.Fatal("empty task id")
 	}
 
+	mu.Lock()
+	if len(publishRequests) != initialPublishCount+2 {
+		t.Fatalf("expected %d publish requests after task.create, got %d", initialPublishCount+2, len(publishRequests))
+	}
+	taskCreatedReq := publishRequests[initialPublishCount]
+	todoAssignedReq := publishRequests[initialPublishCount+1]
+	mu.Unlock()
+
+	if taskCreatedReq["type"] != "task.created" || taskCreatedReq["targetNode"] != "node-pm-001" {
+		t.Fatalf("unexpected task.created publish request: %#v", taskCreatedReq)
+	}
+	if todoAssignedReq["type"] != "todo.assigned" || todoAssignedReq["targetNode"] != "node-dev-001" {
+		t.Fatalf("unexpected todo.assigned publish request: %#v", todoAssignedReq)
+	}
+
 	todoCompleteMessage, err := json.Marshal(map[string]any{
 		"task_id": taskID,
 		"todo_id": "todo-1",
 		"result": map[string]any{
-			"summary":       "done",
-			"output":        "implemented login endpoints",
-			"artifact_refs": []map[string]any{},
+			"summary": "done",
+			"output":  "implemented login endpoints",
+			"artifact_refs": []map[string]any{
+				{
+					"artifact_id": "tf_login_guide",
+					"kind":        "file",
+					"label":       "Login guide",
+				},
+			},
 			"metadata": map[string]any{
 				"duration_ms": 1200,
+				"transfers": []map[string]any{
+					{
+						"transfer_id": "tf_login_guide",
+					},
+				},
 			},
 		},
 	})
@@ -150,9 +208,72 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 		t.Fatalf("todo.complete webhook status=%d", completeResp.StatusCode)
 	}
 
+	mu.Lock()
+	if len(publishRequests) != initialPublishCount+4 {
+		t.Fatalf("expected %d publish requests after todo.complete, got %d", initialPublishCount+4, len(publishRequests))
+	}
+	taskStatusReq := publishRequests[initialPublishCount+2]
+	todoStatusReq := publishRequests[initialPublishCount+3]
+	mu.Unlock()
+
+	if taskStatusReq["type"] != "task.status_changed" || taskStatusReq["targetNode"] != "node-pm-001" {
+		t.Fatalf("unexpected task.status_changed publish request: %#v", taskStatusReq)
+	}
+	if todoStatusReq["type"] != "todo.status_changed" || todoStatusReq["targetNode"] != "node-pm-001" {
+		t.Fatalf("unexpected todo.status_changed publish request: %#v", todoStatusReq)
+	}
+
+	rawTaskStatus, ok := taskStatusReq["message"].(string)
+	if !ok || rawTaskStatus == "" {
+		t.Fatalf("task.status_changed message missing: %#v", taskStatusReq["message"])
+	}
+	var taskStatusMessage map[string]any
+	if err := json.Unmarshal([]byte(rawTaskStatus), &taskStatusMessage); err != nil {
+		t.Fatalf("unmarshal task.status_changed message: %v", err)
+	}
+	if taskStatusMessage["actor_node_id"] != "node-dev-001" || taskStatusMessage["cause"] != "todo.complete" {
+		t.Fatalf("unexpected task.status_changed payload: %#v", taskStatusMessage)
+	}
+	if taskStatusMessage["version"] == nil {
+		t.Fatalf("task.status_changed version missing: %#v", taskStatusMessage)
+	}
+
+	rawTodoStatus, ok := todoStatusReq["message"].(string)
+	if !ok || rawTodoStatus == "" {
+		t.Fatalf("todo.status_changed message missing: %#v", todoStatusReq["message"])
+	}
+	var todoStatusMessage map[string]any
+	if err := json.Unmarshal([]byte(rawTodoStatus), &todoStatusMessage); err != nil {
+		t.Fatalf("unmarshal todo.status_changed message: %v", err)
+	}
+	if todoStatusMessage["actor_node_id"] != "node-dev-001" || todoStatusMessage["cause"] != "todo.complete" {
+		t.Fatalf("unexpected todo.status_changed payload: %#v", todoStatusMessage)
+	}
+	if todoStatusMessage["status"] != "done" {
+		t.Fatalf("unexpected todo.status_changed status: %#v", todoStatusMessage)
+	}
+
 	taskResp := doJSON(t, testServer.Client(), "GET", testServer.URL+"/api/v1/tasks/"+taskID, token, nil)
 	taskData := decodeBody(t, taskResp)
 	if nestedString(taskData, "data", "status") != "done" {
 		t.Fatalf("unexpected task status: %s", nestedString(taskData, "data", "status"))
+	}
+	artifacts, ok := nestedMap(taskData, "data")["artifacts"].([]any)
+	if !ok || len(artifacts) != 1 {
+		t.Fatalf("unexpected artifacts: %#v", nestedMap(taskData, "data")["artifacts"])
+	}
+	artifact, ok := artifacts[0].(map[string]any)
+	if !ok {
+		t.Fatalf("artifact is not object: %#v", artifacts[0])
+	}
+	metadata, ok := artifact["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("artifact metadata is not object: %#v", artifact["metadata"])
+	}
+	if metadata["file_name"] != "login-guide.md" {
+		t.Fatalf("expected file_name to be persisted, got %#v", metadata["file_name"])
+	}
+	if metadata["local_path"] != "/tmp/login-guide.md" {
+		t.Fatalf("expected local_path to be persisted, got %#v", metadata["local_path"])
 	}
 }

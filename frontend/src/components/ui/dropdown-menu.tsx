@@ -65,17 +65,25 @@ function DropdownMenuContent({ children, className, ...props }: React.HTMLAttrib
 
 function DropdownMenuItem({ className, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   const { setOpen } = React.useContext(DropdownContext)
+  const { disabled, onClick, ...rest } = props
   return (
     <button
       className={cn(
-        'relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground',
+        'relative flex w-full select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors',
+        disabled
+          ? 'cursor-not-allowed opacity-50'
+          : 'cursor-pointer hover:bg-accent hover:text-accent-foreground',
         className
       )}
+      disabled={disabled}
       onClick={(e) => {
-        props.onClick?.(e)
+        if (disabled) {
+          return
+        }
+        onClick?.(e)
         setOpen(false)
       }}
-      {...props}
+      {...rest}
     />
   )
 }
