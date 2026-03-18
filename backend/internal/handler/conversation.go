@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"sort"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -138,14 +137,19 @@ func (h *ConversationHandler) notifyPM(userID, projectID, conversationID, conten
 	}
 }
 
-func (h *ConversationHandler) buildPMConversationMessage(userID, projectID, conversationID, content string, initial bool) pmConversationMessage {
+func (h *ConversationHandler) buildPMConversationMessage(userID, projectID, conversationID, userContent string, initial bool) pmConversationMessage {
 	payload := pmConversationMessage{
 		ConversationID: conversationID,
 		ProjectID:      projectID,
-		Content:        content,
-		UserContent:    content,
+		UserContent:    userContent,
 		IsInitial:      initial,
 	}
+	if initial {
+		payload.Content = "请使用 /tm-task-plan skill 处理本次需求。首先理解用户需求，澄清不明确之处，待需求明确后再创建任务。"
+	} else {
+		payload.Content = "用户发送了新的消息，请使用 /tm-task-plan skill 继续处理。"
+	}
+
 	if !initial {
 		return payload
 	}
@@ -165,7 +169,6 @@ func (h *ConversationHandler) buildPMConversationMessage(userID, projectID, conv
 	}
 	payload.PMBrief = defaultPMBrief()
 	payload.CandidateAgents = candidates
-	payload.Content = buildInitialPMContent(project, content, candidates)
 	return payload
 }
 
@@ -173,7 +176,7 @@ func defaultPMBrief() *pmConversationBrief {
 	return &pmConversationBrief{
 		Objective:                   "明确任务目标和业务目的；在需求清晰前持续澄清；仅在需求满足执行条件后拆解任务并派发给其他 Agent。",
 		MustClarifyBeforeTaskCreate: true,
-		MustUseSkill:                "trustmesh",
+		MustUseSkill:                "tm-task-plan",
 	}
 }
 
@@ -213,58 +216,4 @@ func agentStatusRank(status string) int {
 	default:
 		return 2
 	}
-}
-
-func buildInitialPMContent(project *model.Project, content string, candidates []pmConversationAgent) string {
-	var sb strings.Builder
-	sb.WriteString("你正在处理一次新的需求沟通。\n\n")
-	sb.WriteString("任务：")
-	sb.WriteString(content)
-	sb.WriteString("\n")
-	sb.WriteString("目标：先明确任务目标、业务目的、范围、约束和验收标准；如果有不明确之处，先向用户提问澄清。只有在需求足够明确后，才创建任务并拆解 Todo。\n\n")
-	sb.WriteString("执行要求：\n")
-	sb.WriteString("1. 先复述你的理解，并指出缺失信息、歧义或风险。\n")
-	sb.WriteString("2. 未明确前，不要创建 task，也不要拆分 todo。\n")
-	sb.WriteString("3. 明确后，使用 `trustmesh` skill 创建 1 个 Task，并拆成边界清晰、可独立验收的 Todos。\n")
-	sb.WriteString("4. 使用 `trustmesh` skill 发送 `conversation.reply` 回复用户。\n")
-	sb.WriteString("5. 结合候选 Agent 的 role、status、capabilities 进行分派，不要虚构能力。\n\n")
-	sb.WriteString("项目上下文：\n")
-	sb.WriteString("- 项目名称：")
-	sb.WriteString(project.Name)
-	sb.WriteString("\n")
-	if strings.TrimSpace(project.Description) != "" {
-		sb.WriteString("- 项目描述：")
-		sb.WriteString(project.Description)
-		sb.WriteString("\n")
-	}
-	sb.WriteString("- 当前项目 PM：")
-	sb.WriteString(project.PMAgent.Name)
-	sb.WriteString(" (")
-	sb.WriteString(project.PMAgent.NodeID)
-	sb.WriteString(")\n")
-
-	sb.WriteString("候选执行 Agent：\n")
-	if len(candidates) == 0 {
-		sb.WriteString("- 暂无可用于派发的其他 Agent。如需执行，请先说明阻塞。\n")
-	} else {
-		for _, agent := range candidates {
-			sb.WriteString("- ")
-			sb.WriteString(agent.Name)
-			sb.WriteString(" | node_id=")
-			sb.WriteString(agent.NodeID)
-			sb.WriteString(" | role=")
-			sb.WriteString(agent.Role)
-			sb.WriteString(" | status=")
-			sb.WriteString(agent.Status)
-			if len(agent.Capabilities) > 0 {
-				sb.WriteString(" | capabilities=")
-				sb.WriteString(strings.Join(agent.Capabilities, ", "))
-			}
-			sb.WriteString("\n")
-		}
-	}
-
-	sb.WriteString("\n用户原始需求：\n")
-	sb.WriteString(content)
-	return sb.String()
 }

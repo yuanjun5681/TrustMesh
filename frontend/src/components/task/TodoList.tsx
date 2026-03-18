@@ -24,6 +24,8 @@ interface TodoListProps {
 }
 
 export function TodoList({ todos, artifacts }: TodoListProps) {
+  const safeArtifacts = artifacts ?? []
+
   if (todos.length === 0) {
     return <p className="py-8 text-center text-sm text-muted-foreground">暂无 Todo</p>
   }
@@ -31,7 +33,7 @@ export function TodoList({ todos, artifacts }: TodoListProps) {
   return (
     <div className="space-y-1">
       {todos.map((todo) => (
-        <TodoItem key={todo.id} todo={todo} artifacts={artifacts} />
+        <TodoItem key={todo.id} todo={todo} artifacts={safeArtifacts} />
       ))}
     </div>
   )
@@ -40,7 +42,7 @@ export function TodoList({ todos, artifacts }: TodoListProps) {
 function TodoItem({ todo, artifacts }: { todo: Todo; artifacts: TaskArtifact[] }) {
   const [expanded, setExpanded] = useState(false)
   const Icon = statusIcons[todo.status]
-  const relatedArtifacts = artifacts.filter((a) => a.source_todo_id === todo.id)
+  const relatedArtifacts = (artifacts ?? []).filter((a) => a.source_todo_id === todo.id)
   const hasDetails = todo.description || todo.result?.summary || todo.error || relatedArtifacts.length > 0
 
   return (

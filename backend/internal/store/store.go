@@ -785,8 +785,8 @@ func copyProject(p *model.Project) *model.Project {
 
 func copyTask(t *model.TaskDetail) *model.TaskDetail {
 	clone := *t
-	clone.Todos = append([]model.Todo(nil), t.Todos...)
-	clone.Artifacts = append([]model.TaskArtifact(nil), t.Artifacts...)
+	clone.Todos = append([]model.Todo{}, t.Todos...)
+	clone.Artifacts = append([]model.TaskArtifact{}, t.Artifacts...)
 	clone.Result = model.TaskResult{
 		Summary:     t.Result.Summary,
 		FinalOutput: t.Result.FinalOutput,
@@ -794,7 +794,7 @@ func copyTask(t *model.TaskDetail) *model.TaskDetail {
 	}
 	for i := range clone.Todos {
 		clone.Todos[i].Result.Metadata = copyMap(clone.Todos[i].Result.Metadata)
-		clone.Todos[i].Result.ArtifactRefs = append([]model.TodoResultArtifactRef(nil), clone.Todos[i].Result.ArtifactRefs...)
+		clone.Todos[i].Result.ArtifactRefs = append([]model.TodoResultArtifactRef{}, clone.Todos[i].Result.ArtifactRefs...)
 	}
 	for i := range clone.Artifacts {
 		clone.Artifacts[i].Metadata = copyMap(clone.Artifacts[i].Metadata)
