@@ -119,7 +119,7 @@ export interface TodoAssignee {
 
 export interface TodoResultArtifactRef {
   artifact_id: string
-  kind: 'file' | 'link' | 'log' | 'report'
+  kind: string
   label: string
 }
 
@@ -150,7 +150,7 @@ export interface Todo {
 export interface TaskArtifact {
   id: string
   source_todo_id: string | null
-  kind: 'file' | 'link' | 'log' | 'report'
+  kind: string
   title: string
   uri: string
   mime_type: string | null

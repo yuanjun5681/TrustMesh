@@ -1,13 +1,21 @@
-import { FileText, Link as LinkIcon, FileCode, FileBarChart } from 'lucide-react'
+import { FileText, Link as LinkIcon, FileCode, FileBarChart, type LucideIcon } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import type { TaskResult, TaskArtifact } from '@/types'
 
-const kindIcons = {
+const kindIcons: Record<string, LucideIcon> = {
   file: FileText,
   link: LinkIcon,
   log: FileCode,
   report: FileBarChart,
+}
+
+function normalizeArtifactKind(kind: string | null | undefined) {
+  const normalizedKind = kind?.trim().toLowerCase()
+  if (!normalizedKind) {
+    return 'unknown'
+  }
+  return normalizedKind
 }
 
 interface TaskResultViewProps {
@@ -52,7 +60,8 @@ export function TaskResultView({ result, artifacts }: TaskResultViewProps) {
           <h4 className="text-sm font-medium mb-2">交付物</h4>
           <div className="space-y-2">
             {safeArtifacts.map((artifact) => {
-              const Icon = kindIcons[artifact.kind]
+              const normalizedKind = normalizeArtifactKind(artifact.kind)
+              const Icon = kindIcons[normalizedKind] ?? FileText
               return (
                 <Card key={artifact.id}>
                   <CardContent className="flex items-center gap-3 p-3">
@@ -64,7 +73,7 @@ export function TaskResultView({ result, artifacts }: TaskResultViewProps) {
                       <p className="text-xs text-muted-foreground truncate">{artifact.uri}</p>
                     </div>
                     <Badge variant="secondary" className="text-xs shrink-0">
-                      {artifact.kind}
+                      {normalizedKind}
                     </Badge>
                   </CardContent>
                 </Card>
