@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as tasksApi from '@/api/tasks'
-import type { ListProjectTasksQuery, TaskDetail } from '@/types'
+import { usePageVisibility } from './usePageVisibility'
+import type { ListProjectTasksQuery, TaskDetail, TaskListItem } from '@/types'
 
 function normalizeTaskDetail(task: TaskDetail): TaskDetail {
   return {
@@ -11,6 +12,8 @@ function normalizeTaskDetail(task: TaskDetail): TaskDetail {
 }
 
 export function useTasks(projectId: string | undefined, query?: ListProjectTasksQuery) {
+  const isPageVisible = usePageVisibility()
+
   return useQuery({
     queryKey: ['tasks', projectId, query],
     queryFn: async () => {
@@ -18,11 +21,22 @@ export function useTasks(projectId: string | undefined, query?: ListProjectTasks
       return res.data.items
     },
     enabled: !!projectId,
-    refetchInterval: 5000,
+    staleTime: 30_000,
+    refetchInterval: (currentQuery) => {
+      if (!isPageVisible) {
+        return false
+      }
+
+      const tasks = currentQuery.state.data as TaskListItem[] | undefined
+      return tasks?.some((task) => task.status === 'in_progress') ? 15_000 : false
+    },
+    refetchIntervalInBackground: false,
   })
 }
 
 export function useTask(id: string | undefined) {
+  const isPageVisible = usePageVisibility()
+
   return useQuery({
     queryKey: ['tasks', 'detail', id],
     queryFn: async () => {
@@ -30,7 +44,16 @@ export function useTask(id: string | undefined) {
       return normalizeTaskDetail(res.data)
     },
     enabled: !!id,
-    refetchInterval: 3000,
+    staleTime: 5_000,
+    refetchInterval: (currentQuery) => {
+      if (!isPageVisible || !id) {
+        return false
+      }
+
+      const task = currentQuery.state.data as TaskDetail | undefined
+      return !task || task.status === 'in_progress' ? 3_000 : false
+    },
+    refetchIntervalInBackground: false,
   })
 }
 

@@ -18,23 +18,22 @@ export function ConversationPage() {
   const { data: project } = useProject(projectId)
   const { data: conversations, isLoading } = useConversations(projectId)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [isCreatingNew, setIsCreatingNew] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  const isActive = conversations?.find((c) => c.id === selectedId)?.status === 'active'
-  const { data: conversation } = useConversation(selectedId ?? undefined, isActive)
+  const defaultConversationId =
+    conversations?.find((c) => c.status === 'active')?.id ?? conversations?.[0]?.id ?? null
+  const activeConversationId = isCreatingNew ? null : selectedId ?? defaultConversationId
+  const selectedConversation = conversations?.find((c) => c.id === activeConversationId)
+  const { data: conversation } = useConversation(
+    activeConversationId ?? undefined,
+    selectedConversation?.status === 'active'
+  )
   const createConversation = useCreateConversation()
   const appendMessage = useAppendMessage()
 
   const pmOffline = project?.pm_agent.status !== 'online'
-
-  // Auto-select first active conversation
-  useEffect(() => {
-    if (!selectedId && conversations?.length) {
-      const active = conversations.find((c) => c.status === 'active')
-      setSelectedId(active?.id ?? conversations[0].id)
-    }
-  }, [conversations, selectedId])
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -44,13 +43,14 @@ export function ConversationPage() {
   const handleSend = async (content: string) => {
     setError(null)
     try {
-      if (selectedId && isActive) {
-        await appendMessage.mutateAsync({ id: selectedId, input: { content } })
+      if (activeConversationId && (conversation?.status ?? selectedConversation?.status) === 'active') {
+        await appendMessage.mutateAsync({ id: activeConversationId, input: { content } })
       } else {
         const res = await createConversation.mutateAsync({
           projectId: projectId!,
           input: { content },
         })
+        setIsCreatingNew(false)
         setSelectedId(res.data.id)
       }
     } catch (err) {
@@ -77,7 +77,10 @@ export function ConversationPage() {
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            onClick={() => setSelectedId(null)}
+            onClick={() => {
+              setIsCreatingNew(true)
+              setSelectedId(null)
+            }}
             disabled={pmOffline}
           >
             <Plus className="h-4 w-4" />
@@ -100,10 +103,13 @@ export function ConversationPage() {
               {conversations.map((conv) => (
                 <button
                   key={conv.id}
-                  onClick={() => setSelectedId(conv.id)}
+                  onClick={() => {
+                    setIsCreatingNew(false)
+                    setSelectedId(conv.id)
+                  }}
                   className={cn(
                     'w-full rounded-lg p-3 text-left transition-colors hover:bg-sidebar-accent cursor-pointer',
-                    selectedId === conv.id && 'bg-sidebar-accent'
+                    activeConversationId === conv.id && 'bg-sidebar-accent'
                   )}
                 >
                   <div className="flex items-center justify-between mb-1">
@@ -179,10 +185,10 @@ export function ConversationPage() {
           <div className="flex flex-1 flex-col items-center justify-center">
             <EmptyState
               icon={MessageSquare}
-              title={selectedId ? '加载中...' : '开始新对话'}
+              title={activeConversationId ? '加载中...' : '开始新对话'}
               description={pmOffline ? 'PM Agent 当前离线，请等待上线后发起对话' : '向 PM Agent 描述你的需求，AI 将帮你规划任务'}
               action={
-                !pmOffline && !selectedId ? (
+                !pmOffline && !activeConversationId ? (
                   <div className="w-full max-w-lg px-4">
                     <MessageInput onSend={handleSend} disabled={createConversation.isPending} />
                   </div>
