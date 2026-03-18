@@ -7,7 +7,7 @@ description: >
 compatibility: Requires clawsynapse CLI and a running clawsynapsed daemon
 metadata:
   author: TrustMesh
-  version: "2.1"
+  version: "2.2"
 allowed-tools:
   - "Bash(clawsynapse:*)"
 ---
@@ -32,7 +32,7 @@ allowed-tools:
 
 1. **收到 todo.assigned 才开始工作。** 不要主动寻找任务。
 2. **及时回报进度。** 在关键里程碑发送 `todo.progress`，让 PM 和用户了解执行状态。
-3. **结果要具体。** `todo.complete` 的 result 应包含有意义的 summary 和 output；如果交付物里包含文件，先上传文件，再在结果里引用。
+3. **结果要具体。** `todo.complete` 的 result 应包含有意义的 summary 和 output；如果交付物里包含文件，**必须先上传文件**，再在结果里引用。
 4. **失败要说明原因。** `todo.fail` 的 error 应清晰描述失败原因，帮助诊断。
 5. **所有回报都走 ClawSynapse。** 不要在聊天界面直接输出结果。
 
@@ -158,22 +158,31 @@ result 字段说明：
   - `label`：人类可读的标签
 - `metadata`：执行元数据（可选），如使用的模型、耗时等
 
-### 文件交付（可选）
+### 文件交付（有文件时必做）
 
-如果 Todo 的交付结果包含本地文件（如报告、补丁包、截图、日志、导出数据），并且需要把文件实际交付给 TrustMesh 节点，执行顺序应为：
+如果 Todo 的交付结果包含本地文件（如代码、报告、配置文件、截图、日志、导出数据等），**必须**先上传文件，再发送 `todo.complete`。
+
+执行顺序：
 
 1. 先用 `clawsynapse transfer send` 把文件传给 incoming header 中 `from` 指定的 TrustMesh 节点
 2. 再发送 `todo.complete`
 3. 在 `result.artifact_refs` 中引用已上传文件，在 `result.metadata.transfers` 中附上结构化传输信息
 
-规则：
+**触发条件**：任何需要交付给用户的文件都必须上传，包括但不限于：
+- 生成的代码文件
+- 报告、文档（PDF、Markdown 等）
+- 配置文件
+- 截图、日志
+- 导出的数据文件
+
+**规则**：
 
 - `transfer send` 的 `--target` 必须与 `publish` 一样，使用 incoming header 中 `from` 的值
 - `artifact_refs[].kind` 对文件交付使用 `file`
 - `artifact_refs[].artifact_id` 推荐直接使用 `transfer send` 返回的 `transferId`
 - 不要新增 `todo.complete` 顶层字段；文件传输细节放进 `result.metadata`
-- 如果文件是任务完成的必要交付，而上传失败，应发送 `todo.fail`
-- 如果文件上传不是硬性要求但正文结果已足够完成任务，可继续 `todo.complete`，并在 `output` 或 `metadata` 里明确说明未上传原因
+- **如果文件上传失败，必须发送 `todo.fail`**，并在 error 中说明上传失败原因
+- 不要在 `todo.complete` 的 output 里说"文件未上传"——如果没上传，就不应该发 complete
 
 示例：先上传文件，再回报完成
 
