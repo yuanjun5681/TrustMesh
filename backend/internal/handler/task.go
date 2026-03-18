@@ -1,19 +1,39 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+	"trustmesh/backend/internal/clawsynapse"
+	"trustmesh/backend/internal/model"
 	"trustmesh/backend/internal/store"
 	"trustmesh/backend/internal/transport"
 )
 
 type TaskHandler struct {
-	store *store.Store
+	store     *store.Store
+	publisher *clawsynapse.Client
+	log       *zap.Logger
 }
 
-func NewTaskHandler(s *store.Store) *TaskHandler {
-	return &TaskHandler{store: s}
+type todoAssignedPayload struct {
+	TaskID      string         `json:"task_id"`
+	TodoID      string         `json:"todo_id"`
+	Title       string         `json:"title"`
+	Description string         `json:"description"`
+	Content     string         `json:"content"`
+	ExecBrief   *todoExecBrief `json:"exec_brief,omitempty"`
+}
+
+type todoExecBrief struct {
+	Objective    string `json:"objective"`
+	MustUseSkill string `json:"must_use_skill"`
+}
+
+func NewTaskHandler(s *store.Store, publisher *clawsynapse.Client, log *zap.Logger) *TaskHandler {
+	return &TaskHandler{store: s, publisher: publisher, log: log}
 }
 
 func (h *TaskHandler) ListByProject(c *gin.Context) {
@@ -54,4 +74,66 @@ func (h *TaskHandler) ListEvents(c *gin.Context) {
 		return
 	}
 	transport.WriteList(c, events, len(events))
+}
+
+func (h *TaskHandler) DispatchTodo(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	task, appErr := h.store.GetTask(userID, c.Param("id"))
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	todo := findTaskTodo(task, c.Param("todoId"))
+	if todo == nil {
+		transport.WriteError(c, transport.NotFound("todo not found"))
+		return
+	}
+	if todo.Status != "pending" {
+		transport.WriteError(c, transport.Conflict("TODO_NOT_PENDING", "todo is not pending"))
+		return
+	}
+	if h.publisher == nil {
+		transport.WriteError(c, transport.NewError(http.StatusServiceUnavailable, "CLAWSYNAPSE_DISABLED", "clawsynapse client is disabled"))
+		return
+	}
+
+	payload := todoAssignedPayload{
+		TaskID:      task.ID,
+		TodoID:      todo.ID,
+		Title:       todo.Title,
+		Description: todo.Description,
+		Content:     "你收到了一个新的 Todo 任务。请使用 /tm-task-exec skill 执行此任务，按要求回报进度和结果。",
+		ExecBrief: &todoExecBrief{
+			Objective:    "执行分派的 Todo 任务；及时回报进度；完成后提交结果，失败时说明原因。",
+			MustUseSkill: "tm-task-exec",
+		},
+	}
+	if _, err := h.publisher.Publish(context.Background(), todo.Assignee.NodeID, "todo.assigned", payload, task.ID, map[string]any{"source": "manual_dispatch"}); err != nil {
+		if h.log != nil {
+			h.log.Warn("manual todo dispatch failed", zap.String("task_id", task.ID), zap.String("todo_id", todo.ID), zap.String("target_node", todo.Assignee.NodeID), zap.Error(err))
+		}
+		transport.WriteError(c, transport.NewError(http.StatusBadGateway, "TODO_DISPATCH_FAILED", "failed to dispatch todo to agent"))
+		return
+	}
+
+	task, appErr = h.store.RecordTodoDispatch(userID, task.ID, todo.ID)
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+	transport.WriteData(c, http.StatusOK, task)
+}
+
+func findTaskTodo(task *model.TaskDetail, todoID string) *model.Todo {
+	for i := range task.Todos {
+		if task.Todos[i].ID == todoID {
+			return &task.Todos[i]
+		}
+	}
+	return nil
 }

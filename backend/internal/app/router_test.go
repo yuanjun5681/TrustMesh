@@ -283,6 +283,164 @@ func TestCreateConversationPublishesInitialPMBrief(t *testing.T) {
 	}
 }
 
+func TestDispatchTodoPublishesAssignmentToAssignee(t *testing.T) {
+	log, err := logger.New("error")
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	defer func() { _ = log.Sync() }()
+
+	var (
+		mu              sync.Mutex
+		publishRequests []map[string]any
+	)
+
+	clawServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/publish":
+			defer r.Body.Close()
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode publish payload: %v", err)
+			}
+			mu.Lock()
+			publishRequests = append(publishRequests, payload)
+			mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"code":"OK","message":"ok","data":{"targetNode":"node-dev-001","messageId":"msg-1"},"ts":1}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer clawServer.Close()
+
+	application, err := New(config.Config{
+		Port:               "0",
+		JWTSecret:          "test-secret",
+		TokenTTL:           time.Hour,
+		LogLevel:           "error",
+		AllowAllCORS:       true,
+		ReadTimeout:        3 * time.Second,
+		WriteTimeout:       3 * time.Second,
+		ShutdownGrace:      3 * time.Second,
+		ClawSynapseAPIURL:  clawServer.URL,
+		ClawSynapseTimeout: time.Second,
+	}, log)
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
+	defer func() {
+		if closeErr := application.Close(); closeErr != nil {
+			t.Fatalf("close app: %v", closeErr)
+		}
+	}()
+
+	testServer := httptest.NewServer(application.Engine)
+	defer testServer.Close()
+
+	registerResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/auth/register", "", map[string]any{
+		"email":    "dispatch@example.com",
+		"name":     "Dispatch User",
+		"password": "StrongPass123!",
+	})
+	registerData := decodeBody(t, registerResp)
+	token := nestedString(registerData, "data", "token")
+	userID := nestedString(registerData, "data", "user", "id")
+
+	pm, appErr := application.Store.CreateAgent(userID, "node-pm-001", "PM Agent", "pm", "PM", []string{"plan"})
+	if appErr != nil {
+		t.Fatalf("create pm: %v", appErr)
+	}
+	_, appErr = application.Store.CreateAgent(userID, "node-dev-001", "Developer", "developer", "Dev", []string{"backend"})
+	if appErr != nil {
+		t.Fatalf("create developer: %v", appErr)
+	}
+	application.Store.SyncAgentPresence([]store.AgentPresence{
+		{NodeID: "node-pm-001", LastSeenAt: time.Now().UTC()},
+		{NodeID: "node-dev-001", LastSeenAt: time.Now().UTC()},
+	}, time.Now().UTC())
+
+	project, appErr := application.Store.CreateProject(userID, "Dispatch Project", "demo", pm.ID)
+	if appErr != nil {
+		t.Fatalf("create project: %v", appErr)
+	}
+	conversation, appErr := application.Store.CreateConversation(userID, project.ID, "Need login")
+	if appErr != nil {
+		t.Fatalf("create conversation: %v", appErr)
+	}
+	task, appErr := application.Store.CreateTaskByPMNode(pm.NodeID, store.TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: conversation.ID,
+		Title:          "Implement login",
+		Description:    "Support email/password login",
+		Todos: []store.TaskCreateTodoInput{
+			{
+				ID:             "todo-1",
+				Title:          "Build backend API",
+				Description:    "Implement auth endpoints",
+				AssigneeNodeID: "node-dev-001",
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("create task: %v", appErr)
+	}
+
+	dispatchResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/tasks/"+task.ID+"/todos/todo-1/dispatch", token, nil)
+	if dispatchResp.StatusCode != http.StatusOK {
+		t.Fatalf("dispatch todo status=%d", dispatchResp.StatusCode)
+	}
+
+	mu.Lock()
+	if len(publishRequests) != 1 {
+		t.Fatalf("expected 1 publish request, got %d", len(publishRequests))
+	}
+	publishReq := publishRequests[0]
+	mu.Unlock()
+
+	if publishReq["targetNode"] != "node-dev-001" {
+		t.Fatalf("unexpected targetNode: %#v", publishReq["targetNode"])
+	}
+	if publishReq["type"] != "todo.assigned" {
+		t.Fatalf("unexpected publish type: %#v", publishReq["type"])
+	}
+	if publishReq["sessionKey"] != task.ID {
+		t.Fatalf("unexpected session key: %#v", publishReq["sessionKey"])
+	}
+
+	rawMessage, ok := publishReq["message"].(string)
+	if !ok || rawMessage == "" {
+		t.Fatalf("publish message missing: %#v", publishReq["message"])
+	}
+	var message map[string]any
+	if err := json.Unmarshal([]byte(rawMessage), &message); err != nil {
+		t.Fatalf("unmarshal publish message: %v", err)
+	}
+	if message["task_id"] != task.ID || message["todo_id"] != "todo-1" {
+		t.Fatalf("unexpected dispatch payload: %#v", message)
+	}
+
+	eventsResp := doJSON(t, testServer.Client(), "GET", testServer.URL+"/api/v1/tasks/"+task.ID+"/events", token, nil)
+	if eventsResp.StatusCode != http.StatusOK {
+		t.Fatalf("list events status=%d", eventsResp.StatusCode)
+	}
+	eventsData := decodeBody(t, eventsResp)
+	items, ok := eventsData["data"].(map[string]any)["items"].([]any)
+	if !ok {
+		t.Fatalf("unexpected events payload: %#v", eventsData)
+	}
+	assignedCount := 0
+	for _, item := range items {
+		event, ok := item.(map[string]any)
+		if ok && event["event_type"] == "todo_assigned" {
+			assignedCount++
+		}
+	}
+	if assignedCount != 2 {
+		t.Fatalf("expected 2 todo_assigned events, got %d", assignedCount)
+	}
+}
+
 func doJSON(t *testing.T, client *http.Client, method, url, token string, payload any) *http.Response {
 	t.Helper()
 	var body bytes.Buffer

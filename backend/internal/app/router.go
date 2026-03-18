@@ -42,7 +42,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	agentHandler := handler.NewAgentHandler(s)
 	projectHandler := handler.NewProjectHandler(s)
 	conversationHandler := handler.NewConversationHandler(s, clawClient, log)
-	taskHandler := handler.NewTaskHandler(s)
+	taskHandler := handler.NewTaskHandler(s, clawClient, log)
 
 	engine.GET("/healthz", handler.Health)
 	engine.POST("/webhook/clawsynapse", webhookHandler.HandleWebhook)
@@ -74,6 +74,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	authed.GET("/projects/:projectId/tasks", taskHandler.ListByProject)
 	authed.GET("/tasks/:id", taskHandler.Get)
 	authed.GET("/tasks/:id/events", taskHandler.ListEvents)
+	authed.POST("/tasks/:id/todos/:todoId/dispatch", taskHandler.DispatchTodo)
 
 	return &App{Engine: engine, Store: s, PeerSyncer: peerSyncer}, nil
 }

@@ -23,3 +23,7 @@ export async function getTask(id: string) {
 export async function listTaskEvents(id: string) {
   return api.get(`tasks/${id}/events`).json<ApiListResponse<TaskEvent>>()
 }
+
+export async function dispatchTodo(taskId: string, todoId: string) {
+  return api.post(`tasks/${taskId}/todos/${todoId}/dispatch`).json<ApiResponse<TaskDetail>>()
+}

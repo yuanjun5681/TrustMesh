@@ -44,6 +44,46 @@ type TodoFailInput struct {
 	Error  string
 }
 
+func (s *Store) RecordTodoDispatch(userID, taskID, todoID string) (*model.TaskDetail, *transport.AppError) {
+	taskID = strings.TrimSpace(taskID)
+	todoID = strings.TrimSpace(todoID)
+	if taskID == "" || todoID == "" {
+		return nil, transport.Validation("invalid todo dispatch payload", map[string]any{"task_id": "required", "todo_id": "required"})
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[taskID]
+	if !ok || task.UserID != userID {
+		return nil, transport.NotFound("task not found")
+	}
+
+	todoIdx := findTodoIndex(task, todoID)
+	if todoIdx < 0 {
+		return nil, transport.NotFound("todo not found")
+	}
+
+	todo := &task.Todos[todoIdx]
+	if todo.Status != "pending" {
+		return nil, transport.Conflict("TODO_NOT_PENDING", "todo is not pending")
+	}
+
+	now := time.Now().UTC()
+	message := fmt.Sprintf("手动派发给 %s", todo.Assignee.Name)
+	s.addTaskEventUnsafe(task.ID, "user", userID, "todo_assigned", &message, map[string]any{
+		"todo_id":           todo.ID,
+		"assignee_agent_id": todo.Assignee.AgentID,
+		"manual":            true,
+	}, now)
+	task.UpdatedAt = now
+	task.Version++
+	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	return copyTask(task), nil
+}
+
 func (s *Store) GetProjectPMNode(userID, projectID string) (string, *transport.AppError) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

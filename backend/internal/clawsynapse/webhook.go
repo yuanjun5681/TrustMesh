@@ -80,10 +80,17 @@ type taskUpdatedPayload struct {
 }
 
 type todoAssignedPayload struct {
-	TaskID      string `json:"task_id"`
-	TodoID      string `json:"todo_id"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
+	TaskID      string             `json:"task_id"`
+	TodoID      string             `json:"todo_id"`
+	Title       string             `json:"title"`
+	Description string             `json:"description"`
+	Content     string             `json:"content"`
+	ExecBrief   *todoExecBrief     `json:"exec_brief,omitempty"`
+}
+
+type todoExecBrief struct {
+	Objective    string `json:"objective"`
+	MustUseSkill string `json:"must_use_skill"`
 }
 
 type todoUpdatedPayload struct {
@@ -181,6 +188,8 @@ func (h *WebhookHandler) handleTaskCreate(c *gin.Context, webhook WebhookPayload
 			TodoID:      todo.ID,
 			Title:       todo.Title,
 			Description: todo.Description,
+			Content:     "你收到了一个新的 Todo 任务。请使用 /tm-task-exec skill 执行此任务，按要求回报进度和结果。",
+			ExecBrief:   defaultExecBrief(),
 		}, task.ID)
 	}
 	transport.WriteData(c, http.StatusOK, task)
@@ -287,6 +296,13 @@ func (h *WebhookHandler) publish(ctx context.Context, targetNode, msgType string
 	}
 	if _, err := h.client.Publish(ctx, targetNode, msgType, payload, sessionKey, nil); err != nil && h.log != nil {
 		h.log.Warn("clawsynapse publish failed", zap.String("target_node", targetNode), zap.String("type", msgType), zap.Error(err))
+	}
+}
+
+func defaultExecBrief() *todoExecBrief {
+	return &todoExecBrief{
+		Objective:    "执行分派的 Todo 任务；及时回报进度；完成后提交结果，失败时说明原因。",
+		MustUseSkill: "tm-task-exec",
 	}
 }
 

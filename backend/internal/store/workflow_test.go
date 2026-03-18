@@ -69,6 +69,68 @@ func TestSyncAgentPresenceMarksOfflineAndBusy(t *testing.T) {
 	}
 }
 
+func TestAgentUsageAndDeleteConflictDetails(t *testing.T) {
+	s, userID, pm, developer, project, conversation := seedWorkflowState(t)
+
+	_, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: conversation.ID,
+		Title:          "Implement login",
+		Description:    "Support email password login",
+		Todos: []TaskCreateTodoInput{
+			{
+				Title:          "Build backend API",
+				Description:    "Implement auth endpoints",
+				AssigneeNodeID: developer.NodeID,
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("create task: %v", appErr)
+	}
+
+	agents := s.ListAgents(userID)
+	if len(agents) != 2 {
+		t.Fatalf("expected 2 agents, got %d", len(agents))
+	}
+
+	var pmUsage, developerUsage model.AgentUsage
+	for _, agent := range agents {
+		switch agent.ID {
+		case pm.ID:
+			pmUsage = agent.Usage
+		case developer.ID:
+			developerUsage = agent.Usage
+		}
+	}
+
+	if !pmUsage.InUse || pmUsage.ProjectCount != 1 || pmUsage.TaskCount != 1 || pmUsage.TodoCount != 0 || pmUsage.TotalCount != 2 {
+		t.Fatalf("unexpected pm usage: %#v", pmUsage)
+	}
+	if !developerUsage.InUse || developerUsage.ProjectCount != 0 || developerUsage.TaskCount != 0 || developerUsage.TodoCount != 1 || developerUsage.TotalCount != 1 {
+		t.Fatalf("unexpected developer usage: %#v", developerUsage)
+	}
+
+	agent, appErr := s.GetAgent(userID, developer.ID)
+	if appErr != nil {
+		t.Fatalf("get agent: %v", appErr)
+	}
+	if !agent.Usage.InUse || agent.Usage.TodoCount != 1 {
+		t.Fatalf("unexpected get agent usage: %#v", agent.Usage)
+	}
+
+	appErr = s.DeleteAgent(userID, developer.ID)
+	if appErr == nil {
+		t.Fatal("expected delete agent conflict")
+	}
+	if appErr.Code != "AGENT_IN_USE" {
+		t.Fatalf("unexpected delete error code: %s", appErr.Code)
+	}
+	if appErr.Details["project_count"] != 0 || appErr.Details["task_count"] != 0 || appErr.Details["todo_count"] != 1 || appErr.Details["total_count"] != 1 {
+		t.Fatalf("unexpected delete error details: %#v", appErr.Details)
+	}
+}
+
 func TestTaskCreateIdempotencyByMessageID(t *testing.T) {
 	s, _, pm, developer, project, conversation := seedWorkflowState(t)
 

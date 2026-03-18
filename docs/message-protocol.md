@@ -351,9 +351,19 @@ message:
   "task_id": "task_123",
   "todo_id": "todo_1",
   "title": "实现后端登录接口",
-  "description": "完成邮箱密码登录 API"
+  "description": "完成邮箱密码登录 API",
+  "content": "你收到了一个新的 Todo 任务。请使用 /tm-task-exec skill 执行此任务，按要求回报进度和结果。",
+  "exec_brief": {
+    "objective": "执行分派的 Todo 任务；及时回报进度；完成后提交结果，失败时说明原因。",
+    "must_use_skill": "tm-task-exec"
+  }
 }
 ```
+
+约定：
+- `content` 是系统指令，指引执行 Agent 使用 `tm-task-exec` skill 处理任务。
+- `title` 和 `description` 是 Todo 的具体任务信息，执行 Agent 应以此为准理解要做什么。
+- `exec_brief.must_use_skill` 指定执行 Agent 必须使用的 skill 名称。
 
 ### 6.7 Todo 状态更新通知
 

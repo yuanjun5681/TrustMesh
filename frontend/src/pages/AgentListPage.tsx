@@ -5,6 +5,7 @@ import { AgentCard } from '@/components/agent/AgentCard'
 import { AgentConfigDialog } from '@/components/agent/AgentConfigDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { useAgents, useDeleteAgent } from '@/hooks/useAgents'
+import { ApiRequestError } from '@/api/client'
 import type { Agent, AgentRole } from '@/types'
 
 const ROLE_FILTERS: { label: string; value: AgentRole | 'all' }[] = [
@@ -21,19 +22,45 @@ export function AgentListPage() {
   const [showConfig, setShowConfig] = useState(false)
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null)
   const [roleFilter, setRoleFilter] = useState<AgentRole | 'all'>('all')
+  const [error, setError] = useState('')
 
   const filteredAgents = agents?.filter(
     (a) => roleFilter === 'all' || a.role === roleFilter
   ) ?? []
 
+  const formatUsage = (agent: Agent) => {
+    const parts: string[] = []
+    if (agent.usage.project_count > 0) parts.push(`${agent.usage.project_count} 个项目`)
+    if (agent.usage.task_count > 0) parts.push(`${agent.usage.task_count} 个任务`)
+    if (agent.usage.todo_count > 0) parts.push(`${agent.usage.todo_count} 个 Todo`)
+    return parts.join('、')
+  }
+
   const handleEdit = (agent: Agent) => {
+    setError('')
     setEditingAgent(agent)
     setShowConfig(true)
   }
 
   const handleDelete = async (agent: Agent) => {
+    setError('')
+    if (agent.usage.in_use) {
+      setError(`无法删除 Agent "${agent.name}"，当前仍被 ${formatUsage(agent)} 引用，请先解除关联。`)
+      return
+    }
+
     if (confirm(`确定要删除 Agent "${agent.name}" 吗？`)) {
-      await deleteAgent.mutateAsync(agent.id)
+      try {
+        await deleteAgent.mutateAsync(agent.id)
+      } catch (err) {
+        if (err instanceof ApiRequestError) {
+          setError(err.code === 'AGENT_IN_USE'
+            ? `无法删除 Agent "${agent.name}"，当前仍被引用，请先解除关联。`
+            : err.message)
+          return
+        }
+        setError('删除 Agent 失败')
+      }
     }
   }
 
@@ -71,6 +98,8 @@ export function AgentListPage() {
           </button>
         ))}
       </div>
+
+      {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

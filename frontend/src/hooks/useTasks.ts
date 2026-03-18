@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as tasksApi from '@/api/tasks'
 import type { ListProjectTasksQuery, TaskDetail } from '@/types'
 
@@ -42,5 +42,18 @@ export function useTaskEvents(id: string | undefined) {
       return res.data.items
     },
     enabled: !!id,
+  })
+}
+
+export function useDispatchTodo() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ taskId, todoId }: { taskId: string; todoId: string }) =>
+      tasksApi.dispatchTodo(taskId, todoId),
+    onSuccess: (_res, { taskId }) => {
+      qc.invalidateQueries({ queryKey: ['tasks'] })
+      qc.invalidateQueries({ queryKey: ['tasks', 'detail', taskId] })
+      qc.invalidateQueries({ queryKey: ['tasks', 'events', taskId] })
+    },
   })
 }

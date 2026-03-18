@@ -176,7 +176,9 @@ func (s *Store) CreateAgent(userID, nodeID, name, role, description string, capa
 		return nil, mongoWriteError(err)
 	}
 
-	return copyAgent(agent), nil
+	clone := copyAgent(agent)
+	clone.Usage = s.agentUsageUnsafe(agent.ID)
+	return clone, nil
 }
 
 func (s *Store) ListAgents(userID string) []model.Agent {
@@ -186,7 +188,9 @@ func (s *Store) ListAgents(userID string) []model.Agent {
 	items := make([]model.Agent, 0)
 	for _, a := range s.agents {
 		if a.UserID == userID {
-			items = append(items, *copyAgent(a))
+			clone := copyAgent(a)
+			clone.Usage = s.agentUsageUnsafe(a.ID)
+			items = append(items, *clone)
 		}
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.After(items[j].CreatedAt) })
@@ -200,7 +204,9 @@ func (s *Store) GetAgent(userID, agentID string) (*model.Agent, *transport.AppEr
 	if !ok || a.UserID != userID {
 		return nil, transport.NotFound("agent not found")
 	}
-	return copyAgent(a), nil
+	clone := copyAgent(a)
+	clone.Usage = s.agentUsageUnsafe(a.ID)
+	return clone, nil
 }
 
 type UpdateAgentInput struct {
@@ -251,7 +257,9 @@ func (s *Store) UpdateAgent(userID, agentID string, in UpdateAgentInput) (*model
 		return nil, mongoWriteError(err)
 	}
 
-	return copyAgent(a), nil
+	clone := copyAgent(a)
+	clone.Usage = s.agentUsageUnsafe(a.ID)
+	return clone, nil
 }
 
 func (s *Store) DeleteAgent(userID, agentID string) *transport.AppError {
@@ -262,8 +270,16 @@ func (s *Store) DeleteAgent(userID, agentID string) *transport.AppError {
 		return transport.NotFound("agent not found")
 	}
 
-	if s.agentInUseUnsafe(agentID) {
-		return transport.Conflict("AGENT_IN_USE", "agent is referenced by project or task")
+	usage := s.agentUsageUnsafe(agentID)
+	if usage.InUse {
+		err := transport.Conflict("AGENT_IN_USE", "agent is referenced by project or task")
+		err.Details = map[string]any{
+			"project_count": usage.ProjectCount,
+			"task_count":    usage.TaskCount,
+			"todo_count":    usage.TodoCount,
+			"total_count":   usage.TotalCount,
+		}
+		return err
 	}
 	delete(s.agentByNode, a.NodeID)
 	delete(s.agents, agentID)
@@ -622,23 +638,26 @@ func (s *Store) getTaskSummaryByConversationUnsafe(conversationID string) *model
 	}
 }
 
-func (s *Store) agentInUseUnsafe(agentID string) bool {
+func (s *Store) agentUsageUnsafe(agentID string) model.AgentUsage {
+	usage := model.AgentUsage{}
 	for _, p := range s.projects {
 		if p.PMAgentID == agentID {
-			return true
+			usage.ProjectCount++
 		}
 	}
 	for _, t := range s.tasks {
 		if t.PMAgentID == agentID {
-			return true
+			usage.TaskCount++
 		}
 		for _, todo := range t.Todos {
 			if todo.Assignee.AgentID == agentID {
-				return true
+				usage.TodoCount++
 			}
 		}
 	}
-	return false
+	usage.TotalCount = usage.ProjectCount + usage.TaskCount + usage.TodoCount
+	usage.InUse = usage.TotalCount > 0
+	return usage
 }
 
 func (s *Store) rebuildProjectPMSummariesUnsafe(agentID string) {

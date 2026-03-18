@@ -50,7 +50,7 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
 
                 <TabsContent value="todos">
                   <ScrollArea className="max-h-[calc(100vh-280px)]">
-                    <TodoList todos={task.todos} artifacts={task.artifacts} />
+                    <TodoList taskId={task.id} todos={task.todos} artifacts={task.artifacts} />
                   </ScrollArea>
                 </TabsContent>
 

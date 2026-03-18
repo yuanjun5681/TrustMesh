@@ -89,6 +89,14 @@ export interface ConversationDetail {
 export type AgentRole = 'pm' | 'developer' | 'reviewer' | 'custom'
 export type AgentStatus = 'online' | 'offline' | 'busy'
 
+export interface AgentUsage {
+  project_count: number
+  task_count: number
+  todo_count: number
+  total_count: number
+  in_use: boolean
+}
+
 export interface Agent {
   id: string
   name: string
@@ -98,6 +106,7 @@ export interface Agent {
   node_id: string
   status: AgentStatus
   last_seen_at: string | null
+  usage: AgentUsage
   created_at: string
   updated_at: string
 }
