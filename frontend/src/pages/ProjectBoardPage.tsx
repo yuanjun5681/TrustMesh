@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { AgentStatusDot } from '@/components/shared/StatusBadge'
 import { TaskListView } from '@/components/task/TaskListView'
-import { TaskSheet } from '@/components/task/TaskSheet'
+import { TaskDetailPanel } from '@/components/task/TaskDetailPanel'
 import { useProject } from '@/hooks/useProjects'
 import { useTasks } from '@/hooks/useTasks'
 
@@ -58,21 +58,34 @@ export function ProjectBoardPage() {
         </div>
       </div>
 
-      {/* Task List */}
+      {/* Split layout: Task List + Detail Panel */}
       {isLoading ? (
         <div className="flex flex-1 items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       ) : (
-        <TaskListView
-          tasks={tasks ?? []}
-          selectedTaskId={selectedTaskId}
-          onTaskClick={setSelectedTaskId}
-        />
-      )}
+        <div className="flex flex-1 min-h-0">
+          {/* Left: Task List */}
+          <div className={selectedTaskId ? 'w-1/2 border-r' : 'w-full'}>
+            <TaskListView
+              tasks={tasks ?? []}
+              selectedTaskId={selectedTaskId}
+              onTaskClick={(id) => setSelectedTaskId(id === selectedTaskId ? null : id)}
+            />
+          </div>
 
-      {/* Task Detail Sheet */}
-      <TaskSheet taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
+          {/* Right: Detail Panel */}
+          {selectedTaskId && (
+            <div className="w-1/2">
+              <TaskDetailPanel
+                key={selectedTaskId}
+                taskId={selectedTaskId}
+                onClose={() => setSelectedTaskId(null)}
+              />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
