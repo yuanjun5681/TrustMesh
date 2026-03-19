@@ -4,7 +4,7 @@ import type {
   ApiListResponse,
   TaskListItem,
   TaskDetail,
-  TaskEvent,
+  Event,
   TransferDetail,
   ListProjectTasksQuery,
 } from '@/types'
@@ -22,7 +22,7 @@ export async function getTask(id: string) {
 }
 
 export async function listTaskEvents(id: string) {
-  return api.get(`tasks/${id}/events`).json<ApiListResponse<TaskEvent>>()
+  return api.get(`tasks/${id}/events`).json<ApiListResponse<Event>>()
 }
 
 export async function dispatchTodo(taskId: string, todoId: string) {

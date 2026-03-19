@@ -204,7 +204,7 @@ export interface TaskDetail {
   updated_at: string
 }
 
-export type TaskEventType =
+export type EventType =
   | 'task_created'
   | 'task_status_changed'
   | 'todo_assigned'
@@ -213,13 +213,18 @@ export type TaskEventType =
   | 'todo_completed'
   | 'todo_failed'
   | 'task_comment'
+  | 'conversation_reply'
+  | 'agent_status_changed'
 
-export interface TaskEvent {
+export interface Event {
   id: string
-  task_id: string
+  project_id: string
+  task_id?: string
+  todo_id?: string
   actor_type: 'user' | 'agent' | 'system'
   actor_id: string
-  event_type: TaskEventType
+  actor_name: string
+  event_type: EventType
   content: string | null
   metadata: Record<string, unknown>
   created_at: string
@@ -227,7 +232,32 @@ export interface TaskEvent {
 
 export interface TaskStreamSnapshot {
   task: TaskDetail
-  events: TaskEvent[]
+  events: Event[]
+}
+
+export interface Notification {
+  id: string
+  event_id: string
+  project_id: string
+  task_id?: string
+  title: string
+  body: string
+  category: 'task' | 'todo' | 'conversation' | 'system'
+  priority: 'low' | 'medium' | 'high'
+  is_read: boolean
+  read_at: string | null
+  created_at: string
+}
+
+export interface DashboardStats {
+  agents_online: number
+  agents_total: number
+  tasks_in_progress: number
+  tasks_total: number
+  tasks_done_count: number
+  tasks_failed_count: number
+  success_rate: number
+  todos_pending: number
 }
 
 // ─── 请求类型 ───

@@ -179,20 +179,50 @@ type TaskDetail struct {
 	UpdatedAt      time.Time      `json:"updated_at" bson:"updated_at"`
 }
 
-type TaskEvent struct {
+type Event struct {
 	ID        string         `json:"id" bson:"_id"`
-	TaskID    string         `json:"task_id" bson:"task_id"`
+	UserID    string         `json:"-" bson:"user_id"`
+	ProjectID string         `json:"project_id" bson:"project_id"`
+	TaskID    string         `json:"task_id,omitempty" bson:"task_id,omitempty"`
+	TodoID    string         `json:"todo_id,omitempty" bson:"todo_id,omitempty"`
 	ActorType string         `json:"actor_type" bson:"actor_type"`
 	ActorID   string         `json:"actor_id" bson:"actor_id"`
+	ActorName string         `json:"actor_name" bson:"actor_name"`
 	EventType string         `json:"event_type" bson:"event_type"`
 	Content   *string        `json:"content" bson:"content"`
 	Metadata  map[string]any `json:"metadata" bson:"metadata"`
 	CreatedAt time.Time      `json:"created_at" bson:"created_at"`
 }
 
+type Notification struct {
+	ID        string     `json:"id" bson:"_id"`
+	UserID    string     `json:"-" bson:"user_id"`
+	EventID   string     `json:"event_id" bson:"event_id"`
+	ProjectID string     `json:"project_id" bson:"project_id"`
+	TaskID    string     `json:"task_id,omitempty" bson:"task_id,omitempty"`
+	Title     string     `json:"title" bson:"title"`
+	Body      string     `json:"body" bson:"body"`
+	Category  string     `json:"category" bson:"category"`
+	Priority  string     `json:"priority" bson:"priority"`
+	IsRead    bool       `json:"is_read" bson:"is_read"`
+	ReadAt    *time.Time `json:"read_at" bson:"read_at"`
+	CreatedAt time.Time  `json:"created_at" bson:"created_at"`
+}
+
+type DashboardStats struct {
+	AgentsOnline     int     `json:"agents_online"`
+	AgentsTotal      int     `json:"agents_total"`
+	TasksInProgress  int     `json:"tasks_in_progress"`
+	TasksTotal       int     `json:"tasks_total"`
+	TasksDoneCount   int     `json:"tasks_done_count"`
+	TasksFailedCount int     `json:"tasks_failed_count"`
+	SuccessRate      float64 `json:"success_rate"`
+	TodosPending     int     `json:"todos_pending"`
+}
+
 type TaskStreamSnapshot struct {
-	Task   TaskDetail  `json:"task"`
-	Events []TaskEvent `json:"events"`
+	Task   TaskDetail `json:"task"`
+	Events []Event    `json:"events"`
 }
 
 // Internal conversation record for mutable state.

@@ -4,22 +4,16 @@ import { MessageSquare, MoreHorizontal, Pencil, Archive, Loader2 } from 'lucide-
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { AgentStatusDot } from '@/components/shared/StatusBadge'
-import { BoardColumn } from '@/components/board/BoardColumn'
-import { TaskSheet } from '@/components/task/TaskSheet'
+import { TaskListView } from '@/components/task/TaskListView'
+import { TaskDetailPanel } from '@/components/task/TaskDetailPanel'
 import { useProject } from '@/hooks/useProjects'
 import { useTasks } from '@/hooks/useTasks'
-import type { TaskStatus } from '@/types'
-
-const COLUMNS: TaskStatus[] = ['pending', 'in_progress', 'done', 'failed']
 
 export function ProjectBoardPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const { data: project } = useProject(projectId)
   const { data: tasks, isLoading } = useTasks(projectId)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
-
-  const tasksByStatus = (status: TaskStatus) =>
-    tasks?.filter((t) => t.status === status) ?? []
 
   return (
     <div className="flex h-full flex-col">
@@ -64,26 +58,34 @@ export function ProjectBoardPage() {
         </div>
       </div>
 
-      {/* Board */}
+      {/* Split layout: Task List + Detail Panel */}
       {isLoading ? (
         <div className="flex flex-1 items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       ) : (
-        <div className="flex flex-1 gap-4 overflow-x-auto p-6">
-          {COLUMNS.map((status) => (
-            <BoardColumn
-              key={status}
-              status={status}
-              tasks={tasksByStatus(status)}
-              onTaskClick={setSelectedTaskId}
+        <div className="flex flex-1 min-h-0">
+          {/* Left: Task List */}
+          <div className={selectedTaskId ? 'w-1/2 border-r' : 'w-full'}>
+            <TaskListView
+              tasks={tasks ?? []}
+              selectedTaskId={selectedTaskId}
+              onTaskClick={(id) => setSelectedTaskId(id === selectedTaskId ? null : id)}
             />
-          ))}
+          </div>
+
+          {/* Right: Detail Panel */}
+          {selectedTaskId && (
+            <div className="w-1/2">
+              <TaskDetailPanel
+                key={selectedTaskId}
+                taskId={selectedTaskId}
+                onClose={() => setSelectedTaskId(null)}
+              />
+            </div>
+          )}
         </div>
       )}
-
-      {/* Task Detail Sheet */}
-      <TaskSheet taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
     </div>
   )
 }
