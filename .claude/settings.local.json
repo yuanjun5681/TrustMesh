@@ -18,7 +18,9 @@
       "Bash(curl -s \"http://localhost:8080/api/v1/projects/2e061ebd9cb4f904d630696f/tasks\" -H \"Authorization: Bearer $TOKEN\")",
       "Bash(python3 -m json.tool)",
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZTdhY2QxYjYxNTFlM2YyODEwYTk0NTQ2IiwiZXhwIjoxNzczOTk5NzM5LCJpYXQiOjE3NzM5MTMzMzl9.gol4aSiH8yEM8lpAoEr-PCvR3-iHhigAnvJVIX3kgKE\")",
-      "Bash(python3 -c \":*)"
+      "Bash(python3 -c \":*)",
+      "Bash(npx shadcn@latest init -y -d)",
+      "Bash(npx:*)"
     ]
   }
 }

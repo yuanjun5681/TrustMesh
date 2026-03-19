@@ -23,7 +23,7 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
 
   return (
     <Sheet open={!!taskId} onOpenChange={() => onClose()}>
-      <SheetContent onClose={onClose} className="max-w-2xl">
+      <SheetContent className="max-w-2xl">
         {task && (
           <>
             <SheetHeader>

@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Select } from '@/components/ui/select'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { useCreateProject } from '@/hooks/useProjects'
 import { useAgents } from '@/hooks/useAgents'
 import { ApiRequestError } from '@/api/client'
@@ -44,7 +44,7 @@ export function CreateProjectDialog({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>创建项目</DialogTitle>
           <DialogDescription>新建一个 AI Agent 协作项目</DialogDescription>
@@ -71,17 +71,17 @@ export function CreateProjectDialog({ open, onOpenChange }: Props) {
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">PM Agent</label>
-            <Select
-              value={pmAgentId}
-              onChange={(e) => setPmAgentId(e.target.value)}
-              required
-            >
-              <option value="">选择 PM Agent...</option>
-              {pmAgents.map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {agent.name} ({agent.node_id}) - {agent.status === 'online' ? '在线' : '离线'}
-                </option>
-              ))}
+            <Select value={pmAgentId} onValueChange={(val) => setPmAgentId(val ?? '')}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="选择 PM Agent..." />
+              </SelectTrigger>
+              <SelectContent>
+                {pmAgents.map((agent) => (
+                  <SelectItem key={agent.id} value={agent.id}>
+                    {agent.name} ({agent.node_id}) - {agent.status === 'online' ? '在线' : '离线'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
             {pmAgents.length === 0 && (
               <p className="text-xs text-muted-foreground">

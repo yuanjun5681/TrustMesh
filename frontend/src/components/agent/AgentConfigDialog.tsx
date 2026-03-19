@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Select } from '@/components/ui/select'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { X } from 'lucide-react'
 import { useCreateAgent, useUpdateAgent } from '@/hooks/useAgents'
@@ -86,7 +86,7 @@ export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{isEditing ? '编辑 Agent' : '添加 Agent'}</DialogTitle>
         </DialogHeader>
@@ -115,11 +115,16 @@ export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">角色</label>
-            <Select value={role} onChange={(e) => setRole(e.target.value as AgentRole)} required>
-              <option value="pm">PM</option>
-              <option value="developer">开发者</option>
-              <option value="reviewer">审核者</option>
-              <option value="custom">自定义</option>
+            <Select value={role} onValueChange={(val) => setRole(val as AgentRole)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pm">PM</SelectItem>
+                <SelectItem value="developer">开发者</SelectItem>
+                <SelectItem value="reviewer">审核者</SelectItem>
+                <SelectItem value="custom">自定义</SelectItem>
+              </SelectContent>
             </Select>
           </div>
           <div className="space-y-2">
