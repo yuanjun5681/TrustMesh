@@ -35,7 +35,8 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
   const { data: unreadCount } = useUnreadCount()
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
-  const { theme, setTheme } = useThemeStore()
+  const { setTheme, resolvedTheme } = useThemeStore()
+  const isDark = resolvedTheme() === 'dark'
   const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 1280px)').matches)
 
   useEffect(() => {
@@ -46,9 +47,7 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
   }, [])
 
   const toggleTheme = () => {
-    if (theme === 'light') setTheme('dark')
-    else if (theme === 'dark') setTheme('system')
-    else setTheme('light')
+    setTheme(isDark ? 'light' : 'dark')
   }
 
   const isActive = (path: string) => location.pathname === path
@@ -224,7 +223,7 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
             </div>
           )}
           <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={toggleTheme}>
-            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
           <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={logout}>
             <LogOut className="h-4 w-4" />
