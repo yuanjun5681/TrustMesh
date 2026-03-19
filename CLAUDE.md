@@ -8,7 +8,48 @@ TrustMesh 是一个以 AI Agent 为核心执行者的任务编排与项目管理
 
 TrustMesh 构建在 [ClawSynapse](https://github.com/yuanjun5681/clawsynapse) 网络之上，作为 ClawSynapse 的一个节点参与多 Agent 通信。
 
-**当前状态**：设计与文档完成阶段，代码实现尚未开始。核心设计文档在 `docs/` 目录下。
+## 开发命令
+
+### 后端 (Go)
+
+```bash
+# 启动基础设施 (MongoDB)
+docker compose up -d mongo
+
+# 运行后端（从项目根目录）
+cd backend && go run ./cmd/server
+
+# 运行所有测试
+cd backend && go test ./...
+
+# 运行单个包测试
+cd backend && go test ./internal/app/
+cd backend && go test ./internal/store/
+
+# 运行单个测试
+cd backend && go test ./internal/app/ -run TestHappyPathAuthToConversation
+
+# 构建
+cd backend && go build ./cmd/server
+```
+
+### 前端 (React)
+
+```bash
+cd frontend && npm install
+cd frontend && npm run dev      # 开发服务器
+cd frontend && npm run build    # 生产构建 (tsc -b && vite build)
+cd frontend && npm run lint     # ESLint
+```
+
+### Docker Compose (全栈)
+
+```bash
+docker compose up -d            # 启动所有服务 (mongo, backend, clawsynapse, frontend)
+docker compose down             # 停止
+```
+
+服务端口：后端 `:8080`，前端 `:3000`，ClawSynapse `:18080`，MongoDB `:27017`
 
 ## 架构
 
@@ -17,95 +58,96 @@ ClawSynapse 网络 (共享 NATS Server)
 │
 ├── TrustMesh 节点 (clawsynapsed + WebhookAdapter)
 │   ├── 发送：clawsynapsed Local API (POST /v1/publish)
-│   ├── 接收：WebhookAdapter → TrustMesh webhook 端点
+│   ├── 接收：WebhookAdapter → POST /webhook/clawsynapse
 │   ├── 后端 (Go/Gin + MongoDB)
-│   └── 前端 (React) ←→ REST API (JSON, JWT) ←→ 后端
+│   └── 前端 (React) ←→ REST API (/api/v1/*) ←→ 后端
 │
 ├── PM Agent 节点 (clawsynapsed + Adapter)
-│   └── Agent 产品 (role=pm)
-│
 └── 执行 Agent 节点 (clawsynapsed + Adapter)
-    └── Agent 产品 (执行者)
 ```
 
-- **前端 ↔ 后端**：REST API + JWT 认证
-- **TrustMesh ↔ Agent**：通过 ClawSynapse 网络通信
-  - TrustMesh 发送：调用 `clawsynapsed` Local API（`POST /v1/publish`）
-  - TrustMesh 接收：WebhookAdapter 推送到 webhook 端点
-- **Agent 间不直接通信**，一切通过 TrustMesh 中转
+- Agent 间不直接通信，一切通过 TrustMesh 中转
+- 前端通过 `/api/v1` 前缀的 REST API + JWT 认证访问后端
+- TrustMesh 通过 ClawSynapse Local API (`POST /v1/publish`) 向 Agent 发消息
+- Agent 通过 WebhookAdapter 推送到 `POST /webhook/clawsynapse` 端点回传消息
 
-### 核心角色
+### 后端分层
 
-- **用户**：通过 UI 创建项目、提需求、查看状态
-- **PM Agent**：独立 ClawSynapse 节点，每项目绑定一个（role=pm），负责需求分析、任务规划、Todo 拆分
-- **执行 Agent**：独立 ClawSynapse 节点，接收 Todo 并执行，回传进度和结果
+| 层 | 路径 | 职责 |
+|---|---|---|
+| 入口 | `cmd/server/main.go` | 加载 .env → config → logger → app → http.Server |
+| 应用组装 | `internal/app/router.go` | 创建 Gin engine、注入所有依赖、注册路由 |
+| Handler | `internal/handler/` | 请求解析、调用 Store、返回响应 |
+| Store | `internal/store/` | **核心业务层**，内存 map + 可选 MongoDB 持久化，含所有业务逻辑 |
+| Model | `internal/model/types.go` | 所有领域模型定义（单文件） |
+| Transport | `internal/transport/response.go` | 统一响应格式和 AppError |
+| ClawSynapse | `internal/clawsynapse/` | webhook 处理、消息发布客户端、Peer 同步 |
+| Config | `internal/config/config.go` | 环境变量加载，全部通过 `getEnv()` 读取 |
+| Auth | `internal/auth/jwt.go` | JWT 签发与验证 |
+| Middleware | `internal/middleware/` | JWT 认证、CORS、日志、Recovery |
 
-### 关键设计决策
+### Store 的双模式存储
 
-- **基于 ClawSynapse 网络**：TrustMesh 不直连 NATS，通过 clawsynapsed 代理所有 Agent 通信
+Store 采用"内存优先 + MongoDB 持久化"架构：
+- 所有数据首先操作内存 map（`sync.RWMutex` 保护）
+- 如果 `MONGO_ENABLED=true`，变更同时写入 MongoDB（`persist*Unsafe` 方法）
+- 启动时通过 `bootstrap.go` 从 MongoDB 加载数据到内存
+- 方法名含 `Unsafe` 后缀表示调用者已持有锁
+
+### SSE 实时推送
+
+Task 和 Conversation 都支持 SSE 流：
+- `GET /conversations/:id/stream` — Conversation 变更推送
+- `GET /tasks/:id/stream` — Task + Events 快照推送
+- 通过 `store/streams.go` 的 `Subscribe`/`Publish` + channel 实现
+
+### 前端结构
+
+- API 客户端：`src/api/client.ts` 基于 ky，自动附加 JWT，401 自动跳转登录
+- 状态管理：TanStack Query（服务端）+ Zustand（客户端 auth/theme）
+- 路由：react-router-dom v7
+- UI：shadcn/ui (Radix) + Tailwind CSS v4
+
+## 关键设计决策
+
 - **Todo 是最小执行单元**：Task 包含 Todo 列表，Task 状态由 Todos 自动聚合
-- **一个 Conversation 最多对应一个 Task**：PM 对同一 Conversation 只能成功创建一次 Task
-- **PM 门禁**：PM 不在线时禁止用户发起需求，返回 PM_AGENT_OFFLINE
-- **并发控制**：MongoDB `findOneAndUpdate` + positional operator，每次 Todo 更新递增 `task.version`
-- **MVP 使用 TRUST_MODE=open**：不校验签名和信任关系，后续迭代启用
+- **一个 Conversation 最多一个 Task**：PM 创建 Task 后 Conversation 自动变为 resolved
+- **PM 门禁**：PM 不在线时禁止用户发送消息，返回 `PM_AGENT_OFFLINE`
+- **幂等性**：webhook 消息通过 `processedMessages` map 实现幂等（基于 `message_id`）
+- **MVP 使用 TRUST_MODE=open**：不校验签名和信任关系
 
 ## 技术栈
 
 | 层 | 技术 |
 |---|---|
-| 后端 | Go, Gin, MongoDB (mongo-driver v2) |
+| 后端 | Go 1.25, Gin, MongoDB (mongo-driver v2), zap (日志) |
 | 通信网络 | ClawSynapse (clawsynapsed + NATS) |
-| 前端 | React 18, TypeScript, Vite, shadcn/ui (Radix UI), Tailwind CSS v4 |
+| 前端 | React 19, TypeScript, Vite 7, shadcn/ui (Radix UI), Tailwind CSS v4 |
 | 状态管理 | TanStack Query (服务端状态), Zustand (客户端状态) |
 | HTTP 客户端 | ky |
 | 基础设施 | Docker + docker-compose (MongoDB, NATS, clawsynapsed) |
 
-## 计划目录结构
+## API 响应格式
 
+```json
+// 成功（单个资源）
+{ "data": { ... } }
+
+// 成功（列表）
+{ "data": { "items": [...] }, "meta": { "count": N } }
+
+// 错误
+{ "error": { "code": "ERROR_CODE", "message": "...", "details": {} } }
 ```
-backend/
-  cmd/server/main.go          # 入口点
-  internal/
-    config/                    # 配置加载
-    model/                     # MongoDB 文档模型
-    repository/                # 数据访问层
-    handler/                   # Gin HTTP handlers
-    middleware/                 # JWT、CORS、日志
-    service/                   # 业务逻辑、状态机
-    clawsynapse/               # ClawSynapse 集成 (client, webhook handler)
-    dto/                       # 请求/响应 DTO
-
-frontend/
-  src/
-    components/ui/             # shadcn/ui 组件
-    components/{layout,board,task,conversation,agent}/
-    api/                       # API 调用封装
-    hooks/                     # React hooks
-    stores/                    # Zustand stores
-    pages/                     # 页面组件
-    types/                     # TypeScript 类型
-```
-
-## 设计文档索引
-
-| 文档 | 内容 |
-|---|---|
-| `docs/mvp-design.md` | 总览与功能范围 |
-| `docs/data-model.md` | MongoDB 文档结构、约束、索引 |
-| `docs/api-design.md` | REST API 端点、ClawSynapse 通信设计 |
-| `docs/message-protocol.md` | 业务消息类型、payload、权限（基于 ClawSynapse） |
-| `docs/agent-engine.md` | PM 工作流、Agent 执行、后端处理 |
-| `docs/frontend-design.md` | 页面规划、组件树、交互设计 |
-| `docs/project-structure.md` | 目录结构、实施计划、设计决策 |
 
 ## 业务消息类型（type 字段）
 
-Agent → TrustMesh:
+Agent → TrustMesh (webhook):
 - `conversation.reply` — PM 回复用户对话
 - `task.create` — PM 创建任务
 - `todo.progress` / `todo.complete` / `todo.fail` — 执行 Agent 回传结果
 
-TrustMesh → Agent:
+TrustMesh → Agent (clawsynapse publish):
 - `conversation.message` — 转发用户需求给 PM
 - `task.created` / `task.updated` — 任务状态通知给 PM
 - `todo.assigned` / `todo.updated` — Todo 状态通知给执行 Agent
@@ -113,8 +155,22 @@ TrustMesh → Agent:
 ## Task 状态聚合规则
 
 ```
-全部 todos pending      → task.pending
-存在 todo in_progress   → task.in_progress
-全部 todos done         → task.done
-存在 todo failed        → task.failed
+存在 todo failed      → task.failed
+全部 todos done       → task.done
+存在 todo in_progress → task.in_progress
+全部 todos pending    → task.pending
 ```
+
+注意：failed 优先级最高，判断顺序影响结果。
+
+## 配置
+
+后端配置全部通过环境变量，参考 `backend/.env`。关键变量：
+- `MONGO_ENABLED` — 是否启用 MongoDB 持久化（默认 true）
+- `CLAWSYNAPSE_API_URL` — clawsynapsed Local API 地址
+- `CLAWSYNAPSE_NODE_ID` — 本节点 ID
+- `CLAWSYNAPSE_PEER_SYNC_INTERVAL` — Agent 在线状态轮询间隔
+
+## 设计文档
+
+详细设计文档在 `docs/` 目录下，包括数据模型、API 设计、消息协议、Agent 工作流、前端设计等。
