@@ -737,7 +737,6 @@ func (s *Store) rebuildProjectPMSummariesUnsafe(agentID string) {
 	for _, p := range s.projects {
 		if p.PMAgentID == agentID {
 			p.PMAgent = toPMSummary(a)
-			p.UpdatedAt = time.Now().UTC()
 		}
 	}
 }
@@ -750,7 +749,6 @@ func (s *Store) rebuildTaskPMSummariesUnsafe(agentID string) {
 	for _, t := range s.tasks {
 		if t.PMAgentID == agentID {
 			t.PMAgent = toPMSummary(a)
-			t.UpdatedAt = time.Now().UTC()
 		}
 	}
 }
@@ -765,7 +763,6 @@ func (s *Store) rebuildTodoAssigneeUnsafe(agentID string) {
 			if t.Todos[i].Assignee.AgentID == agentID {
 				t.Todos[i].Assignee.Name = a.Name
 				t.Todos[i].Assignee.NodeID = a.NodeID
-				t.UpdatedAt = time.Now().UTC()
 			}
 		}
 	}

@@ -10,7 +10,15 @@
       "Bash(gh repo:*)",
       "WebFetch(domain:github.com)",
       "Bash(gh api:*)",
-      "Bash(go build:*)"
+      "Bash(go build:*)",
+      "Bash(docker exec:*)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZTdhY2QxYjYxNTFlM2YyODEwYTk0NTQ2IiwiZXhwIjoxNzczOTk5NTg2LCJpYXQiOjE3NzM5MTMxODZ9.VrRS6Pm4tAlUJtDD2Iu-q8uCwQcu3Tpi9xBC5a7lxZg\")",
+      "Bash(curl -s \"http://localhost:8080/api/v1/projects\" -H \"Authorization: Bearer $TOKEN\")",
+      "Bash(python3 -c \"import sys,json; [print\\(p[''''id''''], p[''''name'''']\\) for p in json.load\\(sys.stdin\\)[''''data''''][''''items'''']]\")",
+      "Bash(curl -s \"http://localhost:8080/api/v1/projects/2e061ebd9cb4f904d630696f/tasks\" -H \"Authorization: Bearer $TOKEN\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZTdhY2QxYjYxNTFlM2YyODEwYTk0NTQ2IiwiZXhwIjoxNzczOTk5NzM5LCJpYXQiOjE3NzM5MTMzMzl9.gol4aSiH8yEM8lpAoEr-PCvR3-iHhigAnvJVIX3kgKE\")",
+      "Bash(python3 -c \":*)"
     ]
   }
 }
