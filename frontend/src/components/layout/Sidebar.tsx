@@ -21,7 +21,7 @@ import { useAgents } from '@/hooks/useAgents'
 import { useUnreadCount } from '@/hooks/useNotifications'
 import { useAuthStore } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface SidebarProps {
   onCreateProject: () => void
@@ -36,7 +36,14 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
   const { theme, setTheme } = useThemeStore()
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 1280px)').matches)
+
+  useEffect(() => {
+    const mql = window.matchMedia('(max-width: 1280px)')
+    const handler = (e: MediaQueryListEvent) => setCollapsed(e.matches)
+    mql.addEventListener('change', handler)
+    return () => mql.removeEventListener('change', handler)
+  }, [])
 
   const toggleTheme = () => {
     if (theme === 'light') setTheme('dark')
@@ -93,7 +100,7 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
           <Link
             to="/inbox"
             className={cn(
-              'flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+              'relative flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
               isActive('/inbox') && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
             )}
           >

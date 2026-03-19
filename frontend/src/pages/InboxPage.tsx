@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { PageContainer } from '@/components/layout/PageContainer'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { NotificationGroup } from '@/components/inbox/NotificationGroup'
@@ -21,8 +22,8 @@ export function InboxPage() {
   const hasUnread = notifications?.some((n) => !n.is_read) ?? false
 
   return (
-    <div className="p-6 space-y-4 max-w-3xl mx-auto">
-      <div className="flex items-center justify-between">
+    <PageContainer className="flex flex-col h-full space-y-4">
+      <div className="shrink-0 flex items-center justify-between">
         <h1 className="text-2xl font-bold">收件箱</h1>
         {hasUnread && (
           <Button
@@ -36,7 +37,7 @@ export function InboxPage() {
         )}
       </div>
 
-      <div className="flex gap-1">
+      <div className="shrink-0 flex gap-1">
         {filters.map((f) => (
           <Button
             key={f.value}
@@ -61,7 +62,7 @@ export function InboxPage() {
       )}
 
       {!isLoading && groups.length > 0 && (
-        <ScrollArea className="h-[calc(100vh-180px)]">
+        <ScrollArea className="flex-1 min-h-0">
           <div className="space-y-4">
             {groups.map((group) => (
               <NotificationGroup
@@ -74,6 +75,6 @@ export function InboxPage() {
           </div>
         </ScrollArea>
       )}
-    </div>
+    </PageContainer>
   )
 }

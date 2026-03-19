@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Bot, Plus } from 'lucide-react'
+import { PageContainer } from '@/components/layout/PageContainer'
 import { Button } from '@/components/ui/button'
 import { AgentCard } from '@/components/agent/AgentCard'
 import { AgentConfigDialog } from '@/components/agent/AgentConfigDialog'
@@ -70,7 +71,7 @@ export function AgentListPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-6xl mx-auto">
+    <PageContainer>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">Agent 管理</h1>
@@ -102,7 +103,7 @@ export function AgentListPage() {
       {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-40 bg-muted rounded-xl animate-pulse" />
           ))}
@@ -120,7 +121,7 @@ export function AgentListPage() {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredAgents.map((agent) => (
             <AgentCard
               key={agent.id}
@@ -137,6 +138,6 @@ export function AgentListPage() {
         onOpenChange={handleClose}
         agent={editingAgent}
       />
-    </div>
+    </PageContainer>
   )
 }

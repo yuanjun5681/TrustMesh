@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Plus, MessageSquare, AlertCircle, Sparkles, ListTodo, Bug, Lightbulb } from 'lucide-react'
+import { ArrowLeft, Plus, MessageSquare, AlertCircle, Sparkles, ListTodo, Bug, Lightbulb, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +20,7 @@ export function ConversationPage() {
   const { data: conversations, isLoading } = useConversations(projectId)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [isCreatingNew, setIsCreatingNew] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -68,7 +69,10 @@ export function ConversationPage() {
   return (
     <div className="flex h-full">
       {/* Conversation List */}
-      <div className="w-72 flex flex-col border-r bg-sidebar shrink-0">
+      <div className={cn(
+        'flex flex-col border-r bg-sidebar shrink-0 transition-all duration-200',
+        sidebarOpen ? 'w-72' : 'w-0 overflow-hidden border-r-0'
+      )}>
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <div className="flex items-center gap-2">
             <Link to={`/projects/${projectId}`}>
@@ -78,18 +82,28 @@ export function ConversationPage() {
             </Link>
             <span className="text-sm font-medium">对话</span>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={() => {
-              setIsCreatingNew(true)
-              setSelectedId(null)
-            }}
-            disabled={pmOffline}
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => {
+                setIsCreatingNew(true)
+                setSelectedId(null)
+              }}
+              disabled={pmOffline}
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setSidebarOpen(false)}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         <ScrollArea className="flex-1">
@@ -142,6 +156,19 @@ export function ConversationPage() {
 
       {/* Message Area */}
       <div className="flex flex-1 flex-col min-w-0">
+        {!sidebarOpen && (
+          <div className="flex items-center gap-2 px-4 py-2 border-b shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setSidebarOpen(true)}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-medium truncate">{project?.name}</span>
+          </div>
+        )}
         {conversation ? (
           <>
             {/* Messages */}

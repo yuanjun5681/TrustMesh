@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { FolderKanban, Plus } from 'lucide-react'
+import { PageContainer } from '@/components/layout/PageContainer'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { AgentStatusDot } from '@/components/shared/StatusBadge'
@@ -15,7 +16,7 @@ export function ProjectListPage() {
   const activeProjects = projects?.filter((p) => p.status === 'active') ?? []
 
   return (
-    <div className="p-6 lg:p-8 max-w-6xl mx-auto">
+    <PageContainer>
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold">项目</h1>
@@ -28,7 +29,7 @@ export function ProjectListPage() {
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {[1, 2, 3].map((i) => (
             <Card key={i} className="animate-pulse">
               <CardHeader>
@@ -54,7 +55,7 @@ export function ProjectListPage() {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {activeProjects.map((project) => (
             <Link key={project.id} to={`/projects/${project.id}`}>
               <Card className="transition-all hover:shadow-md hover:border-primary/30 cursor-pointer group">
@@ -83,6 +84,6 @@ export function ProjectListPage() {
       )}
 
       <CreateProjectDialog open={showCreate} onOpenChange={setShowCreate} />
-    </div>
+    </PageContainer>
   )
 }

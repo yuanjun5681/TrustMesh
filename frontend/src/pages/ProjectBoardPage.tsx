@@ -58,7 +58,7 @@ export function ProjectBoardPage() {
         </div>
       </div>
 
-      {/* Split layout: Task List + Detail Panel */}
+      {/* Split layout: Task List + Detail Panel (Asana style) */}
       {isLoading ? (
         <div className="flex flex-1 items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -66,7 +66,7 @@ export function ProjectBoardPage() {
       ) : (
         <div className="flex flex-1 min-h-0">
           {/* Left: Task List */}
-          <div className={selectedTaskId ? 'w-1/2 border-r' : 'w-full'}>
+          <div className={`px-6 ${selectedTaskId ? 'w-1/2 border-r' : 'w-full'}`}>
             <TaskListView
               tasks={tasks ?? []}
               selectedTaskId={selectedTaskId}
