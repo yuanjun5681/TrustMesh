@@ -7,6 +7,9 @@ import { ProjectListPage } from '@/pages/ProjectListPage'
 import { ProjectBoardPage } from '@/pages/ProjectBoardPage'
 import { ConversationPage } from '@/pages/ConversationPage'
 import { AgentListPage } from '@/pages/AgentListPage'
+import { DashboardPage } from '@/pages/DashboardPage'
+import { AgentDetailPage } from '@/pages/AgentDetailPage'
+import { InboxPage } from '@/pages/InboxPage'
 import { useAuthStore } from '@/stores/authStore'
 
 const queryClient = new QueryClient({
@@ -27,7 +30,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function GuestRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
-  if (isAuthenticated()) return <Navigate to="/projects" replace />
+  if (isAuthenticated()) return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
 
@@ -48,14 +51,17 @@ export default function App() {
               </ProtectedRoute>
             }
           >
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/inbox" element={<InboxPage />} />
             <Route path="/projects" element={<ProjectListPage />} />
             <Route path="/projects/:projectId" element={<ProjectBoardPage />} />
             <Route path="/projects/:projectId/chat" element={<ConversationPage />} />
             <Route path="/agents" element={<AgentListPage />} />
+            <Route path="/agents/:id" element={<AgentDetailPage />} />
           </Route>
 
           {/* Redirect */}
-          <Route path="*" element={<Navigate to="/projects" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>

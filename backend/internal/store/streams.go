@@ -99,7 +99,7 @@ func (s *Store) publishConversationUnsafe(conversationID string) {
 
 func (s *Store) taskSnapshotUnsafe(taskID string) model.TaskStreamSnapshot {
 	task := copyTask(s.tasks[taskID])
-	events := append([]model.TaskEvent(nil), s.taskEvents[taskID]...)
+	events := append([]model.Event(nil), s.taskEvents[taskID]...)
 	return model.TaskStreamSnapshot{
 		Task:   *task,
 		Events: events,

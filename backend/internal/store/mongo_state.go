@@ -40,8 +40,9 @@ func (s *Store) enableMongo(cfg config.Config, log *zap.Logger) error {
 	s.mongoProjects = db.Collection("projects")
 	s.mongoConversations = db.Collection("conversations")
 	s.mongoTasks = db.Collection("tasks")
-	s.mongoTaskEvents = db.Collection("task_events")
+	s.mongoEvents = db.Collection("events")
 	s.mongoProcessedMessages = db.Collection("processed_messages")
+	s.mongoNotifications = db.Collection("notifications")
 	s.mongoTimeout = cfg.MongoTimeout
 	if log != nil {
 		s.log = log
@@ -82,8 +83,9 @@ func (s *Store) clearMongoCollections() {
 	s.mongoProjects = nil
 	s.mongoConversations = nil
 	s.mongoTasks = nil
-	s.mongoTaskEvents = nil
+	s.mongoEvents = nil
 	s.mongoProcessedMessages = nil
+	s.mongoNotifications = nil
 }
 
 func (s *Store) mongoContext() (context.Context, context.CancelFunc) {
@@ -113,8 +115,13 @@ func (s *Store) ensureMongoIndexes() error {
 			{Keys: bson.D{{Key: "todos.assignee.agent_id", Value: 1}, {Key: "todos.status", Value: 1}}},
 			{Keys: bson.D{{Key: "status", Value: 1}}},
 		},
-		s.mongoTaskEvents: {
+		s.mongoEvents: {
 			{Keys: bson.D{{Key: "task_id", Value: 1}, {Key: "created_at", Value: 1}}},
+			{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "created_at", Value: 1}}},
+			{Keys: bson.D{{Key: "actor_id", Value: 1}, {Key: "created_at", Value: 1}}},
+		},
+		s.mongoNotifications: {
+			{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "is_read", Value: 1}, {Key: "created_at", Value: -1}}},
 		},
 		s.mongoConversations: {
 			{Keys: bson.D{{Key: "project_id", Value: 1}, {Key: "user_id", Value: 1}}},
@@ -156,11 +163,15 @@ func (s *Store) loadMongoState() error {
 	if err != nil {
 		return err
 	}
-	taskEvents, err := s.loadTaskEvents()
+	taskEvents, userEvents, agentEvents, err := s.loadEvents()
 	if err != nil {
 		return err
 	}
 	processedMessages, err := s.loadProcessedMessages()
+	if err != nil {
+		return err
+	}
+	notifications, userNotifications, err := s.loadNotifications()
 	if err != nil {
 		return err
 	}
@@ -187,7 +198,11 @@ func (s *Store) loadMongoState() error {
 	s.projectTasks = projectTasks
 	s.conversationTasks = conversationTasks
 	s.taskEvents = taskEvents
+	s.userEvents = userEvents
+	s.agentEvents = agentEvents
 	s.processedMessages = processedMessages
+	s.notifications = notifications
+	s.userNotifications = userNotifications
 	return nil
 }
 
@@ -324,27 +339,64 @@ func (s *Store) loadTasks() (map[string]*model.TaskDetail, map[string][]string, 
 	return items, projectTasks, conversationTasks, nil
 }
 
-func (s *Store) loadTaskEvents() (map[string][]model.TaskEvent, error) {
-	items := make(map[string][]model.TaskEvent)
-	if s.mongoTaskEvents == nil {
-		return items, nil
+func (s *Store) loadEvents() (map[string][]model.Event, map[string][]*model.Event, map[string][]*model.Event, error) {
+	taskEvents := make(map[string][]model.Event)
+	userEvents := make(map[string][]*model.Event)
+	agentEvents := make(map[string][]*model.Event)
+	if s.mongoEvents == nil {
+		return taskEvents, userEvents, agentEvents, nil
 	}
 	ctx, cancel := s.mongoContext()
 	defer cancel()
-	cursor, err := s.mongoTaskEvents.Find(ctx, bson.D{}, options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}}))
+	cursor, err := s.mongoEvents.Find(ctx, bson.D{}, options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}}))
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	defer cursor.Close(ctx)
 
-	var events []model.TaskEvent
+	var events []model.Event
 	if err := cursor.All(ctx, &events); err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
-	for _, event := range events {
-		items[event.TaskID] = append(items[event.TaskID], event)
+	for i := range events {
+		event := events[i]
+		if event.TaskID != "" {
+			taskEvents[event.TaskID] = append(taskEvents[event.TaskID], event)
+		}
+		if event.UserID != "" {
+			userEvents[event.UserID] = append(userEvents[event.UserID], &events[i])
+		}
+		if event.ActorType == "agent" && event.ActorID != "" {
+			agentEvents[event.ActorID] = append(agentEvents[event.ActorID], &events[i])
+		}
 	}
-	return items, nil
+	return taskEvents, userEvents, agentEvents, nil
+}
+
+func (s *Store) loadNotifications() (map[string]*model.Notification, map[string][]string, error) {
+	items := make(map[string]*model.Notification)
+	userNotifications := make(map[string][]string)
+	if s.mongoNotifications == nil {
+		return items, userNotifications, nil
+	}
+	ctx, cancel := s.mongoContext()
+	defer cancel()
+	cursor, err := s.mongoNotifications.Find(ctx, bson.D{}, options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}}))
+	if err != nil {
+		return nil, nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var notifications []model.Notification
+	if err := cursor.All(ctx, &notifications); err != nil {
+		return nil, nil, err
+	}
+	for i := range notifications {
+		n := notifications[i]
+		items[n.ID] = &n
+		userNotifications[n.UserID] = append(userNotifications[n.UserID], n.ID)
+	}
+	return items, userNotifications, nil
 }
 
 func (s *Store) loadProcessedMessages() (map[string]processedMessage, error) {
@@ -436,12 +488,12 @@ func (s *Store) persistTaskUnsafe(task *model.TaskDetail) error {
 }
 
 func (s *Store) persistTaskEventsUnsafe(taskID string) error {
-	if !s.mongoEnabled || s.mongoTaskEvents == nil || strings.TrimSpace(taskID) == "" {
+	if !s.mongoEnabled || s.mongoEvents == nil || strings.TrimSpace(taskID) == "" {
 		return nil
 	}
 	ctx, cancel := s.mongoContext()
 	defer cancel()
-	if _, err := s.mongoTaskEvents.DeleteMany(ctx, bson.M{"task_id": taskID}); err != nil {
+	if _, err := s.mongoEvents.DeleteMany(ctx, bson.M{"task_id": taskID}); err != nil {
 		return err
 	}
 	events := s.taskEvents[taskID]
@@ -452,8 +504,22 @@ func (s *Store) persistTaskEventsUnsafe(taskID string) error {
 	for _, event := range events {
 		docs = append(docs, event)
 	}
-	_, err := s.mongoTaskEvents.InsertMany(ctx, docs)
+	_, err := s.mongoEvents.InsertMany(ctx, docs)
 	return err
+}
+
+func (s *Store) persistNotificationUnsafe(n *model.Notification) {
+	if !s.mongoEnabled || s.mongoNotifications == nil || n == nil {
+		return
+	}
+	ctx, cancel := s.mongoContext()
+	defer cancel()
+	clone := *n
+	if _, err := s.mongoNotifications.ReplaceOne(ctx, bson.M{"_id": n.ID}, clone, options.Replace().SetUpsert(true)); err != nil {
+		if s.log != nil {
+			s.log.Warn("failed to persist notification", zap.String("id", n.ID), zap.Error(err))
+		}
+	}
 }
 
 func (s *Store) persistProcessedMessageUnsafe(key string) error {

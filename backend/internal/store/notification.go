@@ -1,0 +1,91 @@
+package store
+
+import (
+	"sort"
+	"time"
+
+	"trustmesh/backend/internal/model"
+	"trustmesh/backend/internal/transport"
+)
+
+func (s *Store) ListNotifications(userID, filter string, limit int) ([]model.Notification, *transport.AppError) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	ids := s.userNotifications[userID]
+	items := make([]model.Notification, 0)
+
+	for i := len(ids) - 1; i >= 0; i-- {
+		n, ok := s.notifications[ids[i]]
+		if !ok {
+			continue
+		}
+		switch filter {
+		case "unread":
+			if n.IsRead {
+				continue
+			}
+		case "recent":
+			if time.Since(n.CreatedAt) > 24*time.Hour {
+				continue
+			}
+		}
+		items = append(items, *n)
+		if limit > 0 && len(items) >= limit {
+			break
+		}
+	}
+
+	sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.After(items[j].CreatedAt) })
+	return items, nil
+}
+
+func (s *Store) UnreadNotificationCount(userID string) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	count := 0
+	for _, id := range s.userNotifications[userID] {
+		if n, ok := s.notifications[id]; ok && !n.IsRead {
+			count++
+		}
+	}
+	return count
+}
+
+func (s *Store) MarkNotificationRead(userID, notificationID string) *transport.AppError {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	n, ok := s.notifications[notificationID]
+	if !ok || n.UserID != userID {
+		return transport.NotFound("notification not found")
+	}
+	if n.IsRead {
+		return nil
+	}
+	now := time.Now().UTC()
+	n.IsRead = true
+	n.ReadAt = &now
+	s.persistNotificationUnsafe(n)
+	return nil
+}
+
+func (s *Store) MarkAllNotificationsRead(userID string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	count := 0
+	now := time.Now().UTC()
+	for _, id := range s.userNotifications[userID] {
+		n, ok := s.notifications[id]
+		if !ok || n.IsRead {
+			continue
+		}
+		n.IsRead = true
+		n.ReadAt = &now
+		s.persistNotificationUnsafe(n)
+		count++
+	}
+	return count
+}

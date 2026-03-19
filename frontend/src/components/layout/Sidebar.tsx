@@ -7,13 +7,18 @@ import {
   Sun,
   Moon,
   LogOut,
+  LayoutDashboard,
+  Inbox,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Avatar } from '@/components/ui/avatar'
+import { AgentStatusDot } from '@/components/shared/StatusBadge'
 import { useProjects } from '@/hooks/useProjects'
+import { useAgents } from '@/hooks/useAgents'
+import { useUnreadCount } from '@/hooks/useNotifications'
 import { useAuthStore } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
 import { useState } from 'react'
@@ -26,6 +31,8 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
   const location = useLocation()
   const { projectId } = useParams()
   const { data: projects } = useProjects()
+  const { data: agents } = useAgents()
+  const { data: unreadCount } = useUnreadCount()
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
   const { theme, setTheme } = useThemeStore()
@@ -37,6 +44,8 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
     else setTheme('light')
   }
 
+  const isActive = (path: string) => location.pathname === path
+
   return (
     <aside
       className={cn(
@@ -47,7 +56,7 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
       {/* Header */}
       <div className="flex h-14 items-center gap-2 px-4">
         {!collapsed && (
-          <Link to="/projects" className="flex items-center gap-2 font-semibold text-lg">
+          <Link to="/dashboard" className="flex items-center gap-2 font-semibold text-lg">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-bold">
               T
             </div>
@@ -68,6 +77,46 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
 
       {/* Navigation */}
       <ScrollArea className="flex-1 py-2">
+        {/* Dashboard + Inbox */}
+        <div className="px-2 space-y-0.5">
+          <Link
+            to="/dashboard"
+            className={cn(
+              'flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+              isActive('/dashboard') && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+            )}
+          >
+            <LayoutDashboard className="h-4 w-4 shrink-0" />
+            {!collapsed && <span>Dashboard</span>}
+          </Link>
+
+          <Link
+            to="/inbox"
+            className={cn(
+              'flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+              isActive('/inbox') && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+            )}
+          >
+            <Inbox className="h-4 w-4 shrink-0" />
+            {!collapsed && (
+              <>
+                <span>收件箱</span>
+                {unreadCount != null && unreadCount > 0 && (
+                  <span className="ml-auto text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </>
+            )}
+            {collapsed && unreadCount != null && unreadCount > 0 && (
+              <span className="absolute right-1 top-0.5 h-2 w-2 rounded-full bg-primary" />
+            )}
+          </Link>
+        </div>
+
+        <Separator className="my-2" />
+
+        {/* Projects */}
         <div className="px-2">
           {!collapsed && (
             <div className="mb-1 flex items-center justify-between px-2">
@@ -114,12 +163,40 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
 
         <Separator className="my-2" />
 
+        {/* Agents */}
         <div className="px-2">
+          {!collapsed && (
+            <div className="mb-1 px-2">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Agents
+              </span>
+            </div>
+          )}
+
+          {agents?.map((agent) => (
+            <Link
+              key={agent.id}
+              to={`/agents/${agent.id}`}
+              className={cn(
+                'flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                location.pathname === `/agents/${agent.id}` && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+              )}
+            >
+              <Bot className="h-4 w-4 shrink-0" />
+              {!collapsed && (
+                <>
+                  <span className="truncate">{agent.name}</span>
+                  <span className="ml-auto"><AgentStatusDot status={agent.status} /></span>
+                </>
+              )}
+            </Link>
+          ))}
+
           <Link
             to="/agents"
             className={cn(
-              'flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-              location.pathname === '/agents' && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+              'flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-muted-foreground',
+              isActive('/agents') && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
             )}
           >
             <Bot className="h-4 w-4 shrink-0" />

@@ -44,6 +44,8 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	conversationHandler := handler.NewConversationHandler(s, clawClient, log)
 	taskHandler := handler.NewTaskHandler(s, clawClient, log)
 	transferHandler := handler.NewTransferHandler(s, clawClient)
+	dashboardHandler := handler.NewDashboardHandler(s)
+	notificationHandler := handler.NewNotificationHandler(s)
 
 	engine.GET("/healthz", handler.Health)
 	engine.POST("/webhook/clawsynapse", webhookHandler.HandleWebhook)
@@ -80,6 +82,16 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	authed.POST("/tasks/:id/todos/:todoId/dispatch", taskHandler.DispatchTodo)
 	authed.GET("/tasks/:id/artifacts/:artifactId/transfer", transferHandler.GetTaskArtifactTransfer)
 	authed.GET("/tasks/:id/artifacts/:artifactId/content", transferHandler.GetTaskArtifactContent)
+
+	authed.GET("/dashboard/stats", dashboardHandler.Stats)
+	authed.GET("/dashboard/events", dashboardHandler.RecentEvents)
+	authed.GET("/dashboard/tasks", dashboardHandler.RecentTasks)
+	authed.GET("/agents/:id/events", dashboardHandler.AgentEvents)
+
+	authed.GET("/notifications", notificationHandler.List)
+	authed.GET("/notifications/unread-count", notificationHandler.UnreadCount)
+	authed.PATCH("/notifications/:id/read", notificationHandler.MarkRead)
+	authed.POST("/notifications/mark-all-read", notificationHandler.MarkAllRead)
 
 	return &App{Engine: engine, Store: s, PeerSyncer: peerSyncer}, nil
 }

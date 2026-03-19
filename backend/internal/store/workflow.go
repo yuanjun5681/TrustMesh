@@ -70,8 +70,12 @@ func (s *Store) RecordTodoDispatch(userID, taskID, todoID string) (*model.TaskDe
 	}
 
 	now := time.Now().UTC()
+	userName := ""
+	if u, ok := s.users[userID]; ok {
+		userName = u.Name
+	}
 	message := fmt.Sprintf("手动派发给 %s", todo.Assignee.Name)
-	s.addTaskEventUnsafe(task.ID, "user", userID, "todo_assigned", &message, map[string]any{
+	s.addEventUnsafe(userID, task.ProjectID, task.ID, todo.ID, "user", userID, userName, "todo_assigned", &message, map[string]any{
 		"todo_id":           todo.ID,
 		"assignee_agent_id": todo.Assignee.AgentID,
 		"manual":            true,
@@ -136,11 +140,18 @@ func (s *Store) SyncAgentPresence(items []AgentPresence, now time.Time) int {
 			agent.LastSeenAt = &ts
 			changed = true
 		}
+		prevStatus := agent.Status
 		if agent.Status != nextStatus {
 			agent.Status = nextStatus
 			s.rebuildProjectPMSummariesUnsafe(agent.ID)
 			s.rebuildTaskPMSummariesUnsafe(agent.ID)
 			changed = true
+
+			msg := fmt.Sprintf("Agent %s: %s → %s", agent.Name, prevStatus, nextStatus)
+			s.addEventUnsafe(agent.UserID, "", "", "", "system", agent.ID, agent.Name, "agent_status_changed", &msg, map[string]any{
+				"prev_status": prevStatus,
+				"new_status":  nextStatus,
+			}, now)
 		}
 		if !changed {
 			continue
@@ -195,6 +206,11 @@ func (s *Store) AppendPMReplyByNode(nodeID, conversationID, content string) (*mo
 	s.markAgentSeenUnsafe(pmAgent.ID, now)
 	conv.Messages = append(conv.Messages, model.ConversationMessage{ID: uuid.NewString(), Role: "pm_agent", Content: content, CreatedAt: now})
 	conv.UpdatedAt = now
+
+	s.addEventUnsafe(conv.UserID, conv.ProjectID, "", "", "agent", pmAgent.ID, pmAgent.Name, "conversation_reply", &content, map[string]any{
+		"conversation_id": conv.ID,
+	}, now)
+
 	if err := s.persistConversationUnsafe(conv); err != nil {
 		return nil, mongoWriteError(err)
 	}
@@ -346,10 +362,10 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 	conv.UpdatedAt = now
 
 	taskTitle := task.Title
-	s.addTaskEventUnsafe(task.ID, "agent", pmAgent.ID, "task_created", &taskTitle, map[string]any{"conversation_id": task.ConversationID}, now)
+	s.addEventUnsafe(project.UserID, project.ID, task.ID, "", "agent", pmAgent.ID, pmAgent.Name, "task_created", &taskTitle, map[string]any{"conversation_id": task.ConversationID}, now)
 	for _, todo := range task.Todos {
 		title := fmt.Sprintf("assigned todo: %s", todo.Title)
-		s.addTaskEventUnsafe(task.ID, "agent", pmAgent.ID, "todo_assigned", &title, map[string]any{"todo_id": todo.ID, "assignee_agent_id": todo.Assignee.AgentID}, now)
+		s.addEventUnsafe(project.UserID, project.ID, task.ID, todo.ID, "agent", pmAgent.ID, pmAgent.Name, "todo_assigned", &title, map[string]any{"todo_id": todo.ID, "assignee_agent_id": todo.Assignee.AgentID}, now)
 	}
 
 	s.rememberProcessedMessageUnsafe(processedMessageKey("task.create", nodeID, messageID), "task.create", task.ID)
@@ -409,10 +425,10 @@ func (s *Store) UpdateTodoProgressByNode(nodeID string, in TodoProgressInput) (*
 		todo.Status = "in_progress"
 		todo.StartedAt = &now
 		started := fmt.Sprintf("todo started: %s", todo.Title)
-		s.addTaskEventUnsafe(task.ID, "agent", agent.ID, "todo_started", &started, map[string]any{"todo_id": todo.ID}, now)
+		s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_started", &started, map[string]any{"todo_id": todo.ID}, now)
 	}
 	progress := in.Message
-	s.addTaskEventUnsafe(task.ID, "agent", agent.ID, "todo_progress", &progress, map[string]any{"todo_id": todo.ID}, now)
+	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_progress", &progress, map[string]any{"todo_id": todo.ID}, now)
 
 	s.updateTaskStatusUnsafe(task, now)
 	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
@@ -483,7 +499,7 @@ func (s *Store) CompleteTodoByNodeWithMessageID(nodeID, messageID string, in Tod
 		Metadata:     copyMap(in.Result.Metadata),
 	}
 	completed := fmt.Sprintf("todo completed: %s", todo.Title)
-	s.addTaskEventUnsafe(task.ID, "agent", agent.ID, "todo_completed", &completed, map[string]any{"todo_id": todo.ID}, now)
+	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_completed", &completed, map[string]any{"todo_id": todo.ID}, now)
 
 	s.updateTaskStatusUnsafe(task, now)
 	s.rememberProcessedMessageUnsafe(processedMessageKey("todo.complete", nodeID, messageID), "todo.complete", task.ID)
@@ -554,7 +570,7 @@ func (s *Store) FailTodoByNodeWithMessageID(nodeID, messageID string, in TodoFai
 	errCopy := in.Error
 	todo.Error = &errCopy
 	failed := fmt.Sprintf("todo failed: %s", todo.Title)
-	s.addTaskEventUnsafe(task.ID, "agent", agent.ID, "todo_failed", &failed, map[string]any{"todo_id": todo.ID, "error": in.Error}, now)
+	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_failed", &failed, map[string]any{"todo_id": todo.ID, "error": in.Error}, now)
 
 	s.updateTaskStatusUnsafe(task, now)
 	s.rememberProcessedMessageUnsafe(processedMessageKey("todo.fail", nodeID, messageID), "todo.fail", task.ID)
@@ -616,18 +632,31 @@ func (s *Store) rememberProcessedMessageUnsafe(key, action, resourceID string) {
 	}
 }
 
-func (s *Store) addTaskEventUnsafe(taskID, actorType, actorID, eventType string, content *string, metadata map[string]any, at time.Time) {
-	event := model.TaskEvent{
+func (s *Store) addEventUnsafe(userID, projectID, taskID, todoID, actorType, actorID, actorName, eventType string, content *string, metadata map[string]any, at time.Time) {
+	event := model.Event{
 		ID:        newID(),
+		UserID:    userID,
+		ProjectID: projectID,
 		TaskID:    taskID,
+		TodoID:    todoID,
 		ActorType: actorType,
 		ActorID:   actorID,
+		ActorName: actorName,
 		EventType: eventType,
 		Content:   content,
 		Metadata:  copyMap(metadata),
 		CreatedAt: at,
 	}
-	s.taskEvents[taskID] = append(s.taskEvents[taskID], event)
+	if taskID != "" {
+		s.taskEvents[taskID] = append(s.taskEvents[taskID], event)
+	}
+	if userID != "" {
+		s.userEvents[userID] = append(s.userEvents[userID], &event)
+	}
+	if actorType == "agent" && actorID != "" {
+		s.agentEvents[actorID] = append(s.agentEvents[actorID], &event)
+	}
+	s.maybeCreateNotificationUnsafe(&event)
 }
 
 func (s *Store) updateTaskStatusUnsafe(task *model.TaskDetail, now time.Time) {
@@ -642,7 +671,7 @@ func (s *Store) updateTaskStatusUnsafe(task *model.TaskDetail, now time.Time) {
 	task.Version++
 	if prev != next {
 		msg := fmt.Sprintf("task status changed: %s -> %s", prev, next)
-		s.addTaskEventUnsafe(task.ID, "system", "system", "task_status_changed", &msg, map[string]any{"from": prev, "to": next}, now)
+		s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, "", "system", "system", "System", "task_status_changed", &msg, map[string]any{"from": prev, "to": next}, now)
 	}
 }
 
@@ -904,3 +933,74 @@ func findTodoIndex(task *model.TaskDetail, todoID string) int {
 	}
 	return -1
 }
+
+func (s *Store) maybeCreateNotificationUnsafe(event *model.Event) {
+	var title, body, category, priority string
+	switch event.EventType {
+	case "task_created":
+		title = "任务已创建"
+		body = stringOrDefault(event.Content, "新任务")
+		category = "task"
+		priority = "medium"
+	case "task_status_changed":
+		title = "任务状态变更"
+		body = stringOrDefault(event.Content, "状态已变更")
+		category = "task"
+		priority = "high"
+	case "todo_assigned":
+		title = "Todo 已分派"
+		body = stringOrDefault(event.Content, "新的 Todo 分派")
+		category = "todo"
+		priority = "low"
+	case "todo_started":
+		title = "Todo 开始执行"
+		body = stringOrDefault(event.Content, "Todo 已开始")
+		category = "todo"
+		priority = "low"
+	case "todo_completed":
+		title = "Todo 已完成"
+		body = stringOrDefault(event.Content, "Todo 完成")
+		category = "todo"
+		priority = "medium"
+	case "todo_failed":
+		title = "Todo 执行失败"
+		body = stringOrDefault(event.Content, "Todo 失败")
+		category = "todo"
+		priority = "high"
+	case "conversation_reply":
+		title = "PM 回复"
+		body = stringOrDefault(event.Content, "新的回复")
+		category = "conversation"
+		priority = "medium"
+	default:
+		// todo_progress and agent_status_changed do not generate notifications
+		return
+	}
+
+	now := event.CreatedAt
+	notification := &model.Notification{
+		ID:        newID(),
+		UserID:    event.UserID,
+		EventID:   event.ID,
+		ProjectID: event.ProjectID,
+		TaskID:    event.TaskID,
+		Title:     title,
+		Body:      body,
+		Category:  category,
+		Priority:  priority,
+		IsRead:    false,
+		ReadAt:    nil,
+		CreatedAt: now,
+	}
+	s.notifications[notification.ID] = notification
+	s.userNotifications[event.UserID] = append(s.userNotifications[event.UserID], notification.ID)
+	s.persistNotificationUnsafe(notification)
+}
+
+func stringOrDefault(s *string, def string) string {
+	if s != nil && *s != "" {
+		return *s
+	}
+	return def
+}
+

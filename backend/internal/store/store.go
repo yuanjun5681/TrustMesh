@@ -35,8 +35,13 @@ type Store struct {
 	tasks             map[string]*model.TaskDetail
 	projectTasks      map[string][]string
 	conversationTasks map[string]string
-	taskEvents        map[string][]model.TaskEvent
+	taskEvents        map[string][]model.Event
+	userEvents        map[string][]*model.Event
+	agentEvents       map[string][]*model.Event
 	processedMessages map[string]processedMessage
+
+	notifications     map[string]*model.Notification
+	userNotifications map[string][]string
 
 	mongoEnabled           bool
 	mongoClient            *mongo.Client
@@ -45,8 +50,9 @@ type Store struct {
 	mongoProjects          *mongo.Collection
 	mongoConversations     *mongo.Collection
 	mongoTasks             *mongo.Collection
-	mongoTaskEvents        *mongo.Collection
+	mongoEvents            *mongo.Collection
 	mongoProcessedMessages *mongo.Collection
+	mongoNotifications     *mongo.Collection
 	mongoTimeout           time.Duration
 	log                    *zap.Logger
 
@@ -76,8 +82,12 @@ func New() *Store {
 		tasks:                   make(map[string]*model.TaskDetail),
 		projectTasks:            make(map[string][]string),
 		conversationTasks:       make(map[string]string),
-		taskEvents:              make(map[string][]model.TaskEvent),
+		taskEvents:              make(map[string][]model.Event),
+		userEvents:              make(map[string][]*model.Event),
+		agentEvents:             make(map[string][]*model.Event),
 		processedMessages:       make(map[string]processedMessage),
+		notifications:           make(map[string]*model.Notification),
+		userNotifications:       make(map[string][]string),
 		taskSubscribers:         make(map[string]map[chan model.TaskStreamSnapshot]struct{}),
 		conversationSubscribers: make(map[string]map[chan model.ConversationStreamSnapshot]struct{}),
 	}
@@ -565,7 +575,7 @@ func (s *Store) GetTask(userID, taskID string) (*model.TaskDetail, *transport.Ap
 	return copyTask(task), nil
 }
 
-func (s *Store) ListTaskEvents(userID, taskID string) ([]model.TaskEvent, *transport.AppError) {
+func (s *Store) ListTaskEvents(userID, taskID string) ([]model.Event, *transport.AppError) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	task, ok := s.tasks[taskID]
@@ -573,10 +583,60 @@ func (s *Store) ListTaskEvents(userID, taskID string) ([]model.TaskEvent, *trans
 		return nil, transport.NotFound("task not found")
 	}
 	events := s.taskEvents[taskID]
-	cloned := make([]model.TaskEvent, len(events))
+	cloned := make([]model.Event, len(events))
 	copy(cloned, events)
 	sort.Slice(cloned, func(i, j int) bool { return cloned[i].CreatedAt.Before(cloned[j].CreatedAt) })
 	return cloned, nil
+}
+
+func (s *Store) ListUserEvents(userID string, limit int) []model.Event {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	events := s.userEvents[userID]
+	if limit <= 0 || limit > len(events) {
+		limit = len(events)
+	}
+	// userEvents is appended chronologically, return newest first
+	result := make([]model.Event, 0, limit)
+	for i := len(events) - 1; i >= 0 && len(result) < limit; i-- {
+		result = append(result, *events[i])
+	}
+	return result
+}
+
+func (s *Store) ListAgentEvents(userID, agentID string, limit int) ([]model.Event, *transport.AppError) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	agent, ok := s.agents[agentID]
+	if !ok || agent.UserID != userID {
+		return nil, transport.NotFound("agent not found")
+	}
+	events := s.agentEvents[agentID]
+	if limit <= 0 || limit > len(events) {
+		limit = len(events)
+	}
+	result := make([]model.Event, 0, limit)
+	for i := len(events) - 1; i >= 0 && len(result) < limit; i-- {
+		result = append(result, *events[i])
+	}
+	return result, nil
+}
+
+func (s *Store) ListRecentTasks(userID string, limit int) []model.TaskListItem {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	items := make([]model.TaskListItem, 0)
+	for _, t := range s.tasks {
+		if t.UserID == userID {
+			items = append(items, toTaskListItem(*t))
+		}
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].UpdatedAt.After(items[j].UpdatedAt) })
+	if limit > 0 && limit < len(items) {
+		items = items[:limit]
+	}
+	return items
 }
 
 func (s *Store) projectForUserUnsafe(userID, projectID string) (*model.Project, *transport.AppError) {
