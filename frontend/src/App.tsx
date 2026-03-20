@@ -5,7 +5,6 @@ import { LoginPage } from '@/pages/LoginPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { ProjectListPage } from '@/pages/ProjectListPage'
 import { ProjectBoardPage } from '@/pages/ProjectBoardPage'
-import { ConversationPage } from '@/pages/ConversationPage'
 import { AgentListPage } from '@/pages/AgentListPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { AgentDetailPage } from '@/pages/AgentDetailPage'
@@ -56,7 +55,6 @@ export default function App() {
             <Route path="/inbox" element={<InboxPage />} />
             <Route path="/projects" element={<ProjectListPage />} />
             <Route path="/projects/:projectId" element={<ProjectBoardPage />} />
-            <Route path="/projects/:projectId/chat" element={<ConversationPage />} />
             <Route path="/agents" element={<AgentListPage />} />
             <Route path="/agents/:id" element={<AgentDetailPage />} />
           </Route>
