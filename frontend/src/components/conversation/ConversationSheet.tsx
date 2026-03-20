@@ -19,39 +19,41 @@ interface ConversationSheetProps {
   projectId: string
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** 传入已有对话 ID 时进入历史查看模式 */
+  initialConversationId?: string
   onTaskCreated?: (taskId: string) => void
 }
 
-export function ConversationSheet({ projectId, open, onOpenChange, onTaskCreated }: ConversationSheetProps) {
+export function ConversationSheet({ projectId, open, onOpenChange, initialConversationId, onTaskCreated }: ConversationSheetProps) {
   const { data: project } = useProject(projectId)
-  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [conversationId, setConversationId] = useState<string | null>(initialConversationId ?? null)
   const [error, setError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-
   const [inputValue, setInputValue] = useState<string | undefined>(undefined)
 
+  const isHistoryMode = !!initialConversationId
   const pmOffline = project?.pm_agent.status !== 'online'
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
-      setConversationId(null)
+      setConversationId(initialConversationId ?? null)
       setError(null)
+      setInputValue(undefined)
     }
     onOpenChange(nextOpen)
   }
 
   const { data: conversation } = useConversation(
     open && conversationId ? conversationId : undefined,
-    true
+    !isHistoryMode
   )
 
-  const shouldStream = open && !!conversationId && conversation?.status !== 'resolved'
+  const shouldStream = open && !!conversationId && conversation?.status !== 'resolved' && !isHistoryMode
   useConversationStream(conversationId ?? undefined, shouldStream)
 
   const createConversation = useCreateConversation()
   const appendMessage = useAppendMessage()
 
-  // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [conversation?.messages])
@@ -82,13 +84,15 @@ export function ConversationSheet({ projectId, open, onOpenChange, onTaskCreated
     onOpenChange(false)
   }
 
+  const title = isHistoryMode ? '需求对话记录' : '提交新需求'
+
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent side="right" showCloseButton className="w-full max-w-4xl! gap-0! p-0 overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-2 px-4 py-3 border-b shrink-0">
           <MessageSquare className="size-4 text-muted-foreground" />
-          <SheetTitle className="text-sm font-medium flex-1 !p-0 !m-0">提交新需求</SheetTitle>
+          <SheetTitle className="text-sm font-medium flex-1 p-0! m-0!">{title}</SheetTitle>
         </div>
 
         {/* Content Area */}
@@ -100,14 +104,15 @@ export function ConversationSheet({ projectId, open, onOpenChange, onTaskCreated
               ))}
 
               {/* Thinking Indicator */}
-              {conversation.status === 'active' &&
+              {!isHistoryMode &&
+                conversation.status === 'active' &&
                 conversation.messages.length > 0 &&
                 conversation.messages[conversation.messages.length - 1].role === 'user' && (
                   <ThinkingIndicator />
                 )}
 
               {/* Task Created Banner */}
-              {conversation.linked_task && (
+              {!isHistoryMode && conversation.linked_task && (
                 <div className="flex items-center gap-2 py-2 my-1">
                   <div className="flex-1 border-t" />
                   <button
@@ -125,6 +130,10 @@ export function ConversationSheet({ projectId, open, onOpenChange, onTaskCreated
               <div ref={messagesEndRef} />
             </div>
           </ScrollArea>
+        ) : conversationId ? (
+          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+            加载中...
+          </div>
         ) : (
           /* New conversation - empty state with examples */
           <div className="flex flex-1 flex-col items-center justify-center px-6">
@@ -175,10 +184,16 @@ export function ConversationSheet({ projectId, open, onOpenChange, onTaskCreated
           </div>
         )}
 
-        {/* Input - always at bottom */}
+        {/* Footer */}
         <div className="px-4 py-3 shrink-0 flex justify-center">
           <div className="w-full max-w-2xl">
-          {conversation?.status === 'resolved' ? (
+          {isHistoryMode ? (
+            conversation?.status === 'resolved' ? (
+              <div className="text-center text-sm text-muted-foreground py-2">
+                对话已结束
+              </div>
+            ) : null
+          ) : conversation?.status === 'resolved' ? (
             <div className="text-center text-sm text-muted-foreground py-2">
               对话已结束
             </div>

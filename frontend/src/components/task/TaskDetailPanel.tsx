@@ -1,10 +1,11 @@
-import { X } from 'lucide-react'
+import { X, MessageSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/StatusBadge'
 import { TodoList } from './TodoList'
 import { TaskTimeline } from './TaskTimeline'
 import { TaskResultView } from './TaskResult'
+import { ConversationSheet } from '@/components/conversation/ConversationSheet'
 import { useTask } from '@/hooks/useTasks'
 import { useTaskStream } from '@/hooks/useLiveStreams'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -20,6 +21,7 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
   const shouldStream = !task || task.status === 'pending' || task.status === 'in_progress'
   useTaskStream(taskId, shouldStream)
   const [tab, setTab] = useState('todos')
+  const [chatOpen, setChatOpen] = useState(false)
 
   if (!task) {
     return (
@@ -37,9 +39,14 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
           <TaskStatusBadge status={task.status} />
           <PriorityBadge priority={task.priority} />
         </div>
-        <Button variant="ghost" size="icon" className="size-7" onClick={onClose}>
-          <X className="size-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" className="size-7" onClick={() => setChatOpen(true)} title="查看关联对话">
+            <MessageSquare className="size-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="size-7" onClick={onClose}>
+            <X className="size-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Content */}
@@ -77,6 +84,13 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
           </Tabs>
         </div>
       </ScrollArea>
+
+      <ConversationSheet
+        projectId={task.project_id}
+        initialConversationId={task.conversation_id}
+        open={chatOpen}
+        onOpenChange={setChatOpen}
+      />
     </div>
   )
 }
