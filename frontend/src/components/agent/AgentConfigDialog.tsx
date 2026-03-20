@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { X } from 'lucide-react'
 import { useCreateAgent, useUpdateAgent } from '@/hooks/useAgents'
 import { ApiRequestError } from '@/api/client'
+import { toast } from 'sonner'
 import type { Agent, AgentRole } from '@/types'
 
 interface Props {
@@ -77,10 +78,12 @@ export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
           capabilities,
         })
       }
+      toast.success(isEditing ? 'Agent 已更新' : 'Agent 已添加')
       onOpenChange(false)
     } catch (err) {
-      if (err instanceof ApiRequestError) setError(err.message)
-      else setError('操作失败')
+      const message = err instanceof ApiRequestError ? err.message : '操作失败'
+      toast.error(message)
+      setError(message)
     }
   }
 

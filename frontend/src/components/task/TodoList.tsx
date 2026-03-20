@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useDispatchTodo } from '@/hooks/useTasks'
 import { ApiRequestError } from '@/api/client'
+import { toast } from 'sonner'
 import type { Todo, TaskArtifact } from '@/types'
 
 const statusIcons = {
@@ -40,12 +41,11 @@ export function TodoList({ taskId, todos, artifacts }: TodoListProps) {
     setDispatchError(null)
     try {
       await dispatchTodo.mutateAsync({ taskId, todoId: todo.id })
+      toast.success(`Todo "${todo.title}" 已派发`)
     } catch (err) {
-      if (err instanceof ApiRequestError) {
-        setDispatchError({ todoId: todo.id, message: err.message })
-        return
-      }
-      setDispatchError({ todoId: todo.id, message: '手动派发失败' })
+      const message = err instanceof ApiRequestError ? err.message : '手动派发失败'
+      toast.error(message)
+      setDispatchError({ todoId: todo.id, message })
     }
   }
 

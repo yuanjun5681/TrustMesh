@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ApiRequestError } from '@/api/client'
 import { getTaskArtifactContent, getTaskArtifactTransfer } from '@/api/tasks'
+import { toast } from 'sonner'
 import type { TaskResult, TaskArtifact, TransferDetail } from '@/types'
 
 const kindIcons: Record<string, LucideIcon> = {
@@ -54,6 +55,7 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
       window.setTimeout(() => URL.revokeObjectURL(objectURL), 60_000)
     } catch (err) {
       const message = err instanceof ApiRequestError ? err.message : '加载传输详情失败'
+      toast.error(message)
       setTransferErrors((current) => ({ ...current, [artifact.id]: message }))
     } finally {
       setLoadingArtifactId(null)
@@ -69,6 +71,7 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
       downloadBlob(fileBlob, fileName)
     } catch (err) {
       const message = err instanceof ApiRequestError ? err.message : '下载文件失败'
+      toast.error(message)
       setTransferErrors((current) => ({ ...current, [artifact.id]: message }))
     } finally {
       setDownloadingArtifactId(null)

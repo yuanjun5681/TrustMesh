@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAgents, useDeleteAgent } from '@/hooks/useAgents'
 import { ApiRequestError } from '@/api/client'
+import { toast } from 'sonner'
 import type { Agent, AgentRole } from '@/types'
 
 const ROLE_FILTERS: { label: string; value: AgentRole | 'all' }[] = [
@@ -47,21 +48,25 @@ export function AgentListPage() {
   const handleDelete = async (agent: Agent) => {
     setError('')
     if (agent.usage.in_use) {
-      setError(`无法删除 Agent "${agent.name}"，当前仍被 ${formatUsage(agent)} 引用，请先解除关联。`)
+      const msg = `无法删除 Agent "${agent.name}"，当前仍被 ${formatUsage(agent)} 引用，请先解除关联。`
+      toast.error(msg)
+      setError(msg)
       return
     }
 
     if (confirm(`确定要删除 Agent "${agent.name}" 吗？`)) {
       try {
         await deleteAgent.mutateAsync(agent.id)
+        toast.success(`Agent "${agent.name}" 已删除`)
       } catch (err) {
+        let message = '删除 Agent 失败'
         if (err instanceof ApiRequestError) {
-          setError(err.code === 'AGENT_IN_USE'
+          message = err.code === 'AGENT_IN_USE'
             ? `无法删除 Agent "${agent.name}"，当前仍被引用，请先解除关联。`
-            : err.message)
-          return
+            : err.message
         }
-        setError('删除 Agent 失败')
+        toast.error(message)
+        setError(message)
       }
     }
   }

@@ -11,6 +11,7 @@ import { DashboardPage } from '@/pages/DashboardPage'
 import { AgentDetailPage } from '@/pages/AgentDetailPage'
 import { InboxPage } from '@/pages/InboxPage'
 import { useAuthStore } from '@/stores/authStore'
+import { Toaster } from '@/components/ui/sonner'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -64,6 +65,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BrowserRouter>
+      <Toaster position="top-center" />
     </QueryClientProvider>
   )
 }

@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useAuthStore } from '@/stores/authStore'
 import * as authApi from '@/api/auth'
 import { ApiRequestError } from '@/api/client'
+import { toast } from 'sonner'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
@@ -24,8 +25,9 @@ export function LoginPage() {
       setAuth(res.data.token, res.data.user)
       navigate('/projects')
     } catch (err) {
-      if (err instanceof ApiRequestError) setError(err.message)
-      else setError('登录失败，请重试')
+      const message = err instanceof ApiRequestError ? err.message : '登录失败，请重试'
+      toast.error(message)
+      setError(message)
     } finally {
       setLoading(false)
     }
@@ -69,7 +71,6 @@ export function LoginPage() {
                   required
                 />
               </div>
-              {error && <p className="text-sm text-destructive">{error}</p>}
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? '登录中...' : '登录'}
               </Button>

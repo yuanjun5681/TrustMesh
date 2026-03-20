@@ -7,6 +7,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { useCreateProject } from '@/hooks/useProjects'
 import { useAgents } from '@/hooks/useAgents'
 import { ApiRequestError } from '@/api/client'
+import { toast } from 'sonner'
 
 interface Props {
   open: boolean
@@ -32,13 +33,15 @@ export function CreateProjectDialog({ open, onOpenChange }: Props) {
         description,
         pm_agent_id: pmAgentId,
       })
+      toast.success('项目已创建')
       setName('')
       setDescription('')
       setPmAgentId('')
       onOpenChange(false)
     } catch (err) {
-      if (err instanceof ApiRequestError) setError(err.message)
-      else setError('创建失败')
+      const message = err instanceof ApiRequestError ? err.message : '创建失败'
+      toast.error(message)
+      setError(message)
     }
   }
 

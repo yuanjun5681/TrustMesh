@@ -5,6 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { NotificationGroup } from '@/components/inbox/NotificationGroup'
 import { groupNotificationsByDate } from '@/lib/notifications'
 import { useNotifications, useMarkNotificationRead, useMarkAllRead } from '@/hooks/useNotifications'
+import { toast } from 'sonner'
 
 const filters = [
   { label: '最近', value: 'recent' },
@@ -29,7 +30,7 @@ export function InboxPage() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => markAllRead.mutate()}
+            onClick={() => markAllRead.mutate(undefined, { onSuccess: () => toast.success('全部通知已标记为已读') })}
             disabled={markAllRead.isPending}
           >
             全部已读

@@ -14,6 +14,7 @@ import { useConversationStream } from '@/hooks/useLiveStreams'
 import { useProject } from '@/hooks/useProjects'
 import { cn, formatRelativeTime } from '@/lib/utils'
 import { ApiRequestError } from '@/api/client'
+import { toast } from 'sonner'
 
 export function ConversationPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -62,7 +63,9 @@ export function ConversationPage() {
       }
     } catch (err) {
       if (err instanceof ApiRequestError) {
-        setError(err.code === 'PM_AGENT_OFFLINE' ? 'PM Agent 当前离线，无法发送消息' : err.message)
+        const message = err.code === 'PM_AGENT_OFFLINE' ? 'PM Agent 当前离线，无法发送消息' : err.message
+        toast.error(message)
+        setError(message)
       }
     }
   }
