@@ -22,7 +22,7 @@ export function InboxPage() {
   const hasUnread = notifications?.some((n) => !n.is_read) ?? false
 
   return (
-    <PageContainer className="flex flex-col h-full space-y-4">
+    <PageContainer className="flex flex-col h-full gap-4">
       <div className="shrink-0 flex items-center justify-between">
         <h1 className="text-2xl font-bold">收件箱</h1>
         {hasUnread && (
@@ -63,7 +63,7 @@ export function InboxPage() {
 
       {!isLoading && groups.length > 0 && (
         <ScrollArea className="flex-1 min-h-0">
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
             {groups.map((group) => (
               <NotificationGroup
                 key={group.label}

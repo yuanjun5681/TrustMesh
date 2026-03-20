@@ -6,9 +6,9 @@ interface AvatarProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 const sizeClasses = {
-  sm: 'h-7 w-7 text-xs',
-  md: 'h-9 w-9 text-sm',
-  lg: 'h-11 w-11 text-base',
+  sm: 'size-7 text-xs',
+  md: 'size-9 text-sm',
+  lg: 'size-11 text-base',
 }
 
 export function Avatar({ fallback, size = 'md', className, ...props }: AvatarProps) {

@@ -16,7 +16,7 @@ export function PlanPreview({ task, projectId }: PlanPreviewProps) {
 
   return (
     <Card className="border-primary/20 bg-primary/5">
-      <CardContent className="p-3 space-y-2">
+      <CardContent className="flex flex-col gap-2 p-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <TaskStatusBadge status={task.status} />
@@ -26,12 +26,12 @@ export function PlanPreview({ task, projectId }: PlanPreviewProps) {
             to={`/projects/${projectId}`}
             className="text-xs text-primary hover:underline flex items-center gap-1"
           >
-            查看看板 <ExternalLink className="h-3 w-3" />
+            查看看板 <ExternalLink className="size-3" />
           </Link>
         </div>
         <p className="text-sm font-medium">{task.title}</p>
         {task.todo_count > 0 && (
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1">
             <div className="h-1.5 rounded-full bg-background overflow-hidden">
               <div
                 className="h-full rounded-full bg-primary transition-all"

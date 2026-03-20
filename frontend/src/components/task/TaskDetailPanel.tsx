@@ -37,14 +37,14 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
           <TaskStatusBadge status={task.status} />
           <PriorityBadge priority={task.priority} />
         </div>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>
-          <X className="h-4 w-4" />
+        <Button variant="ghost" size="icon" className="size-7" onClick={onClose}>
+          <X className="size-4" />
         </Button>
       </div>
 
       {/* Content */}
       <ScrollArea className="flex-1">
-        <div className="px-5 py-4 space-y-4">
+        <div className="flex flex-col gap-4 px-5 py-4">
           <div>
             <h2 className="text-lg font-semibold">{task.title}</h2>
             {task.description && (

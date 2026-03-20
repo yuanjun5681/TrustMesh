@@ -54,7 +54,7 @@ export function EventTimeline({
   }
 
   return (
-    <div className="relative space-y-0">
+    <div className="relative">
       {events.map((event, index) => {
         const config = eventConfig[event.event_type] ?? {
           icon: Circle,
@@ -70,17 +70,17 @@ export function EventTimeline({
             <div className="flex flex-col items-center">
               <div
                 className={cn(
-                  'flex h-7 w-7 items-center justify-center rounded-full bg-muted',
+                  'flex size-7 items-center justify-center rounded-full bg-muted',
                   config.color
                 )}
               >
-                <Icon className="h-3.5 w-3.5" />
+                <Icon className="size-3.5" />
               </div>
               {!isLast && <div className="w-px flex-1 bg-border" />}
             </div>
             <div className={cn('pb-4 flex-1', isLast && 'pb-0')}>
               <div className="flex items-center gap-1.5">
-                <ActorIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                <ActorIcon className="size-3.5 text-muted-foreground" />
                 {showActorName && event.actor_name && (
                   <span className="text-xs text-muted-foreground">{event.actor_name}</span>
                 )}

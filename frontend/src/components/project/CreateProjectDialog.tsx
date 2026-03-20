@@ -49,8 +49,8 @@ export function CreateProjectDialog({ open, onOpenChange }: Props) {
           <DialogTitle>创建项目</DialogTitle>
           <DialogDescription>新建一个 AI Agent 协作项目</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-          <div className="space-y-2">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-4">
+          <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">项目名称</label>
             <Input
               value={name}
@@ -59,7 +59,7 @@ export function CreateProjectDialog({ open, onOpenChange }: Props) {
               required
             />
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">项目描述</label>
             <Textarea
               value={description}
@@ -69,7 +69,7 @@ export function CreateProjectDialog({ open, onOpenChange }: Props) {
               required
             />
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">PM Agent</label>
             <Select value={pmAgentId} onValueChange={(val) => setPmAgentId(val ?? '')}>
               <SelectTrigger className="w-full">

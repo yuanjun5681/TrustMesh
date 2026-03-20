@@ -15,11 +15,11 @@ export function AgentStatusCard({ agent }: AgentStatusCardProps) {
       <Card className="min-w-[180px] hover:bg-accent/50 transition-colors cursor-pointer">
         <CardContent className="p-4">
           <div className="flex items-center gap-2 mb-2">
-            <Bot className="h-4 w-4 text-muted-foreground" />
+            <Bot className="size-4 text-muted-foreground" />
             <span className="text-sm font-medium truncate">{agent.name}</span>
             <AgentStatusDot status={agent.status} />
           </div>
-          <div className="text-xs text-muted-foreground space-y-0.5">
+          <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
             <div className="capitalize">{agent.role}</div>
             {agent.status === 'offline' && agent.last_seen_at && (
               <div>{formatRelativeTime(agent.last_seen_at)}</div>

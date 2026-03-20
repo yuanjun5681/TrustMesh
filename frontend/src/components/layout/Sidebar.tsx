@@ -63,7 +63,7 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
       <div className="flex h-14 items-center gap-2 px-4">
         {!collapsed && (
           <Link to="/dashboard" className="flex items-center gap-2 font-semibold text-lg">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-bold">
+            <div className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-bold">
               T
             </div>
             TrustMesh
@@ -72,10 +72,10 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
         <Button
           variant="ghost"
           size="icon"
-          className={cn('ml-auto h-7 w-7', collapsed && 'mx-auto rotate-180')}
+          className={cn('ml-auto size-7', collapsed && 'mx-auto rotate-180')}
           onClick={() => setCollapsed(!collapsed)}
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="size-4" />
         </Button>
       </div>
 
@@ -84,7 +84,7 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
       {/* Navigation */}
       <ScrollArea className="flex-1 py-2">
         {/* Dashboard + Inbox */}
-        <div className="px-2 space-y-0.5">
+        <div className="flex flex-col gap-0.5 px-2">
           <Link
             to="/dashboard"
             className={cn(
@@ -92,7 +92,7 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
               isActive('/dashboard') && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
             )}
           >
-            <LayoutDashboard className="h-4 w-4 shrink-0" />
+            <LayoutDashboard className="size-4 shrink-0" />
             {!collapsed && <span>Dashboard</span>}
           </Link>
 
@@ -103,7 +103,7 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
               isActive('/inbox') && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
             )}
           >
-            <Inbox className="h-4 w-4 shrink-0" />
+            <Inbox className="size-4 shrink-0" />
             {!collapsed && (
               <>
                 <span>收件箱</span>
@@ -115,7 +115,7 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
               </>
             )}
             {collapsed && unreadCount != null && unreadCount > 0 && (
-              <span className="absolute right-1 top-0.5 h-2 w-2 rounded-full bg-primary" />
+              <span className="absolute right-1 top-0.5 size-2 rounded-full bg-primary" />
             )}
           </Link>
         </div>
@@ -129,15 +129,15 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 项目
               </span>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onCreateProject}>
-                <Plus className="h-3.5 w-3.5" />
+              <Button variant="ghost" size="icon" className="size-6" onClick={onCreateProject}>
+                <Plus className="size-3.5" />
               </Button>
             </div>
           )}
 
           {collapsed && (
             <Button variant="ghost" size="icon" className="w-full mb-1" onClick={onCreateProject}>
-              <Plus className="h-4 w-4" />
+              <Plus className="size-4" />
             </Button>
           )}
 
@@ -150,14 +150,14 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
                 projectId === project.id && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
               )}
             >
-              <FolderKanban className="h-4 w-4 shrink-0" />
+              <FolderKanban className="size-4 shrink-0" />
               {!collapsed && (
                 <span className="truncate">{project.name}</span>
               )}
               {!collapsed && (
                 <span
                   className={cn(
-                    'ml-auto h-2 w-2 rounded-full shrink-0',
+                    'ml-auto size-2 rounded-full shrink-0',
                     project.pm_agent.status === 'online' ? 'bg-status-online' :
                     project.pm_agent.status === 'busy' ? 'bg-status-busy' : 'bg-status-offline'
                   )}
@@ -188,7 +188,7 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
                 location.pathname === `/agents/${agent.id}` && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
               )}
             >
-              <Bot className="h-4 w-4 shrink-0" />
+              <Bot className="size-4 shrink-0" />
               {!collapsed && (
                 <>
                   <span className="truncate">{agent.name}</span>
@@ -205,7 +205,7 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
               isActive('/agents') && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
             )}
           >
-            <Bot className="h-4 w-4 shrink-0" />
+            <Bot className="size-4 shrink-0" />
             {!collapsed && <span>Agent 管理</span>}
           </Link>
         </div>
@@ -222,11 +222,11 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
               <span className="truncate text-sm">{user.name}</span>
             </div>
           )}
-          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={toggleTheme}>
-            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          <Button variant="ghost" size="icon" className="size-7 shrink-0" onClick={toggleTheme}>
+            {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
           </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={logout}>
-            <LogOut className="h-4 w-4" />
+          <Button variant="ghost" size="icon" className="size-7 shrink-0" onClick={logout}>
+            <LogOut className="size-4" />
           </Button>
         </div>
       </div>

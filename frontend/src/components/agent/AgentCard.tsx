@@ -35,8 +35,8 @@ export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary shrink-0">
-              <Bot className="h-5 w-5" />
+            <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary shrink-0">
+              <Bot className="size-5" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
@@ -51,11 +51,11 @@ export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
 
           <DropdownMenu>
             <DropdownMenuTrigger className="p-1 rounded hover:bg-muted shrink-0">
-              <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+              <MoreHorizontal className="size-4 text-muted-foreground" />
             </DropdownMenuTrigger>
             <DropdownMenuContent>
               <DropdownMenuItem onClick={onEdit}>
-                <Pencil className="h-3.5 w-3.5 mr-2" />
+                <Pencil className="size-3.5 mr-2" />
                 编辑
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -65,7 +65,7 @@ export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
                 className="text-destructive disabled:text-muted-foreground"
                 title={agent.usage.in_use ? `该 Agent 正被 ${usageText} 引用` : '删除 Agent'}
               >
-                <Trash2 className="h-3.5 w-3.5 mr-2" />
+                <Trash2 className="size-3.5 mr-2" />
                 {agent.usage.in_use ? '删除前需解除引用' : '删除'}
               </DropdownMenuItem>
             </DropdownMenuContent>

@@ -52,8 +52,8 @@ export function TaskListView({ tasks, selectedTaskId, onTaskClick }: TaskListVie
                 onClick={() => toggle(group.status)}
               >
                 {isCollapsed
-                  ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-                  : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  ? <ChevronRight className="size-3.5 text-muted-foreground" />
+                  : <ChevronDown className="size-3.5 text-muted-foreground" />
                 }
                 <span className="text-xs font-semibold">{group.label}</span>
                 <span className={cn(

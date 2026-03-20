@@ -11,7 +11,7 @@ export function NotificationGroup({ label, notifications, onMarkRead }: Notifica
   if (notifications.length === 0) return null
 
   return (
-    <div className="space-y-1">
+    <div className="flex flex-col gap-1">
       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-3 py-1">
         {label}
       </div>

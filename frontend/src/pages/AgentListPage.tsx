@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { AgentCard } from '@/components/agent/AgentCard'
 import { AgentConfigDialog } from '@/components/agent/AgentConfigDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useAgents, useDeleteAgent } from '@/hooks/useAgents'
 import { ApiRequestError } from '@/api/client'
 import type { Agent, AgentRole } from '@/types'
@@ -78,7 +79,7 @@ export function AgentListPage() {
           <p className="text-muted-foreground mt-1">管理 AI Agent 的配置和状态</p>
         </div>
         <Button onClick={() => { setEditingAgent(null); setShowConfig(true) }}>
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus className="size-4 mr-2" />
           添加 Agent
         </Button>
       </div>
@@ -105,7 +106,7 @@ export function AgentListPage() {
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-40 bg-muted rounded-xl animate-pulse" />
+            <Skeleton key={i} className="h-40 rounded-xl" />
           ))}
         </div>
       ) : filteredAgents.length === 0 ? (
@@ -115,7 +116,7 @@ export function AgentListPage() {
           description="添加你的第一个 AI Agent 开始协作"
           action={
             <Button onClick={() => { setEditingAgent(null); setShowConfig(true) }}>
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="size-4 mr-2" />
               添加 Agent
             </Button>
           }

@@ -40,11 +40,11 @@ export function AgentDetailPage() {
     : (events ?? []).filter((e) => e.event_type === filter)
 
   return (
-    <PageContainer className="space-y-6">
+    <PageContainer className="flex flex-col gap-6">
       <div className="flex items-center gap-2">
         <Link to="/dashboard">
           <Button variant="ghost" size="icon">
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="size-4" />
           </Button>
         </Link>
         <h1 className="text-2xl font-bold">{agent.name}</h1>

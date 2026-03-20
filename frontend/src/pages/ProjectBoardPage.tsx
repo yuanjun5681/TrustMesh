@@ -34,23 +34,23 @@ export function ProjectBoardPage() {
           {projectId && (
             <Link to={`/projects/${projectId}/chat`}>
               <Button variant="outline" size="sm">
-                <MessageSquare className="h-4 w-4 mr-1.5" />
+                <MessageSquare className="size-4 mr-1.5" />
                 对话
               </Button>
             </Link>
           )}
           <DropdownMenu>
             <DropdownMenuTrigger className="p-2 rounded-md hover:bg-muted">
-              <MoreHorizontal className="h-4 w-4" />
+              <MoreHorizontal className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent>
               <DropdownMenuItem>
-                <Pencil className="h-3.5 w-3.5 mr-2" />
+                <Pencil className="size-3.5 mr-2" />
                 编辑项目
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="text-destructive">
-                <Archive className="h-3.5 w-3.5 mr-2" />
+                <Archive className="size-3.5 mr-2" />
                 归档项目
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -61,7 +61,7 @@ export function ProjectBoardPage() {
       {/* Split layout: Task List + Detail Panel (Asana style) */}
       {isLoading ? (
         <div className="flex flex-1 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <Loader2 className="size-8 animate-spin text-muted-foreground" />
         </div>
       ) : (
         <div className="flex flex-1 min-h-0">

@@ -4,6 +4,7 @@ import { ArrowLeft, Plus, MessageSquare, AlertCircle, Sparkles, ListTodo, Bug, L
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 import { MessageBubble } from '@/components/conversation/MessageBubble'
 import { MessageInput } from '@/components/conversation/MessageInput'
 import { PlanPreview } from '@/components/conversation/PlanPreview'
@@ -76,8 +77,8 @@ export function ConversationPage() {
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <div className="flex items-center gap-2">
             <Link to={`/projects/${projectId}`}>
-              <Button variant="ghost" size="icon" className="h-7 w-7">
-                <ArrowLeft className="h-4 w-4" />
+              <Button variant="ghost" size="icon" className="size-7">
+                <ArrowLeft className="size-4" />
               </Button>
             </Link>
             <span className="text-sm font-medium">对话</span>
@@ -86,31 +87,31 @@ export function ConversationPage() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
+              className="size-7"
               onClick={() => {
                 setIsCreatingNew(true)
                 setSelectedId(null)
               }}
               disabled={pmOffline}
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="size-4" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
+              className="size-7"
               onClick={() => setSidebarOpen(false)}
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="size-4" />
             </Button>
           </div>
         </div>
 
         <ScrollArea className="flex-1">
           {isLoading ? (
-            <div className="p-4 space-y-2">
+            <div className="flex flex-col gap-2 p-4">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="h-16 bg-muted rounded-lg animate-pulse" />
+                <Skeleton key={i} className="h-16 rounded-lg" />
               ))}
             </div>
           ) : !conversations?.length ? (
@@ -118,7 +119,7 @@ export function ConversationPage() {
               暂无对话
             </div>
           ) : (
-            <div className="p-2 space-y-0.5">
+            <div className="flex flex-col gap-0.5 p-2">
               {conversations.map((conv) => (
                 <button
                   key={conv.id}
@@ -161,10 +162,10 @@ export function ConversationPage() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
+              className="size-7"
               onClick={() => setSidebarOpen(true)}
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="size-4" />
             </Button>
             <span className="text-sm font-medium truncate">{project?.name}</span>
           </div>
@@ -173,7 +174,7 @@ export function ConversationPage() {
           <>
             {/* Messages */}
             <ScrollArea className="flex-1 p-4">
-              <div className="max-w-2xl mx-auto space-y-4">
+              <div className="flex flex-col gap-4 max-w-2xl mx-auto">
                 {conversation.messages.map((msg) => (
                   <MessageBubble key={msg.id} message={msg} />
                 ))}
@@ -192,7 +193,7 @@ export function ConversationPage() {
             {error && (
               <div className="px-4 pb-2 max-w-2xl mx-auto w-full">
                 <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <AlertCircle className="size-4 shrink-0" />
                   {error}
                 </div>
               </div>
@@ -223,8 +224,8 @@ export function ConversationPage() {
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center px-4">
             <div className="w-full max-w-xl flex flex-col items-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 mb-5">
-                <Sparkles className="h-7 w-7 text-primary" />
+              <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 mb-5">
+                <Sparkles className="size-7 text-primary" />
               </div>
               <h2 className="text-xl font-semibold mb-2">开始新对话</h2>
               <p className="text-sm text-muted-foreground mb-8 text-center max-w-sm">
@@ -248,7 +249,7 @@ export function ConversationPage() {
                         className="group flex flex-col items-start gap-2 rounded-xl border bg-card p-4 text-left transition-all hover:border-primary/30 hover:shadow-sm disabled:opacity-50 cursor-pointer"
                       >
                         <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground group-hover:text-primary transition-colors">
-                          <example.icon className="h-3.5 w-3.5" />
+                          <example.icon className="size-3.5" />
                           {example.label}
                         </div>
                         <span className="text-sm leading-snug">{example.text}</span>

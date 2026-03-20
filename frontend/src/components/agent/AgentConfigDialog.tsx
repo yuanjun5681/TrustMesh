@@ -90,8 +90,8 @@ export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
         <DialogHeader>
           <DialogTitle>{isEditing ? '编辑 Agent' : '添加 Agent'}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-          <div className="space-y-2">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-2">
+          <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">节点 ID</label>
             <Input
               value={nodeId}
@@ -104,7 +104,7 @@ export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
               <p className="text-xs text-muted-foreground">节点 ID 创建后不可修改</p>
             )}
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">名称</label>
             <Input
               value={name}
@@ -113,7 +113,7 @@ export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
               required
             />
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">角色</label>
             <Select value={role} onValueChange={(val) => setRole(val as AgentRole)}>
               <SelectTrigger className="w-full">
@@ -127,7 +127,7 @@ export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">描述</label>
             <Textarea
               value={description}
@@ -137,7 +137,7 @@ export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
               required
             />
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">能力标签</label>
             <div className="flex gap-2">
               <Input
@@ -161,7 +161,7 @@ export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
                   <Badge key={cap} variant="secondary" className="gap-1">
                     {cap}
                     <button type="button" onClick={() => removeCapability(cap)} className="cursor-pointer">
-                      <X className="h-3 w-3" />
+                      <X className="size-3" />
                     </button>
                   </Badge>
                 ))}

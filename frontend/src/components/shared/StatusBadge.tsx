@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 import type { TaskStatus, TaskPriority, AgentStatus } from '@/types'
 
 const taskStatusConfig: Record<TaskStatus, { label: string; variant: 'secondary' | 'info' | 'success' | 'destructive' }> = {
@@ -44,5 +45,5 @@ export function AgentStatusDot({ status }: { status: AgentStatus }) {
   const colorClass =
     status === 'online' ? 'bg-status-online' :
     status === 'busy' ? 'bg-status-busy' : 'bg-status-offline'
-  return <span className={`inline-block h-2 w-2 rounded-full ${colorClass}`} />
+  return <span className={cn('inline-block size-2 rounded-full', colorClass)} />
 }

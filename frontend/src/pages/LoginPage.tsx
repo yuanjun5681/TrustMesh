@@ -35,7 +35,7 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 px-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground text-lg font-bold">
+          <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground text-lg font-bold">
             T
           </div>
           <h1 className="text-2xl font-bold">欢迎回来</h1>
@@ -47,8 +47,8 @@ export function LoginPage() {
             <CardDescription>使用邮箱和密码登录</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium">邮箱</label>
                 <Input
                   type="email"
@@ -59,7 +59,7 @@ export function LoginPage() {
                   autoFocus
                 />
               </div>
-              <div className="space-y-2">
+              <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium">密码</label>
                 <Input
                   type="password"

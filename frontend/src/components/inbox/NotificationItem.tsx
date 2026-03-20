@@ -66,13 +66,13 @@ export function NotificationItem({ notification, onMarkRead }: NotificationItemP
       <div className="flex gap-3 p-3">
         <div className="flex items-start gap-2 pt-0.5">
           {!notification.is_read ? (
-            <span className="inline-block h-2 w-2 rounded-full bg-primary mt-1.5 shrink-0" />
+            <span className="inline-block size-2 rounded-full bg-primary mt-1.5 shrink-0" />
           ) : (
-            <span className="inline-block h-2 w-2 shrink-0" />
+            <span className="inline-block size-2 shrink-0" />
           )}
           <span
             className={cn(
-              'inline-block h-1.5 w-1.5 rounded-full mt-2 shrink-0',
+              'inline-block size-1.5 rounded-full mt-2 shrink-0',
               priorityDotColors[notification.priority]
             )}
           />
@@ -100,7 +100,7 @@ export function NotificationItem({ notification, onMarkRead }: NotificationItemP
             className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
             onClick={(e) => e.stopPropagation()}
           >
-            <ExternalLink className="h-3 w-3" />
+            <ExternalLink className="size-3" />
             {linkInfo.text}
           </Link>
         </div>
