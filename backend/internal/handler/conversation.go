@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 	"trustmesh/backend/internal/clawsynapse"
 	"trustmesh/backend/internal/model"
+	"trustmesh/backend/internal/protocol"
 	"trustmesh/backend/internal/store"
 	"trustmesh/backend/internal/transport"
 )
@@ -25,37 +26,6 @@ func NewConversationHandler(s *store.Store, publisher *clawsynapse.Client, log *
 
 type createConversationRequest struct {
 	Content string `json:"content"`
-}
-
-type pmConversationMessage struct {
-	ConversationID  string                 `json:"conversation_id"`
-	ProjectID       string                 `json:"project_id"`
-	Content         string                 `json:"content"`
-	UserContent     string                 `json:"user_content"`
-	IsInitial       bool                   `json:"is_initial_message"`
-	Project         *pmConversationProject `json:"project,omitempty"`
-	PMBrief         *pmConversationBrief   `json:"pm_brief,omitempty"`
-	CandidateAgents []pmConversationAgent  `json:"candidate_agents,omitempty"`
-}
-
-type pmConversationProject struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-}
-
-type pmConversationBrief struct {
-	Objective                   string `json:"objective"`
-	MustClarifyBeforeTaskCreate bool   `json:"must_clarify_before_task_create"`
-	MustUseSkill                string `json:"must_use_skill"`
-}
-
-type pmConversationAgent struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	NodeID       string   `json:"node_id"`
-	Role         string   `json:"role"`
-	Status       string   `json:"status"`
-	Capabilities []string `json:"capabilities"`
 }
 
 func (h *ConversationHandler) Create(c *gin.Context) {
@@ -153,8 +123,8 @@ func (h *ConversationHandler) notifyPM(userID, projectID, conversationID, conten
 	}
 }
 
-func (h *ConversationHandler) buildPMConversationMessage(userID, projectID, conversationID, userContent string, initial bool) pmConversationMessage {
-	payload := pmConversationMessage{
+func (h *ConversationHandler) buildPMConversationMessage(userID, projectID, conversationID, userContent string, initial bool) protocol.PMConversationMessage {
+	payload := protocol.PMConversationMessage{
 		ConversationID: conversationID,
 		ProjectID:      projectID,
 		UserContent:    userContent,
@@ -179,7 +149,7 @@ func (h *ConversationHandler) buildPMConversationMessage(userID, projectID, conv
 	}
 
 	candidates := buildCandidateAgents(project.PMAgent.ID, h.store.ListAgents(userID))
-	payload.Project = &pmConversationProject{
+	payload.Project = &protocol.PMConversationProject{
 		Name:        project.Name,
 		Description: project.Description,
 	}
@@ -188,21 +158,21 @@ func (h *ConversationHandler) buildPMConversationMessage(userID, projectID, conv
 	return payload
 }
 
-func defaultPMBrief() *pmConversationBrief {
-	return &pmConversationBrief{
+func defaultPMBrief() *protocol.PMConversationBrief {
+	return &protocol.PMConversationBrief{
 		Objective:                   "明确任务目标和业务目的；在需求清晰前持续澄清；仅在需求满足执行条件后拆解任务并派发给其他 Agent。",
 		MustClarifyBeforeTaskCreate: true,
 		MustUseSkill:                "tm-task-plan",
 	}
 }
 
-func buildCandidateAgents(pmAgentID string, agents []model.Agent) []pmConversationAgent {
-	out := make([]pmConversationAgent, 0, len(agents))
+func buildCandidateAgents(pmAgentID string, agents []model.Agent) []protocol.PMConversationAgent {
+	out := make([]protocol.PMConversationAgent, 0, len(agents))
 	for _, agent := range agents {
 		if agent.ID == pmAgentID {
 			continue
 		}
-		out = append(out, pmConversationAgent{
+		out = append(out, protocol.PMConversationAgent{
 			ID:           agent.ID,
 			Name:         agent.Name,
 			NodeID:       agent.NodeID,

@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 	"trustmesh/backend/internal/clawsynapse"
 	"trustmesh/backend/internal/model"
+	"trustmesh/backend/internal/protocol"
 	"trustmesh/backend/internal/store"
 	"trustmesh/backend/internal/transport"
 )
@@ -16,20 +17,6 @@ type TaskHandler struct {
 	store     *store.Store
 	publisher *clawsynapse.Client
 	log       *zap.Logger
-}
-
-type todoAssignedPayload struct {
-	TaskID      string         `json:"task_id"`
-	TodoID      string         `json:"todo_id"`
-	Title       string         `json:"title"`
-	Description string         `json:"description"`
-	Content     string         `json:"content"`
-	ExecBrief   *todoExecBrief `json:"exec_brief,omitempty"`
-}
-
-type todoExecBrief struct {
-	Objective    string `json:"objective"`
-	MustUseSkill string `json:"must_use_skill"`
 }
 
 func NewTaskHandler(s *store.Store, publisher *clawsynapse.Client, log *zap.Logger) *TaskHandler {
@@ -118,13 +105,13 @@ func (h *TaskHandler) DispatchTodo(c *gin.Context) {
 		return
 	}
 
-	payload := todoAssignedPayload{
+	payload := protocol.TodoAssignedPayload{
 		TaskID:      task.ID,
 		TodoID:      todo.ID,
 		Title:       todo.Title,
 		Description: todo.Description,
 		Content:     "你收到了一个新的 Todo 任务。请使用 /tm-task-exec skill 执行此任务，按要求回报进度和结果。",
-		ExecBrief: &todoExecBrief{
+		ExecBrief: &protocol.TodoExecBrief{
 			Objective:    "执行分派的 Todo 任务；及时回报进度；完成后提交结果，失败时说明原因。",
 			MustUseSkill: "tm-task-exec",
 		},
