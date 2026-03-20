@@ -199,8 +199,9 @@ type Notification struct {
 	UserID    string     `json:"-" bson:"user_id"`
 	EventID   string     `json:"event_id" bson:"event_id"`
 	ProjectID string     `json:"project_id" bson:"project_id"`
-	TaskID    string     `json:"task_id,omitempty" bson:"task_id,omitempty"`
-	Title     string     `json:"title" bson:"title"`
+	TaskID         string     `json:"task_id,omitempty" bson:"task_id,omitempty"`
+	ConversationID string     `json:"conversation_id,omitempty" bson:"conversation_id,omitempty"`
+	Title          string     `json:"title" bson:"title"`
 	Body      string     `json:"body" bson:"body"`
 	Category  string     `json:"category" bson:"category"`
 	Priority  string     `json:"priority" bson:"priority"`

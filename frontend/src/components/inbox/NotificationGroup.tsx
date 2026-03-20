@@ -5,9 +5,10 @@ interface NotificationGroupProps {
   label: string
   notifications: Notification[]
   onMarkRead?: (id: string) => void
+  onViewConversation?: (projectId: string, conversationId?: string) => void
 }
 
-export function NotificationGroup({ label, notifications, onMarkRead }: NotificationGroupProps) {
+export function NotificationGroup({ label, notifications, onMarkRead, onViewConversation }: NotificationGroupProps) {
   if (notifications.length === 0) return null
 
   return (
@@ -16,7 +17,7 @@ export function NotificationGroup({ label, notifications, onMarkRead }: Notifica
         {label}
       </div>
       {notifications.map((n) => (
-        <NotificationItem key={n.id} notification={n} onMarkRead={onMarkRead} />
+        <NotificationItem key={n.id} notification={n} onMarkRead={onMarkRead} onViewConversation={onViewConversation} />
       ))}
     </div>
   )

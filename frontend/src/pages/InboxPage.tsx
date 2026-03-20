@@ -3,6 +3,7 @@ import { PageContainer } from '@/components/layout/PageContainer'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { NotificationGroup } from '@/components/inbox/NotificationGroup'
+import { ConversationSheet } from '@/components/conversation/ConversationSheet'
 import { groupNotificationsByDate } from '@/lib/notifications'
 import { useNotifications, useMarkNotificationRead, useMarkAllRead } from '@/hooks/useNotifications'
 import { toast } from 'sonner'
@@ -18,9 +19,14 @@ export function InboxPage() {
   const { data: notifications, isLoading } = useNotifications(filter)
   const markRead = useMarkNotificationRead()
   const markAllRead = useMarkAllRead()
+  const [chatState, setChatState] = useState<{ projectId: string; conversationId?: string } | null>(null)
 
   const groups = notifications ? groupNotificationsByDate(notifications) : []
   const hasUnread = notifications?.some((n) => !n.is_read) ?? false
+
+  const handleViewConversation = (projectId: string, conversationId?: string) => {
+    setChatState({ projectId, conversationId })
+  }
 
   return (
     <PageContainer className="flex flex-col h-full gap-4">
@@ -71,10 +77,20 @@ export function InboxPage() {
                 label={group.label}
                 notifications={group.items}
                 onMarkRead={(id) => markRead.mutate(id)}
+                onViewConversation={handleViewConversation}
               />
             ))}
           </div>
         </ScrollArea>
+      )}
+
+      {chatState && (
+        <ConversationSheet
+          projectId={chatState.projectId}
+          initialConversationId={chatState.conversationId}
+          open={!!chatState}
+          onOpenChange={(open) => { if (!open) setChatState(null) }}
+        />
       )}
     </PageContainer>
   )

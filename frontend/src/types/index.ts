@@ -240,6 +240,7 @@ export interface Notification {
   event_id: string
   project_id: string
   task_id?: string
+  conversation_id?: string
   title: string
   body: string
   category: 'task' | 'todo' | 'conversation' | 'system'

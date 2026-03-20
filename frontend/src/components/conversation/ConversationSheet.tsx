@@ -187,13 +187,7 @@ export function ConversationSheet({ projectId, open, onOpenChange, initialConver
         {/* Footer */}
         <div className="px-4 py-3 shrink-0 flex justify-center">
           <div className="w-full max-w-2xl">
-          {isHistoryMode ? (
-            conversation?.status === 'resolved' ? (
-              <div className="text-center text-sm text-muted-foreground py-2">
-                对话已结束
-              </div>
-            ) : null
-          ) : conversation?.status === 'resolved' ? (
+          {conversation?.status === 'resolved' ? (
             <div className="text-center text-sm text-muted-foreground py-2">
               对话已结束
             </div>

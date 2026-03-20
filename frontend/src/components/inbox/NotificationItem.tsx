@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -17,42 +16,45 @@ const priorityDotColors: Record<string, string> = {
   low: 'bg-muted-foreground',
 }
 
-const categoryLabels: Record<string, { text: string; path: (n: Notification) => string | null }> = {
-  task: {
-    text: '查看任务',
-    path: (n) => n.task_id ? `/projects/${n.project_id}` : null,
-  },
-  todo: {
-    text: '查看任务',
-    path: (n) => n.task_id ? `/projects/${n.project_id}` : null,
-  },
-  conversation: {
-    text: '查看对话',
-    path: (n) => `/projects/${n.project_id}/chat`,
-  },
-  system: {
-    text: '',
-    path: () => null,
-  },
+function truncateBody(body: string, maxLen = 80): string {
+  // Strip markdown formatting for preview
+  const plain = body.replace(/[*_~`#>\-\[\]()]/g, '').replace(/\n+/g, ' ').trim()
+  return plain.length > maxLen ? plain.slice(0, maxLen) + '...' : plain
 }
 
 interface NotificationItemProps {
   notification: Notification
   onMarkRead?: (id: string) => void
+  onViewConversation?: (projectId: string, conversationId?: string) => void
 }
 
-export function NotificationItem({ notification, onMarkRead }: NotificationItemProps) {
-  const [expanded, setExpanded] = useState(false)
-
+export function NotificationItem({ notification, onMarkRead, onViewConversation }: NotificationItemProps) {
   const handleClick = () => {
     if (!notification.is_read && onMarkRead) {
       onMarkRead(notification.id)
     }
-    setExpanded(!expanded)
   }
 
-  const linkInfo = categoryLabels[notification.category]
-  const linkPath = linkInfo?.path(notification)
+  const getLinkInfo = () => {
+    switch (notification.category) {
+      case 'task':
+      case 'todo':
+        return notification.task_id
+          ? { text: '查看任务', path: `/projects/${notification.project_id}` }
+          : null
+      case 'conversation':
+        return { text: '查看对话', path: null }
+      default:
+        return null
+    }
+  }
+
+  const linkInfo = getLinkInfo()
+
+  const handleConversationClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    onViewConversation?.(notification.project_id, notification.conversation_id)
+  }
 
   return (
     <div
@@ -62,7 +64,6 @@ export function NotificationItem({ notification, onMarkRead }: NotificationItemP
       )}
       onClick={handleClick}
     >
-      {/* 折叠态：标题 + 截断 body */}
       <div className="flex gap-3 p-3">
         <div className="flex items-start gap-2 pt-0.5">
           {!notification.is_read ? (
@@ -86,25 +87,33 @@ export function NotificationItem({ notification, onMarkRead }: NotificationItemP
               {formatRelativeTime(notification.created_at)}
             </span>
           </div>
-          <p className={cn('text-sm text-muted-foreground mt-0.5', !expanded && 'truncate')}>
-            {notification.body}
+          <p className="text-sm text-muted-foreground mt-0.5 truncate">
+            {truncateBody(notification.body)}
           </p>
+          {linkInfo && (
+            <div className="mt-1.5">
+              {linkInfo.path ? (
+                <Link
+                  to={linkInfo.path}
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ExternalLink className="size-3" />
+                  {linkInfo.text}
+                </Link>
+              ) : (
+                <button
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline cursor-pointer"
+                  onClick={handleConversationClick}
+                >
+                  <ExternalLink className="size-3" />
+                  {linkInfo.text}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
-
-      {/* 展开态：完整内容 + 跳转链接 */}
-      {expanded && linkPath && (
-        <div className="px-3 pb-3 ml-[26px]">
-          <Link
-            to={linkPath}
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <ExternalLink className="size-3" />
-            {linkInfo.text}
-          </Link>
-        </div>
-      )}
     </div>
   )
 }
