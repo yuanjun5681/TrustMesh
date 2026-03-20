@@ -22,7 +22,10 @@
       "Bash(npx shadcn@latest init -y -d)",
       "Bash(npx:*)",
       "WebFetch(domain:ui.shadcn.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(find /Volumes/UWorks/Projects/TrustMesh/frontend/src/pages -type f -name *.tsx)",
+      "Bash(find /Volumes/UWorks/Projects/TrustMesh/frontend/src -type f -name *router* -o -name *Router*)",
+      "Bash(find /Volumes/UWorks/Projects/TrustMesh/frontend/src/hooks -type f -name *.ts)"
     ]
   }
 }

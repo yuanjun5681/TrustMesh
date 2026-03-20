@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { MessageSquare, MoreHorizontal, Pencil, Archive, Loader2 } from 'lucide-react'
+import { useParams } from 'react-router-dom'
+import { MessageSquarePlus, MoreHorizontal, Pencil, Archive, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { AgentStatusDot } from '@/components/shared/StatusBadge'
 import { TaskListView } from '@/components/task/TaskListView'
 import { TaskDetailPanel } from '@/components/task/TaskDetailPanel'
+import { ConversationSheet } from '@/components/conversation/ConversationSheet'
 import { useProject } from '@/hooks/useProjects'
 import { useTasks } from '@/hooks/useTasks'
 
@@ -14,6 +15,7 @@ export function ProjectBoardPage() {
   const { data: project } = useProject(projectId)
   const { data: tasks, isLoading } = useTasks(projectId)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
 
   return (
     <div className="flex h-full flex-col">
@@ -31,14 +33,10 @@ export function ProjectBoardPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {projectId && (
-            <Link to={`/projects/${projectId}/chat`}>
-              <Button variant="outline" size="sm">
-                <MessageSquare className="size-4 mr-1.5" />
-                对话
-              </Button>
-            </Link>
-          )}
+          <Button size="sm" onClick={() => setSheetOpen(true)}>
+            <MessageSquarePlus className="size-4 mr-1.5" />
+            提交新需求
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger className="p-2 rounded-md hover:bg-muted">
               <MoreHorizontal className="size-4" />
@@ -85,6 +83,19 @@ export function ProjectBoardPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Conversation Sheet */}
+      {projectId && (
+        <ConversationSheet
+          projectId={projectId}
+          open={sheetOpen}
+          onOpenChange={setSheetOpen}
+          onTaskCreated={(taskId) => {
+            setSheetOpen(false)
+            setSelectedTaskId(taskId)
+          }}
+        />
       )}
     </div>
   )
