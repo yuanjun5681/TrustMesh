@@ -64,7 +64,7 @@ export function ProjectBoardPage() {
       ) : (
         <div className="flex flex-1 min-h-0">
           {/* Left: Task List */}
-          <div className={`px-6 ${selectedTaskId ? 'w-1/2 border-r' : 'w-full'}`}>
+          <div className={`px-6 h-full ${selectedTaskId ? 'w-1/2 border-r' : 'w-full'}`}>
             <TaskListView
               tasks={tasks ?? []}
               selectedTaskId={selectedTaskId}
@@ -74,7 +74,7 @@ export function ProjectBoardPage() {
 
           {/* Right: Detail Panel */}
           {selectedTaskId && (
-            <div className="w-1/2">
+            <div className="w-1/2 h-full">
               <TaskDetailPanel
                 key={selectedTaskId}
                 taskId={selectedTaskId}
