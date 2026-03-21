@@ -35,7 +35,7 @@ export function TaskListRow({ task, isSelected, onClick }: TaskListRowProps) {
     >
       {/* Name */}
       <div className="flex items-center gap-2.5 min-w-0">
-        <Icon className={cn('h-4 w-4 shrink-0', iconClass)} />
+        <Icon className={cn('size-4 shrink-0', iconClass)} />
         <div className="min-w-0">
           <div className="text-sm font-medium truncate">{task.title}</div>
           {task.description && (

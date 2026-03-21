@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { FolderKanban, Plus } from 'lucide-react'
+import { PageContainer } from '@/components/layout/PageContainer'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { AgentStatusDot } from '@/components/shared/StatusBadge'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { CreateProjectDialog } from '@/components/project/CreateProjectDialog'
@@ -15,28 +17,28 @@ export function ProjectListPage() {
   const activeProjects = projects?.filter((p) => p.status === 'active') ?? []
 
   return (
-    <div className="p-6 lg:p-8 max-w-6xl mx-auto">
+    <PageContainer>
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold">项目</h1>
           <p className="text-muted-foreground mt-1">管理你的 AI Agent 协作项目</p>
         </div>
         <Button onClick={() => setShowCreate(true)}>
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus className="size-4 mr-2" />
           新建项目
         </Button>
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {[1, 2, 3].map((i) => (
-            <Card key={i} className="animate-pulse">
+            <Card key={i}>
               <CardHeader>
-                <div className="h-5 bg-muted rounded w-32" />
-                <div className="h-4 bg-muted rounded w-48 mt-2" />
+                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-4 w-48 mt-2" />
               </CardHeader>
               <CardContent>
-                <div className="h-4 bg-muted rounded w-24" />
+                <Skeleton className="h-4 w-24" />
               </CardContent>
             </Card>
           ))}
@@ -48,19 +50,19 @@ export function ProjectListPage() {
           description="创建你的第一个项目，开始用 AI Agent 协作完成任务"
           action={
             <Button onClick={() => setShowCreate(true)}>
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="size-4 mr-2" />
               创建项目
             </Button>
           }
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {activeProjects.map((project) => (
             <Link key={project.id} to={`/projects/${project.id}`}>
               <Card className="transition-all hover:shadow-md hover:border-primary/30 cursor-pointer group">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base group-hover:text-primary transition-colors">
-                    <FolderKanban className="h-4 w-4 shrink-0" />
+                    <FolderKanban className="size-4 shrink-0" />
                     {project.name}
                   </CardTitle>
                   <CardDescription className="line-clamp-2">
@@ -83,6 +85,6 @@ export function ProjectListPage() {
       )}
 
       <CreateProjectDialog open={showCreate} onOpenChange={setShowCreate} />
-    </div>
+    </PageContainer>
   )
 }

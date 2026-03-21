@@ -36,8 +36,17 @@ export const api = ky.create({
               window.location.href = '/login'
             }
           }
-          const body = await response.json<{ error: ApiError }>()
-          throw new ApiRequestError(body.error, response.status)
+          let apiError: ApiError | undefined
+          try {
+            const body = await response.json<{ error: ApiError }>()
+            apiError = body.error
+          } catch {
+            // response body is not valid JSON or not in expected format
+          }
+          throw new ApiRequestError(
+            apiError ?? { code: 'UNKNOWN', message: `请求失败 (${response.status})`, details: {} },
+            response.status,
+          )
         }
       },
     ],

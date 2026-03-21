@@ -1,5 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
 import { ChevronLeft } from 'lucide-react'
+import { PageContainer } from '@/components/layout/PageContainer'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -39,11 +40,11 @@ export function AgentDetailPage() {
     : (events ?? []).filter((e) => e.event_type === filter)
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl mx-auto">
+    <PageContainer className="flex flex-col gap-6">
       <div className="flex items-center gap-2">
         <Link to="/dashboard">
           <Button variant="ghost" size="icon">
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="size-4" />
           </Button>
         </Link>
         <h1 className="text-2xl font-bold">{agent.name}</h1>
@@ -90,7 +91,7 @@ export function AgentDetailPage() {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base">活动历史</CardTitle>
-            <div className="flex gap-1">
+            <div className="flex gap-1 flex-wrap">
               {eventTypeFilters.map((f) => (
                 <Button
                   key={f.value}
@@ -106,7 +107,7 @@ export function AgentDetailPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <ScrollArea className="h-[500px]">
+          <ScrollArea className="max-h-[min(500px,60vh)] overflow-auto">
             <EventTimeline
               events={filteredEvents}
               loading={eventsLoading}
@@ -115,6 +116,6 @@ export function AgentDetailPage() {
           </ScrollArea>
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   )
 }

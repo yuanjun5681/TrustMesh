@@ -22,11 +22,11 @@ export function BoardColumn({ status, tasks, onTaskClick }: BoardColumnProps) {
     <div className="flex flex-col min-w-[280px] w-[280px]">
       <div className={cn('rounded-t-lg border-t-2 px-3 py-2.5 flex items-center justify-between', config.accent)}>
         <span className="text-sm font-medium">{config.title}</span>
-        <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-muted px-1.5 text-xs font-medium text-muted-foreground">
+        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-xs font-medium text-muted-foreground">
           {tasks.length}
         </span>
       </div>
-      <div className="flex-1 space-y-2 p-1 overflow-y-auto">
+      <div className="flex flex-1 flex-col gap-2 p-1 overflow-y-auto">
         {tasks.map((task) => (
           <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task.id)} />
         ))}

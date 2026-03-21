@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { MessageSquare, MoreHorizontal, Pencil, Archive, Loader2 } from 'lucide-react'
+import { useParams } from 'react-router-dom'
+import { MessageSquarePlus, MoreHorizontal, Pencil, Archive, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { AgentStatusDot } from '@/components/shared/StatusBadge'
 import { TaskListView } from '@/components/task/TaskListView'
 import { TaskDetailPanel } from '@/components/task/TaskDetailPanel'
+import { ConversationSheet } from '@/components/conversation/ConversationSheet'
 import { useProject } from '@/hooks/useProjects'
 import { useTasks } from '@/hooks/useTasks'
 
@@ -14,6 +15,7 @@ export function ProjectBoardPage() {
   const { data: project } = useProject(projectId)
   const { data: tasks, isLoading } = useTasks(projectId)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
 
   return (
     <div className="flex h-full flex-col">
@@ -31,26 +33,22 @@ export function ProjectBoardPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {projectId && (
-            <Link to={`/projects/${projectId}/chat`}>
-              <Button variant="outline" size="sm">
-                <MessageSquare className="h-4 w-4 mr-1.5" />
-                对话
-              </Button>
-            </Link>
-          )}
+          <Button size="sm" onClick={() => setSheetOpen(true)}>
+            <MessageSquarePlus className="size-4 mr-1.5" />
+            提交新需求
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger className="p-2 rounded-md hover:bg-muted">
-              <MoreHorizontal className="h-4 w-4" />
+              <MoreHorizontal className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent>
               <DropdownMenuItem>
-                <Pencil className="h-3.5 w-3.5 mr-2" />
+                <Pencil className="size-3.5 mr-2" />
                 编辑项目
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="text-destructive">
-                <Archive className="h-3.5 w-3.5 mr-2" />
+                <Archive className="size-3.5 mr-2" />
                 归档项目
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -58,15 +56,15 @@ export function ProjectBoardPage() {
         </div>
       </div>
 
-      {/* Split layout: Task List + Detail Panel */}
+      {/* Split layout: Task List + Detail Panel (Asana style) */}
       {isLoading ? (
         <div className="flex flex-1 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <Loader2 className="size-8 animate-spin text-muted-foreground" />
         </div>
       ) : (
         <div className="flex flex-1 min-h-0">
           {/* Left: Task List */}
-          <div className={selectedTaskId ? 'w-1/2 border-r' : 'w-full'}>
+          <div className={`px-6 h-full ${selectedTaskId ? 'w-1/2 border-r' : 'w-full'}`}>
             <TaskListView
               tasks={tasks ?? []}
               selectedTaskId={selectedTaskId}
@@ -76,7 +74,7 @@ export function ProjectBoardPage() {
 
           {/* Right: Detail Panel */}
           {selectedTaskId && (
-            <div className="w-1/2">
+            <div className="w-1/2 h-full">
               <TaskDetailPanel
                 key={selectedTaskId}
                 taskId={selectedTaskId}
@@ -85,6 +83,19 @@ export function ProjectBoardPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Conversation Sheet */}
+      {projectId && (
+        <ConversationSheet
+          projectId={projectId}
+          open={sheetOpen}
+          onOpenChange={setSheetOpen}
+          onTaskCreated={(taskId) => {
+            setSheetOpen(false)
+            setSelectedTaskId(taskId)
+          }}
+        />
       )}
     </div>
   )

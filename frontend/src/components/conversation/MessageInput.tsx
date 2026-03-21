@@ -6,12 +6,19 @@ interface MessageInputProps {
   onSend: (content: string) => void
   disabled?: boolean
   placeholder?: string
+  defaultValue?: string
 }
 
-export function MessageInput({ onSend, disabled, placeholder = '输入你的需求...' }: MessageInputProps) {
-  const [value, setValue] = useState('')
+export function MessageInput({ onSend, disabled, placeholder = '输入你的需求...', defaultValue }: MessageInputProps) {
+  const [value, setValue] = useState(defaultValue ?? '')
   const [isComposing, setIsComposing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (defaultValue !== undefined) {
+      setValue(defaultValue)
+    }
+  }, [defaultValue])
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -50,11 +57,11 @@ export function MessageInput({ onSend, disabled, placeholder = '输入你的需�
       />
       <Button
         size="icon"
-        className="h-9 w-9 shrink-0 rounded-xl"
+        className="size-9 shrink-0 rounded-xl"
         onClick={handleSubmit}
         disabled={disabled || !value.trim()}
       >
-        <Send className="h-4 w-4" />
+        <Send className="size-4" />
       </Button>
     </div>
   )

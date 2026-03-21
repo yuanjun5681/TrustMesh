@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useAuthStore } from '@/stores/authStore'
 import * as authApi from '@/api/auth'
 import { ApiRequestError } from '@/api/client'
+import { toast } from 'sonner'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
@@ -24,8 +25,9 @@ export function LoginPage() {
       setAuth(res.data.token, res.data.user)
       navigate('/projects')
     } catch (err) {
-      if (err instanceof ApiRequestError) setError(err.message)
-      else setError('登录失败，请重试')
+      const message = err instanceof ApiRequestError ? err.message : '登录失败，请重试'
+      toast.error(message)
+      setError(message)
     } finally {
       setLoading(false)
     }
@@ -35,7 +37,7 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 px-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground text-lg font-bold">
+          <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground text-lg font-bold">
             T
           </div>
           <h1 className="text-2xl font-bold">欢迎回来</h1>
@@ -47,8 +49,8 @@ export function LoginPage() {
             <CardDescription>使用邮箱和密码登录</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium">邮箱</label>
                 <Input
                   type="email"
@@ -59,7 +61,7 @@ export function LoginPage() {
                   autoFocus
                 />
               </div>
-              <div className="space-y-2">
+              <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium">密码</label>
                 <Input
                   type="password"
@@ -69,7 +71,6 @@ export function LoginPage() {
                   required
                 />
               </div>
-              {error && <p className="text-sm text-destructive">{error}</p>}
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? '登录中...' : '登录'}
               </Button>

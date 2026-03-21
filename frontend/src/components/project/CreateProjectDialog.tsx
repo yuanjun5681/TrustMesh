@@ -3,10 +3,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Select } from '@/components/ui/select'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { useCreateProject } from '@/hooks/useProjects'
 import { useAgents } from '@/hooks/useAgents'
 import { ApiRequestError } from '@/api/client'
+import { toast } from 'sonner'
 
 interface Props {
   open: boolean
@@ -32,25 +33,27 @@ export function CreateProjectDialog({ open, onOpenChange }: Props) {
         description,
         pm_agent_id: pmAgentId,
       })
+      toast.success('项目已创建')
       setName('')
       setDescription('')
       setPmAgentId('')
       onOpenChange(false)
     } catch (err) {
-      if (err instanceof ApiRequestError) setError(err.message)
-      else setError('创建失败')
+      const message = err instanceof ApiRequestError ? err.message : '创建失败'
+      toast.error(message)
+      setError(message)
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>创建项目</DialogTitle>
           <DialogDescription>新建一个 AI Agent 协作项目</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-          <div className="space-y-2">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-4">
+          <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">项目名称</label>
             <Input
               value={name}
@@ -59,7 +62,7 @@ export function CreateProjectDialog({ open, onOpenChange }: Props) {
               required
             />
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">项目描述</label>
             <Textarea
               value={description}
@@ -69,19 +72,19 @@ export function CreateProjectDialog({ open, onOpenChange }: Props) {
               required
             />
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">PM Agent</label>
-            <Select
-              value={pmAgentId}
-              onChange={(e) => setPmAgentId(e.target.value)}
-              required
-            >
-              <option value="">选择 PM Agent...</option>
-              {pmAgents.map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {agent.name} ({agent.node_id}) - {agent.status === 'online' ? '在线' : '离线'}
-                </option>
-              ))}
+            <Select value={pmAgentId} onValueChange={(val) => setPmAgentId(val ?? '')}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="选择 PM Agent..." />
+              </SelectTrigger>
+              <SelectContent>
+                {pmAgents.map((agent) => (
+                  <SelectItem key={agent.id} value={agent.id}>
+                    {agent.name} ({agent.node_id}) - {agent.status === 'online' ? '在线' : '离线'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
             {pmAgents.length === 0 && (
               <p className="text-xs text-muted-foreground">

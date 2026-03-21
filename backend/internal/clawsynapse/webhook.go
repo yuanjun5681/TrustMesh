@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"trustmesh/backend/internal/model"
+	"trustmesh/backend/internal/protocol"
 	"trustmesh/backend/internal/store"
 	"trustmesh/backend/internal/transport"
 )
@@ -18,92 +19,6 @@ type WebhookHandler struct {
 	client      *Client
 	localNodeID string
 	log         *zap.Logger
-}
-
-type WebhookPayload struct {
-	NodeID     string         `json:"nodeId"`
-	Type       string         `json:"type"`
-	From       string         `json:"from"`
-	SessionKey string         `json:"sessionKey"`
-	Message    string         `json:"message"`
-	Metadata   map[string]any `json:"metadata"`
-}
-
-type conversationReplyPayload struct {
-	ConversationID string `json:"conversation_id"`
-	Content        string `json:"content"`
-}
-
-type taskCreatePayload struct {
-	ProjectID      string                  `json:"project_id"`
-	ConversationID string                  `json:"conversation_id"`
-	Title          string                  `json:"title"`
-	Description    string                  `json:"description"`
-	Todos          []taskCreateTodoPayload `json:"todos"`
-}
-
-type taskCreateTodoPayload struct {
-	ID             string `json:"id"`
-	Title          string `json:"title"`
-	Description    string `json:"description"`
-	AssigneeNodeID string `json:"assignee_node_id"`
-}
-
-type todoProgressPayload struct {
-	TaskID  string `json:"task_id"`
-	TodoID  string `json:"todo_id"`
-	Message string `json:"message"`
-}
-
-type todoCompletePayload struct {
-	TaskID string           `json:"task_id"`
-	TodoID string           `json:"todo_id"`
-	Result model.TodoResult `json:"result"`
-}
-
-type todoFailPayload struct {
-	TaskID string `json:"task_id"`
-	TodoID string `json:"todo_id"`
-	Error  string `json:"error"`
-}
-
-type taskCreatedPayload struct {
-	TaskID         string `json:"task_id"`
-	ProjectID      string `json:"project_id"`
-	ConversationID string `json:"conversation_id"`
-	Title          string `json:"title"`
-}
-
-type taskStatusChangedPayload struct {
-	TaskID      string `json:"task_id"`
-	Status      string `json:"status"`
-	ActorNodeID string `json:"actor_node_id,omitempty"`
-	Cause       string `json:"cause,omitempty"`
-	Version     int    `json:"version"`
-}
-
-type todoAssignedPayload struct {
-	TaskID      string         `json:"task_id"`
-	TodoID      string         `json:"todo_id"`
-	Title       string         `json:"title"`
-	Description string         `json:"description"`
-	Content     string         `json:"content"`
-	ExecBrief   *todoExecBrief `json:"exec_brief,omitempty"`
-}
-
-type todoExecBrief struct {
-	Objective    string `json:"objective"`
-	MustUseSkill string `json:"must_use_skill"`
-}
-
-type todoStatusChangedPayload struct {
-	TaskID      string `json:"task_id"`
-	TodoID      string `json:"todo_id"`
-	Status      string `json:"status"`
-	ActorNodeID string `json:"actor_node_id,omitempty"`
-	Cause       string `json:"cause,omitempty"`
-	Version     int    `json:"version"`
-	Message     string `json:"message,omitempty"`
 }
 
 func NewWebhookHandler(st *store.Store, client *Client, localNodeID string, log *zap.Logger) *WebhookHandler {
@@ -116,7 +31,7 @@ func NewWebhookHandler(st *store.Store, client *Client, localNodeID string, log 
 }
 
 func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
-	var payload WebhookPayload
+	var payload protocol.WebhookPayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid webhook payload"))
 		return
@@ -138,13 +53,15 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 		h.handleTodoComplete(c, payload)
 	case "todo.fail":
 		h.handleTodoFail(c, payload)
+	case "task.comment":
+		h.handleTaskComment(c, payload)
 	default:
 		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "unsupported webhook type"))
 	}
 }
 
-func (h *WebhookHandler) handleConversationReply(c *gin.Context, webhook WebhookPayload) {
-	var payload conversationReplyPayload
+func (h *WebhookHandler) handleConversationReply(c *gin.Context, webhook protocol.WebhookPayload) {
+	var payload protocol.ConversationReplyPayload
 	if err := decodeWebhookMessage(webhook.Message, &payload); err != nil {
 		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid conversation.reply message"))
 		return
@@ -158,8 +75,8 @@ func (h *WebhookHandler) handleConversationReply(c *gin.Context, webhook Webhook
 	transport.WriteData(c, http.StatusOK, detail)
 }
 
-func (h *WebhookHandler) handleTaskCreate(c *gin.Context, webhook WebhookPayload) {
-	var payload taskCreatePayload
+func (h *WebhookHandler) handleTaskCreate(c *gin.Context, webhook protocol.WebhookPayload) {
+	var payload protocol.TaskCreatePayload
 	if err := decodeWebhookMessage(webhook.Message, &payload); err != nil {
 		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid task.create message"))
 		return
@@ -189,7 +106,7 @@ func (h *WebhookHandler) handleTaskCreate(c *gin.Context, webhook WebhookPayload
 
 	h.publishTaskCreated(task)
 	for _, todo := range task.Todos {
-		h.publish(context.Background(), todo.Assignee.NodeID, "todo.assigned", todoAssignedPayload{
+		h.publish(context.Background(), todo.Assignee.NodeID, "todo.assigned", protocol.TodoAssignedPayload{
 			TaskID:      task.ID,
 			TodoID:      todo.ID,
 			Title:       todo.Title,
@@ -201,8 +118,8 @@ func (h *WebhookHandler) handleTaskCreate(c *gin.Context, webhook WebhookPayload
 	transport.WriteData(c, http.StatusOK, task)
 }
 
-func (h *WebhookHandler) handleTodoProgress(c *gin.Context, webhook WebhookPayload) {
-	var payload todoProgressPayload
+func (h *WebhookHandler) handleTodoProgress(c *gin.Context, webhook protocol.WebhookPayload) {
+	var payload protocol.TodoProgressPayload
 	if err := decodeWebhookMessage(webhook.Message, &payload); err != nil {
 		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid todo.progress message"))
 		return
@@ -222,8 +139,8 @@ func (h *WebhookHandler) handleTodoProgress(c *gin.Context, webhook WebhookPaylo
 	transport.WriteData(c, http.StatusOK, task)
 }
 
-func (h *WebhookHandler) handleTodoComplete(c *gin.Context, webhook WebhookPayload) {
-	var payload todoCompletePayload
+func (h *WebhookHandler) handleTodoComplete(c *gin.Context, webhook protocol.WebhookPayload) {
+	var payload protocol.TodoCompletePayload
 	if err := decodeWebhookMessage(webhook.Message, &payload); err != nil {
 		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid todo.complete message"))
 		return
@@ -244,8 +161,8 @@ func (h *WebhookHandler) handleTodoComplete(c *gin.Context, webhook WebhookPaylo
 	transport.WriteData(c, http.StatusOK, task)
 }
 
-func (h *WebhookHandler) handleTodoFail(c *gin.Context, webhook WebhookPayload) {
-	var payload todoFailPayload
+func (h *WebhookHandler) handleTodoFail(c *gin.Context, webhook protocol.WebhookPayload) {
+	var payload protocol.TodoFailPayload
 	if err := decodeWebhookMessage(webhook.Message, &payload); err != nil {
 		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid todo.fail message"))
 		return
@@ -263,6 +180,25 @@ func (h *WebhookHandler) handleTodoFail(c *gin.Context, webhook WebhookPayload) 
 
 	h.publishTaskAndTodoStatusChanges(task, payload.TodoID, payload.Error, webhook.From, "todo.fail")
 	transport.WriteData(c, http.StatusOK, task)
+}
+
+func (h *WebhookHandler) handleTaskComment(c *gin.Context, webhook protocol.WebhookPayload) {
+	var payload protocol.TaskCommentPayload
+	if err := decodeWebhookMessage(webhook.Message, &payload); err != nil {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid task.comment message"))
+		return
+	}
+
+	event, appErr := h.store.AddTaskCommentByNode(webhook.From, store.TaskCommentInput{
+		TaskID:  payload.TaskID,
+		TodoID:  payload.TodoID,
+		Content: payload.Content,
+	})
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+	transport.WriteData(c, http.StatusOK, event)
 }
 
 func (h *WebhookHandler) enrichTodoResultTransfers(ctx context.Context, result *model.TodoResult) {
@@ -369,7 +305,7 @@ func transferIDFromMap(transfer map[string]any) string {
 }
 
 func (h *WebhookHandler) publishTaskCreated(task *model.TaskDetail) {
-	h.publish(context.Background(), task.PMAgent.NodeID, "task.created", taskCreatedPayload{
+	h.publish(context.Background(), task.PMAgent.NodeID, "task.created", protocol.TaskCreatedPayload{
 		TaskID:         task.ID,
 		ProjectID:      task.ProjectID,
 		ConversationID: task.ConversationID,
@@ -378,7 +314,7 @@ func (h *WebhookHandler) publishTaskCreated(task *model.TaskDetail) {
 }
 
 func (h *WebhookHandler) publishTaskAndTodoStatusChanges(task *model.TaskDetail, todoID, message, actorNodeID, cause string) {
-	h.publish(context.Background(), task.PMAgent.NodeID, "task.status_changed", taskStatusChangedPayload{
+	h.publish(context.Background(), task.PMAgent.NodeID, "task.status_changed", protocol.TaskStatusChangedPayload{
 		TaskID:      task.ID,
 		Status:      task.Status,
 		ActorNodeID: strings.TrimSpace(actorNodeID),
@@ -391,7 +327,7 @@ func (h *WebhookHandler) publishTaskAndTodoStatusChanges(task *model.TaskDetail,
 		return
 	}
 
-	payload := todoStatusChangedPayload{
+	payload := protocol.TodoStatusChangedPayload{
 		TaskID:      task.ID,
 		TodoID:      todo.ID,
 		Status:      todo.Status,
@@ -417,8 +353,8 @@ func (h *WebhookHandler) publish(ctx context.Context, targetNode, msgType string
 	}
 }
 
-func defaultExecBrief() *todoExecBrief {
-	return &todoExecBrief{
+func defaultExecBrief() *protocol.TodoExecBrief {
+	return &protocol.TodoExecBrief{
 		Objective:    "执行分派的 Todo 任务；及时回报进度；完成后提交结果，失败时说明原因。",
 		MustUseSkill: "tm-task-exec",
 	}

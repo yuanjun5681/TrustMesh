@@ -3,11 +3,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Select } from '@/components/ui/select'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { X } from 'lucide-react'
 import { useCreateAgent, useUpdateAgent } from '@/hooks/useAgents'
 import { ApiRequestError } from '@/api/client'
+import { toast } from 'sonner'
 import type { Agent, AgentRole } from '@/types'
 
 interface Props {
@@ -77,21 +78,23 @@ export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
           capabilities,
         })
       }
+      toast.success(isEditing ? 'Agent 已更新' : 'Agent 已添加')
       onOpenChange(false)
     } catch (err) {
-      if (err instanceof ApiRequestError) setError(err.message)
-      else setError('操作失败')
+      const message = err instanceof ApiRequestError ? err.message : '操作失败'
+      toast.error(message)
+      setError(message)
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{isEditing ? '编辑 Agent' : '添加 Agent'}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-          <div className="space-y-2">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-2">
+          <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">节点 ID</label>
             <Input
               value={nodeId}
@@ -104,7 +107,7 @@ export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
               <p className="text-xs text-muted-foreground">节点 ID 创建后不可修改</p>
             )}
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">名称</label>
             <Input
               value={name}
@@ -113,16 +116,21 @@ export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
               required
             />
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">角色</label>
-            <Select value={role} onChange={(e) => setRole(e.target.value as AgentRole)} required>
-              <option value="pm">PM</option>
-              <option value="developer">开发者</option>
-              <option value="reviewer">审核者</option>
-              <option value="custom">自定义</option>
+            <Select value={role} onValueChange={(val) => setRole(val as AgentRole)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pm">PM</SelectItem>
+                <SelectItem value="developer">开发者</SelectItem>
+                <SelectItem value="reviewer">审核者</SelectItem>
+                <SelectItem value="custom">自定义</SelectItem>
+              </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">描述</label>
             <Textarea
               value={description}
@@ -132,7 +140,7 @@ export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
               required
             />
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">能力标签</label>
             <div className="flex gap-2">
               <Input
@@ -156,7 +164,7 @@ export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
                   <Badge key={cap} variant="secondary" className="gap-1">
                     {cap}
                     <button type="button" onClick={() => removeCapability(cap)} className="cursor-pointer">
-                      <X className="h-3 w-3" />
+                      <X className="size-3" />
                     </button>
                   </Badge>
                 ))}

@@ -5,6 +5,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ApiRequestError } from '@/api/client'
 import { getTaskArtifactContent, getTaskArtifactTransfer } from '@/api/tasks'
+import { cn } from '@/lib/utils'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { toast } from 'sonner'
 import type { TaskResult, TaskArtifact, TransferDetail } from '@/types'
 
 const kindIcons: Record<string, LucideIcon> = {
@@ -22,6 +26,18 @@ function normalizeArtifactKind(kind: string | null | undefined) {
   return normalizedKind
 }
 
+function normalizeResultText(value: string | null | undefined) {
+  if (!value) {
+    return ''
+  }
+
+  return value
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+}
+
 interface TaskResultViewProps {
   taskId: string
   result: TaskResult
@@ -30,7 +46,9 @@ interface TaskResultViewProps {
 
 export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProps) {
   const safeArtifacts = artifacts ?? []
-  const hasResult = result.summary || result.final_output
+  const summaryText = normalizeResultText(result.summary)
+  const finalOutputText = normalizeResultText(result.final_output)
+  const hasResult = summaryText || finalOutputText
   const hasArtifacts = safeArtifacts.length > 0
   const [loadingArtifactId, setLoadingArtifactId] = useState<string | null>(null)
   const [downloadingArtifactId, setDownloadingArtifactId] = useState<string | null>(null)
@@ -54,6 +72,7 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
       window.setTimeout(() => URL.revokeObjectURL(objectURL), 60_000)
     } catch (err) {
       const message = err instanceof ApiRequestError ? err.message : '加载传输详情失败'
+      toast.error(message)
       setTransferErrors((current) => ({ ...current, [artifact.id]: message }))
     } finally {
       setLoadingArtifactId(null)
@@ -69,6 +88,7 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
       downloadBlob(fileBlob, fileName)
     } catch (err) {
       const message = err instanceof ApiRequestError ? err.message : '下载文件失败'
+      toast.error(message)
       setTransferErrors((current) => ({ ...current, [artifact.id]: message }))
     } finally {
       setDownloadingArtifactId(null)
@@ -76,21 +96,33 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {hasResult && (
         <Card>
-          <CardContent className="p-4 space-y-2">
-            {result.summary && (
+          <CardContent className="flex flex-col gap-2 p-4">
+            {summaryText && (
               <div>
                 <h4 className="text-sm font-medium mb-1">摘要</h4>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{result.summary}</p>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{summaryText}</p>
               </div>
             )}
-            {result.final_output && (
+            {finalOutputText && (
               <div>
                 <h4 className="text-sm font-medium mb-1">最终产出</h4>
-                <div className="rounded-md bg-muted p-3 text-sm whitespace-pre-wrap font-mono text-xs">
-                  {result.final_output}
+                <div className="rounded-md bg-muted p-3">
+                  <div
+                    className={cn(
+                      'prose prose-sm max-w-none text-foreground dark:prose-invert',
+                      'prose-p:my-2 prose-headings:my-3',
+                      'prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5',
+                      'prose-pre:overflow-x-auto prose-pre:text-xs',
+                      'prose-code:text-xs prose-table:text-xs'
+                    )}
+                  >
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {finalOutputText}
+                    </ReactMarkdown>
+                  </div>
                 </div>
               </div>
             )}
@@ -101,7 +133,7 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
       {hasArtifacts && (
         <div>
           <h4 className="text-sm font-medium mb-2">交付物</h4>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             {safeArtifacts.map((artifact) => {
               const normalizedKind = normalizeArtifactKind(artifact.kind)
               const Icon = kindIcons[normalizedKind] ?? FileText
@@ -112,10 +144,10 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
 
               return (
                 <Card key={artifact.id}>
-                  <CardContent className="p-3 space-y-3">
+                  <CardContent className="flex flex-col gap-3 p-3">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
-                        <Icon className="h-4 w-4 text-muted-foreground" />
+                      <div className="flex size-8 items-center justify-center rounded-lg bg-muted">
+                        <Icon className="size-4 text-muted-foreground" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{artifact.title}</p>
@@ -137,12 +169,12 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
                         >
                           {loadingArtifactId === artifact.id ? (
                             <>
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              <Loader2 className="size-3.5 animate-spin" />
                               加载中
                             </>
                           ) : transferDetail ? (
                             <>
-                              <ExternalLink className="h-3.5 w-3.5" />
+                              <ExternalLink className="size-3.5" />
                               打开文件
                             </>
                           ) : (
@@ -158,12 +190,12 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
                         >
                           {downloadingArtifactId === artifact.id ? (
                             <>
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              <Loader2 className="size-3.5 animate-spin" />
                               下载中
                             </>
                           ) : (
                             <>
-                              <Download className="h-3.5 w-3.5" />
+                              <Download className="size-3.5" />
                               下载
                             </>
                           )}
@@ -177,7 +209,7 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
                     )}
 
                     {transferDetail && (
-                      <div className="rounded-md bg-muted/50 p-3 space-y-1 text-xs text-muted-foreground">
+                      <div className="flex flex-col gap-1 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
                         {renderTransferLine('大小', firstString(transferDetail, ['size']))}
                         {renderTransferLine('校验', firstString(transferDetail, ['checksum']))}
                         {renderTransferLine('Bucket', firstString(transferDetail, ['bucket']))}

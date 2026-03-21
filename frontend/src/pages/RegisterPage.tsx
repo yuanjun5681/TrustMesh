@@ -53,7 +53,7 @@ export function RegisterPage() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 px-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground text-lg font-bold">
+          <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground text-lg font-bold">
             T
           </div>
           <h1 className="text-2xl font-bold">创建账号</h1>
@@ -65,8 +65,8 @@ export function RegisterPage() {
             <CardDescription>填写信息创建新账号</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium">邮箱</label>
                 <Input
                   type="email"
@@ -77,7 +77,7 @@ export function RegisterPage() {
                   autoFocus
                 />
               </div>
-              <div className="space-y-2">
+              <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium">用户名</label>
                 <Input
                   value={name}
@@ -86,7 +86,7 @@ export function RegisterPage() {
                   required
                 />
               </div>
-              <div className="space-y-2">
+              <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium">密码</label>
                 <Input
                   type="password"

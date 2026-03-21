@@ -5,12 +5,12 @@ import { LoginPage } from '@/pages/LoginPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { ProjectListPage } from '@/pages/ProjectListPage'
 import { ProjectBoardPage } from '@/pages/ProjectBoardPage'
-import { ConversationPage } from '@/pages/ConversationPage'
 import { AgentListPage } from '@/pages/AgentListPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { AgentDetailPage } from '@/pages/AgentDetailPage'
 import { InboxPage } from '@/pages/InboxPage'
 import { useAuthStore } from '@/stores/authStore'
+import { Toaster } from '@/components/ui/sonner'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -55,7 +55,6 @@ export default function App() {
             <Route path="/inbox" element={<InboxPage />} />
             <Route path="/projects" element={<ProjectListPage />} />
             <Route path="/projects/:projectId" element={<ProjectBoardPage />} />
-            <Route path="/projects/:projectId/chat" element={<ConversationPage />} />
             <Route path="/agents" element={<AgentListPage />} />
             <Route path="/agents/:id" element={<AgentDetailPage />} />
           </Route>
@@ -64,6 +63,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BrowserRouter>
+      <Toaster position="top-center" />
     </QueryClientProvider>
   )
 }

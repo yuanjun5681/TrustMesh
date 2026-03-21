@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { Bot, Plus } from 'lucide-react'
+import { PageContainer } from '@/components/layout/PageContainer'
 import { Button } from '@/components/ui/button'
 import { AgentCard } from '@/components/agent/AgentCard'
 import { AgentConfigDialog } from '@/components/agent/AgentConfigDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useAgents, useDeleteAgent } from '@/hooks/useAgents'
 import { ApiRequestError } from '@/api/client'
+import { toast } from 'sonner'
 import type { Agent, AgentRole } from '@/types'
 
 const ROLE_FILTERS: { label: string; value: AgentRole | 'all' }[] = [
@@ -45,21 +48,25 @@ export function AgentListPage() {
   const handleDelete = async (agent: Agent) => {
     setError('')
     if (agent.usage.in_use) {
-      setError(`无法删除 Agent "${agent.name}"，当前仍被 ${formatUsage(agent)} 引用，请先解除关联。`)
+      const msg = `无法删除 Agent "${agent.name}"，当前仍被 ${formatUsage(agent)} 引用，请先解除关联。`
+      toast.error(msg)
+      setError(msg)
       return
     }
 
     if (confirm(`确定要删除 Agent "${agent.name}" 吗？`)) {
       try {
         await deleteAgent.mutateAsync(agent.id)
+        toast.success(`Agent "${agent.name}" 已删除`)
       } catch (err) {
+        let message = '删除 Agent 失败'
         if (err instanceof ApiRequestError) {
-          setError(err.code === 'AGENT_IN_USE'
+          message = err.code === 'AGENT_IN_USE'
             ? `无法删除 Agent "${agent.name}"，当前仍被引用，请先解除关联。`
-            : err.message)
-          return
+            : err.message
         }
-        setError('删除 Agent 失败')
+        toast.error(message)
+        setError(message)
       }
     }
   }
@@ -70,14 +77,14 @@ export function AgentListPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-6xl mx-auto">
+    <PageContainer>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">Agent 管理</h1>
           <p className="text-muted-foreground mt-1">管理 AI Agent 的配置和状态</p>
         </div>
         <Button onClick={() => { setEditingAgent(null); setShowConfig(true) }}>
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus className="size-4 mr-2" />
           添加 Agent
         </Button>
       </div>
@@ -102,9 +109,9 @@ export function AgentListPage() {
       {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-40 bg-muted rounded-xl animate-pulse" />
+            <Skeleton key={i} className="h-40 rounded-xl" />
           ))}
         </div>
       ) : filteredAgents.length === 0 ? (
@@ -114,13 +121,13 @@ export function AgentListPage() {
           description="添加你的第一个 AI Agent 开始协作"
           action={
             <Button onClick={() => { setEditingAgent(null); setShowConfig(true) }}>
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="size-4 mr-2" />
               添加 Agent
             </Button>
           }
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredAgents.map((agent) => (
             <AgentCard
               key={agent.id}
@@ -137,6 +144,6 @@ export function AgentListPage() {
         onOpenChange={handleClose}
         agent={editingAgent}
       />
-    </div>
+    </PageContainer>
   )
 }

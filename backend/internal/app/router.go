@@ -80,6 +80,8 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	authed.GET("/tasks/:id/stream", taskHandler.Stream)
 	authed.GET("/tasks/:id/events", taskHandler.ListEvents)
 	authed.POST("/tasks/:id/todos/:todoId/dispatch", taskHandler.DispatchTodo)
+	authed.GET("/tasks/:id/comments", taskHandler.ListComments)
+	authed.POST("/tasks/:id/comments", taskHandler.AddComment)
 	authed.GET("/tasks/:id/artifacts/:artifactId/transfer", transferHandler.GetTaskArtifactTransfer)
 	authed.GET("/tasks/:id/artifacts/:artifactId/content", transferHandler.GetTaskArtifactContent)
 

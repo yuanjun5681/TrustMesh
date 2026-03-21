@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useDispatchTodo } from '@/hooks/useTasks'
 import { ApiRequestError } from '@/api/client'
+import { toast } from 'sonner'
 import type { Todo, TaskArtifact } from '@/types'
 
 const statusIcons = {
@@ -40,17 +41,16 @@ export function TodoList({ taskId, todos, artifacts }: TodoListProps) {
     setDispatchError(null)
     try {
       await dispatchTodo.mutateAsync({ taskId, todoId: todo.id })
+      toast.success(`Todo "${todo.title}" 已派发`)
     } catch (err) {
-      if (err instanceof ApiRequestError) {
-        setDispatchError({ todoId: todo.id, message: err.message })
-        return
-      }
-      setDispatchError({ todoId: todo.id, message: '手动派发失败' })
+      const message = err instanceof ApiRequestError ? err.message : '手动派发失败'
+      toast.error(message)
+      setDispatchError({ todoId: todo.id, message })
     }
   }
 
   return (
-    <div className="space-y-1">
+    <div className="flex flex-col gap-1">
       {todos.map((todo) => (
         <TodoItem
           key={todo.id}
@@ -94,7 +94,7 @@ function TodoItem({
             hasDetails && 'cursor-pointer rounded-md hover:bg-muted/50 transition-colors'
           )}
         >
-          <Icon className={cn('h-4 w-4 mt-0.5 shrink-0', statusColors[todo.status])} />
+          <Icon className={cn('size-4 mt-0.5 shrink-0', statusColors[todo.status])} />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">{todo.title}</span>
@@ -108,8 +108,8 @@ function TodoItem({
           </div>
           {hasDetails && (
             expanded
-              ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
-              : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
+              ? <ChevronDown className="size-4 shrink-0 text-muted-foreground mt-0.5" />
+              : <ChevronRight className="size-4 shrink-0 text-muted-foreground mt-0.5" />
           )}
         </button>
         {todo.status === 'pending' && (
@@ -123,12 +123,12 @@ function TodoItem({
           >
             {isDispatching ? (
               <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="size-3.5 animate-spin" />
                 派发中
               </>
             ) : (
               <>
-                <Play className="h-3.5 w-3.5" />
+                <Play className="size-3.5" />
                 手动触发
               </>
             )}
@@ -137,7 +137,7 @@ function TodoItem({
       </div>
 
       {expanded && hasDetails && (
-        <div className="px-3 pb-3 pt-0 ml-7 space-y-2 text-sm">
+        <div className="flex flex-col gap-2 px-3 pb-3 pt-0 ml-7 text-sm">
           {todo.description && (
             <p className="text-muted-foreground whitespace-pre-wrap">{todo.description}</p>
           )}

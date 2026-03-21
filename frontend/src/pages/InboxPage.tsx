@@ -1,9 +1,12 @@
 import { useState } from 'react'
+import { PageContainer } from '@/components/layout/PageContainer'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { NotificationGroup } from '@/components/inbox/NotificationGroup'
+import { ConversationSheet } from '@/components/conversation/ConversationSheet'
 import { groupNotificationsByDate } from '@/lib/notifications'
 import { useNotifications, useMarkNotificationRead, useMarkAllRead } from '@/hooks/useNotifications'
+import { toast } from 'sonner'
 
 const filters = [
   { label: '最近', value: 'recent' },
@@ -16,19 +19,24 @@ export function InboxPage() {
   const { data: notifications, isLoading } = useNotifications(filter)
   const markRead = useMarkNotificationRead()
   const markAllRead = useMarkAllRead()
+  const [chatState, setChatState] = useState<{ projectId: string; conversationId?: string } | null>(null)
 
   const groups = notifications ? groupNotificationsByDate(notifications) : []
   const hasUnread = notifications?.some((n) => !n.is_read) ?? false
 
+  const handleViewConversation = (projectId: string, conversationId?: string) => {
+    setChatState({ projectId, conversationId })
+  }
+
   return (
-    <div className="p-6 space-y-4 max-w-3xl mx-auto">
-      <div className="flex items-center justify-between">
+    <PageContainer className="flex flex-col h-full gap-4">
+      <div className="shrink-0 flex items-center justify-between">
         <h1 className="text-2xl font-bold">收件箱</h1>
         {hasUnread && (
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => markAllRead.mutate()}
+            onClick={() => markAllRead.mutate(undefined, { onSuccess: () => toast.success('全部通知已标记为已读') })}
             disabled={markAllRead.isPending}
           >
             全部已读
@@ -36,7 +44,7 @@ export function InboxPage() {
         )}
       </div>
 
-      <div className="flex gap-1">
+      <div className="shrink-0 flex gap-1">
         {filters.map((f) => (
           <Button
             key={f.value}
@@ -61,19 +69,29 @@ export function InboxPage() {
       )}
 
       {!isLoading && groups.length > 0 && (
-        <ScrollArea className="h-[calc(100vh-180px)]">
-          <div className="space-y-4">
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="flex flex-col gap-4">
             {groups.map((group) => (
               <NotificationGroup
                 key={group.label}
                 label={group.label}
                 notifications={group.items}
                 onMarkRead={(id) => markRead.mutate(id)}
+                onViewConversation={handleViewConversation}
               />
             ))}
           </div>
         </ScrollArea>
       )}
-    </div>
+
+      {chatState && (
+        <ConversationSheet
+          projectId={chatState.projectId}
+          initialConversationId={chatState.conversationId}
+          open={!!chatState}
+          onOpenChange={(open) => { if (!open) setChatState(null) }}
+        />
+      )}
+    </PageContainer>
   )
 }
