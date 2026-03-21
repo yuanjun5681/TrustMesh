@@ -24,7 +24,6 @@ export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
   const [description, setDescription] = useState('')
   const [capabilities, setCapabilities] = useState<string[]>([])
   const [capInput, setCapInput] = useState('')
-  const [error, setError] = useState('')
 
   const createAgent = useCreateAgent()
   const updateAgent = useUpdateAgent()
@@ -44,7 +43,6 @@ export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
       setDescription('')
       setCapabilities([])
     }
-    setError('')
     setCapInput('')
   }, [agent, open])
 
@@ -62,7 +60,6 @@ export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
     try {
       if (isEditing) {
         await updateAgent.mutateAsync({
@@ -83,7 +80,6 @@ export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
     } catch (err) {
       const message = err instanceof ApiRequestError ? err.message : '操作失败'
       toast.error(message)
-      setError(message)
     }
   }
 
@@ -171,7 +167,6 @@ export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
               </div>
             )}
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               取消

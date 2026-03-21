@@ -19,6 +19,32 @@ import (
 	"trustmesh/backend/internal/store"
 )
 
+func clawsynapsePeersResponse(t *testing.T, nodeIDs ...string) string {
+	t.Helper()
+
+	items := make([]map[string]any, 0, len(nodeIDs))
+	for _, nodeID := range nodeIDs {
+		items = append(items, map[string]any{
+			"nodeId":     nodeID,
+			"lastSeenMs": time.Now().UnixMilli(),
+		})
+	}
+
+	body, err := json.Marshal(map[string]any{
+		"ok":      true,
+		"code":    "OK",
+		"message": "ok",
+		"data": map[string]any{
+			"items": items,
+		},
+		"ts": 1,
+	})
+	if err != nil {
+		t.Fatalf("marshal peers response: %v", err)
+	}
+	return string(body)
+}
+
 func TestHappyPathAuthToConversation(t *testing.T) {
 	log, err := logger.New("error")
 	if err != nil {
@@ -26,14 +52,27 @@ func TestHappyPathAuthToConversation(t *testing.T) {
 	}
 	defer func() { _ = log.Sync() }()
 
+	clawServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/peers":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(clawsynapsePeersResponse(t, "node-pm-001")))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer clawServer.Close()
+
 	application, err := New(config.Config{
-		Port:          "0",
-		JWTSecret:     "test-secret",
-		TokenTTL:      time.Hour,
-		LogLevel:      "error",
-		AllowAllCORS:  true,
-		ReadTimeout:   3 * time.Second,
-		ShutdownGrace: 3 * time.Second,
+		Port:               "0",
+		JWTSecret:          "test-secret",
+		TokenTTL:           time.Hour,
+		LogLevel:           "error",
+		AllowAllCORS:       true,
+		ReadTimeout:        3 * time.Second,
+		ShutdownGrace:      3 * time.Second,
+		ClawSynapseAPIURL:  clawServer.URL,
+		ClawSynapseTimeout: time.Second,
 	}, log)
 	if err != nil {
 		t.Fatalf("new app: %v", err)
@@ -115,6 +154,74 @@ func TestHappyPathAuthToConversation(t *testing.T) {
 	}
 }
 
+func TestCreateAgentRejectsOfflineNode(t *testing.T) {
+	log, err := logger.New("error")
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	defer func() { _ = log.Sync() }()
+
+	clawServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/peers":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(clawsynapsePeersResponse(t, "node-online-001")))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer clawServer.Close()
+
+	application, err := New(config.Config{
+		Port:               "0",
+		JWTSecret:          "test-secret",
+		TokenTTL:           time.Hour,
+		LogLevel:           "error",
+		AllowAllCORS:       true,
+		ReadTimeout:        3 * time.Second,
+		ShutdownGrace:      3 * time.Second,
+		ClawSynapseAPIURL:  clawServer.URL,
+		ClawSynapseTimeout: time.Second,
+	}, log)
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
+	defer func() {
+		if closeErr := application.Close(); closeErr != nil {
+			t.Fatalf("close app: %v", closeErr)
+		}
+	}()
+
+	testServer := httptest.NewServer(application.Engine)
+	defer testServer.Close()
+
+	registerResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/auth/register", "", map[string]any{
+		"email":    "offline-node@example.com",
+		"name":     "Offline Node User",
+		"password": "StrongPass123!",
+	})
+	token := nestedString(decodeBody(t, registerResp), "data", "token")
+
+	agentResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/agents", token, map[string]any{
+		"node_id":      "node-offline-001",
+		"name":         "Offline Agent",
+		"role":         "developer",
+		"description":  "Developer",
+		"capabilities": []string{"backend"},
+	})
+	if agentResp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("create offline agent status=%d", agentResp.StatusCode)
+	}
+
+	body := decodeBody(t, agentResp)
+	if nestedString(body, "error", "code") != "VALIDATION_ERROR" {
+		t.Fatalf("unexpected error code: %#v", body)
+	}
+	if nestedString(body, "error", "details", "node_id") != "offline_or_not_found" {
+		t.Fatalf("unexpected error details: %#v", body)
+	}
+}
+
 func TestCreateConversationPublishesInitialPMBrief(t *testing.T) {
 	log, err := logger.New("error")
 	if err != nil {
@@ -129,6 +236,9 @@ func TestCreateConversationPublishesInitialPMBrief(t *testing.T) {
 
 	clawServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/v1/peers":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(clawsynapsePeersResponse(t, "node-pm-001", "node-dev-001", "node-review-001")))
 		case "/v1/publish":
 			defer r.Body.Close()
 			var payload map[string]any

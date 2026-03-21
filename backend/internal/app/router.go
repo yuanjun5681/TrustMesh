@@ -39,7 +39,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	}
 
 	authHandler := handler.NewAuthHandler(s, jwtManager)
-	agentHandler := handler.NewAgentHandler(s)
+	agentHandler := handler.NewAgentHandler(s, clawClient)
 	projectHandler := handler.NewProjectHandler(s)
 	conversationHandler := handler.NewConversationHandler(s, clawClient, log)
 	taskHandler := handler.NewTaskHandler(s, clawClient, log)
