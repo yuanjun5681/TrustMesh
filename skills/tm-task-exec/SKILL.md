@@ -3,7 +3,7 @@ name: tm-task-exec
 description: >
   执行 Agent 专用 skill：接收 Todo 任务，执行工作，回报进度和结果。
   收到 todo.assigned 后，通过 ClawSynapse 向 TrustMesh 回传
-  todo.progress / todo.complete / todo.fail。
+  todo.progress / todo.complete / todo.fail / task.comment。
 compatibility: Requires clawsynapse CLI and a running clawsynapsed daemon
 metadata:
   author: TrustMesh
@@ -24,14 +24,16 @@ allowed-tools:
   1. 阅读 Todo 的 title 和 description，理解要做什么
   2. 开始执行，发送 todo.progress 报告进度
   3. 执行过程中可多次发送 todo.progress
-  4. 成功 → 发送 todo.complete（附带结果）
-  5. 失败 → 发送 todo.fail（附带错误原因）
+  4. 执行过程中可随时发送 task.comment 记录详细过程
+  5. 成功 → 发送 todo.complete（附带结果）
+  6. 失败 → 发送 todo.fail（附带错误原因）
 ```
 
 ### 关键规则
 
 1. **收到 todo.assigned 才开始工作。** 不要主动寻找任务。
 2. **及时回报进度。** 在关键里程碑发送 `todo.progress`，让 PM 和用户了解执行状态。
+2.1. **记录详细过程。** 使用 `task.comment` 记录思考过程、推理链、执行命令、关键决策等细节，帮助用户理解执行过程。
 3. **结果要具体。** `todo.complete` 的 result 应包含有意义的 summary 和 output；如果交付物里包含文件，**必须先上传文件**，再在结果里引用。
 4. **失败要说明原因。** `todo.fail` 的 error 应清晰描述失败原因，帮助诊断。
 5. **所有回报都走 ClawSynapse。** 不要在聊天界面直接输出结果。
@@ -276,6 +278,35 @@ clawsynapse publish \
   --message "$payload"
 ```
 
+### task.comment — 发送评论
+
+在执行过程中随时发送，记录思考过程、推理链、执行的命令、关键决策、遇到的问题等详细信息。评论不影响 Todo 状态，纯粹用于过程追踪。
+
+```bash
+TARGET_NODE="trustmesh-server"  # ← 替换为实际 from 值
+
+payload="$(jq -nc \
+  --arg task_id "task_123" \
+  --arg todo_id "todo_1" \
+  --arg content "分析了现有的 auth 模块，发现已有 JWT 签发逻辑，决定复用而非重写。接下来实现登录 handler。" \
+  '{
+    task_id: $task_id,
+    todo_id: $todo_id,
+    content: $content
+  }')"
+
+clawsynapse publish \
+  --target "$TARGET_NODE" \
+  --type task.comment \
+  --session-key task_123 \
+  --message "$payload"
+```
+
+字段说明：
+- `task_id`：必填，关联的任务 ID
+- `todo_id`：可选，关联到具体的 Todo
+- `content`：必填，评论内容（支持多行文本）
+
 ### 获取结构化发送结果
 
 ```bash
@@ -289,7 +320,7 @@ clawsynapse --json publish \
 ## 四、Guardrails
 
 - **永远不要用你自己的 node ID 作为 `--target`。** target 是 TrustMesh 节点（incoming `from`）。
-- **不要发送 `conversation.reply`、`task.create`。** 这些是 PM Agent 的消息类型，不是执行 Agent 的。
+- **不要发送 `conversation.reply`、`task.create`。** 这些是 PM Agent 的消息类型，不是执行 Agent 的。你只能发送 `todo.progress`、`todo.complete`、`todo.fail`、`task.comment` 四种消息类型。
 - **Todo 终态不可逆。** 已经 `done` 或 `failed` 的 Todo 不能再更新，服务端会拒绝（`TODO_ALREADY_DONE` / `TODO_ALREADY_FAILED`）。
 - 不要在聊天界面直接回复，必须使用 `clawsynapse publish`。
 - 不要丢弃 `--session-key`。
@@ -319,5 +350,5 @@ clawsynapse --json peers
 ## 七、重要提示
 
 - 不要运行 `clawsynapsed`，它由系统管理。
-- 你只能发送 `todo.progress`、`todo.complete`、`todo.fail` 三种消息类型。
+- 你只能发送 `todo.progress`、`todo.complete`、`todo.fail`、`task.comment` 四种消息类型。
 - 任务规划和对话回复由 PM Agent 负责，不需要你介入。
