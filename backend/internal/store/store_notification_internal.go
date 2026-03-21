@@ -40,7 +40,17 @@ func (s *Store) maybeCreateNotificationUnsafe(event *model.Event) {
 		body = stringOrDefault(event.Content, "新的回复")
 		category = "conversation"
 		priority = "medium"
+	case "task_comment":
+		title = "任务评论"
+		body = stringOrDefault(event.Content, "新评论")
+		category = "task"
+		priority = "low"
 	default:
+		return
+	}
+
+	// 用户自己触发的操作不通知自己
+	if event.ActorType == "user" && event.ActorID == event.UserID {
 		return
 	}
 

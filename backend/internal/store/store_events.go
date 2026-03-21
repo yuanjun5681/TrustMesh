@@ -39,7 +39,7 @@ func (s *Store) rememberProcessedMessageUnsafe(key, action, resourceID string) {
 	}
 }
 
-func (s *Store) addEventUnsafe(userID, projectID, taskID, todoID, actorType, actorID, actorName, eventType string, content *string, metadata map[string]any, at time.Time) {
+func (s *Store) addEventUnsafe(userID, projectID, taskID, todoID, actorType, actorID, actorName, eventType string, content *string, metadata map[string]any, at time.Time) *model.Event {
 	event := model.Event{
 		ID:        newID(),
 		UserID:    userID,
@@ -64,4 +64,5 @@ func (s *Store) addEventUnsafe(userID, projectID, taskID, todoID, actorType, act
 		s.agentEvents[actorID] = append(s.agentEvents[actorID], &event)
 	}
 	s.maybeCreateNotificationUnsafe(&event)
+	return &event
 }

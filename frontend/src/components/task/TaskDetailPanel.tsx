@@ -1,15 +1,16 @@
-import { X, MessageSquare } from 'lucide-react'
+import { X, MessageSquare, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/StatusBadge'
 import { TodoList } from './TodoList'
 import { TaskTimeline } from './TaskTimeline'
+import { TaskComments } from './TaskComments'
 import { TaskResultView } from './TaskResult'
 import { ConversationSheet } from '@/components/conversation/ConversationSheet'
-import { useTask } from '@/hooks/useTasks'
+import { useTask, useAddTaskComment } from '@/hooks/useTasks'
 import { useTaskStream } from '@/hooks/useLiveStreams'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 
 interface TaskDetailPanelProps {
   taskId: string
@@ -22,6 +23,29 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
   useTaskStream(taskId, shouldStream)
   const [tab, setTab] = useState('todos')
   const [chatOpen, setChatOpen] = useState(false)
+  const [comment, setComment] = useState('')
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const addComment = useAddTaskComment()
+
+  const handleSendComment = useCallback(() => {
+    const text = comment.trim()
+    if (!text || addComment.isPending) return
+    addComment.mutate({ taskId, content: text }, {
+      onSuccess: () => {
+        setComment('')
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto'
+        }
+      },
+    })
+  }, [comment, taskId, addComment])
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSendComment()
+    }
+  }, [handleSendComment])
 
   if (!task) {
     return (
@@ -64,17 +88,22 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList>
               <TabsTrigger value="todos">
-                Todo ({task.todos.length})
+                待办列表 ({task.todos.length})
               </TabsTrigger>
-              <TabsTrigger value="timeline">时间线</TabsTrigger>
-              <TabsTrigger value="result">结果</TabsTrigger>
+              <TabsTrigger value="comments">评论讨论</TabsTrigger>
+              <TabsTrigger value="activity">全部活动</TabsTrigger>
+              <TabsTrigger value="result">交付成果</TabsTrigger>
             </TabsList>
 
             <TabsContent value="todos" className="mt-3">
               <TodoList taskId={task.id} todos={task.todos} artifacts={task.artifacts} />
             </TabsContent>
 
-            <TabsContent value="timeline" className="mt-3">
+            <TabsContent value="comments" className="mt-3">
+              <TaskComments taskId={task.id} />
+            </TabsContent>
+
+            <TabsContent value="activity" className="mt-3">
               <TaskTimeline taskId={task.id} />
             </TabsContent>
 
@@ -84,6 +113,33 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
           </Tabs>
         </div>
       </ScrollArea>
+
+      {/* Comment input */}
+      <div className="border-t px-4 py-3 shrink-0">
+        <div className="flex items-end gap-2">
+          <textarea
+            ref={textareaRef}
+            className="flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[36px] max-h-[120px]"
+            placeholder="输入评论... (Enter 发送, Shift+Enter 换行)"
+            rows={1}
+            value={comment}
+            onChange={(e) => {
+              setComment(e.target.value)
+              e.target.style.height = 'auto'
+              e.target.style.height = e.target.scrollHeight + 'px'
+            }}
+            onKeyDown={handleKeyDown}
+          />
+          <Button
+            size="icon"
+            className="size-9 shrink-0"
+            disabled={!comment.trim() || addComment.isPending}
+            onClick={handleSendComment}
+          >
+            <Send className="size-4" />
+          </Button>
+        </div>
+      </div>
 
       <ConversationSheet
         projectId={task.project_id}

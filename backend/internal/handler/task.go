@@ -132,6 +132,46 @@ func (h *TaskHandler) DispatchTodo(c *gin.Context) {
 	transport.WriteData(c, http.StatusOK, task)
 }
 
+func (h *TaskHandler) AddComment(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	var body struct {
+		Content string `json:"content"`
+		TodoID  string `json:"todo_id"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid request body"))
+		return
+	}
+
+	comment, appErr := h.store.AddTaskComment(userID, c.Param("id"), store.TaskCommentInput{
+		TaskID:  c.Param("id"),
+		TodoID:  body.TodoID,
+		Content: body.Content,
+	})
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+	transport.WriteData(c, http.StatusCreated, comment)
+}
+
+func (h *TaskHandler) ListComments(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+	comments, appErr := h.store.ListTaskComments(userID, c.Param("id"))
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+	transport.WriteList(c, comments, len(comments))
+}
+
 func findTaskTodo(task *model.TaskDetail, todoID string) *model.Todo {
 	for i := range task.Todos {
 		if task.Todos[i].ID == todoID {

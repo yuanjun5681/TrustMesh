@@ -49,6 +49,12 @@ type TodoFailPayload struct {
 	Error  string `json:"error"`
 }
 
+type TaskCommentPayload struct {
+	TaskID  string `json:"task_id"`
+	TodoID  string `json:"todo_id,omitempty"`
+	Content string `json:"content"`
+}
+
 type TaskCreatedPayload struct {
 	TaskID         string `json:"task_id"`
 	ProjectID      string `json:"project_id"`

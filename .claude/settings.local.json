@@ -25,7 +25,9 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(find /Volumes/UWorks/Projects/TrustMesh/frontend/src/pages -type f -name *.tsx)",
       "Bash(find /Volumes/UWorks/Projects/TrustMesh/frontend/src -type f -name *router* -o -name *Router*)",
-      "Bash(find /Volumes/UWorks/Projects/TrustMesh/frontend/src/hooks -type f -name *.ts)"
+      "Bash(find /Volumes/UWorks/Projects/TrustMesh/frontend/src/hooks -type f -name *.ts)",
+      "Bash(grep -E \"\\\\.\\(go\\)$\")",
+      "Bash(grep:*)"
     ]
   }
 }

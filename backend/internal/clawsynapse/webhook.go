@@ -53,6 +53,8 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 		h.handleTodoComplete(c, payload)
 	case "todo.fail":
 		h.handleTodoFail(c, payload)
+	case "task.comment":
+		h.handleTaskComment(c, payload)
 	default:
 		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "unsupported webhook type"))
 	}
@@ -178,6 +180,25 @@ func (h *WebhookHandler) handleTodoFail(c *gin.Context, webhook protocol.Webhook
 
 	h.publishTaskAndTodoStatusChanges(task, payload.TodoID, payload.Error, webhook.From, "todo.fail")
 	transport.WriteData(c, http.StatusOK, task)
+}
+
+func (h *WebhookHandler) handleTaskComment(c *gin.Context, webhook protocol.WebhookPayload) {
+	var payload protocol.TaskCommentPayload
+	if err := decodeWebhookMessage(webhook.Message, &payload); err != nil {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid task.comment message"))
+		return
+	}
+
+	event, appErr := h.store.AddTaskCommentByNode(webhook.From, store.TaskCommentInput{
+		TaskID:  payload.TaskID,
+		TodoID:  payload.TodoID,
+		Content: payload.Content,
+	})
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+	transport.WriteData(c, http.StatusOK, event)
 }
 
 func (h *WebhookHandler) enrichTodoResultTransfers(ctx context.Context, result *model.TodoResult) {

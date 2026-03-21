@@ -230,6 +230,17 @@ export interface Event {
   created_at: string
 }
 
+export interface Comment {
+  id: string
+  task_id: string
+  todo_id?: string
+  actor_type: 'user' | 'agent'
+  actor_id: string
+  actor_name: string
+  content: string
+  created_at: string
+}
+
 export interface TaskStreamSnapshot {
   task: TaskDetail
   events: Event[]

@@ -68,6 +68,29 @@ export function useTaskEvents(id: string | undefined) {
   })
 }
 
+export function useTaskComments(taskId: string | undefined) {
+  return useQuery({
+    queryKey: ['tasks', 'comments', taskId],
+    queryFn: async () => {
+      const res = await tasksApi.listTaskComments(taskId!)
+      return res.data.items
+    },
+    enabled: !!taskId,
+  })
+}
+
+export function useAddTaskComment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ taskId, content, todoId }: { taskId: string; content: string; todoId?: string }) =>
+      tasksApi.addTaskComment(taskId, content, todoId),
+    onSuccess: (_res, { taskId }) => {
+      qc.invalidateQueries({ queryKey: ['tasks', 'comments', taskId] })
+      qc.invalidateQueries({ queryKey: ['tasks', 'events', taskId] })
+    },
+  })
+}
+
 export function useDispatchTodo() {
   const qc = useQueryClient()
   return useMutation({

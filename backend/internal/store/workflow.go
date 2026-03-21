@@ -43,6 +43,12 @@ type TodoFailInput struct {
 	Error  string
 }
 
+type TaskCommentInput struct {
+	TaskID  string
+	TodoID  string
+	Content string
+}
+
 func (s *Store) RecordTodoDispatch(userID, taskID, todoID string) (*model.TaskDetail, *transport.AppError) {
 	taskID = strings.TrimSpace(taskID)
 	todoID = strings.TrimSpace(todoID)
@@ -452,6 +458,126 @@ func (s *Store) FailTodoByNodeWithMessageID(nodeID, messageID string, in TodoFai
 	}
 	s.publishTaskUnsafe(task.ID)
 	return copyTask(task), nil
+}
+
+func (s *Store) AddTaskCommentByNode(nodeID string, in TaskCommentInput) (*model.Comment, *transport.AppError) {
+	in.TaskID = strings.TrimSpace(in.TaskID)
+	in.TodoID = strings.TrimSpace(in.TodoID)
+	in.Content = strings.TrimSpace(in.Content)
+	if in.TaskID == "" || in.Content == "" {
+		return nil, transport.Validation("invalid task.comment payload", map[string]any{"task_id": "required", "content": "required"})
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	agent, err := s.agentByNodeUnsafe(nodeID)
+	if err != nil {
+		return nil, err
+	}
+	task, ok := s.tasks[in.TaskID]
+	if !ok || task.UserID != agent.UserID {
+		return nil, transport.NotFound("task not found")
+	}
+	if in.TodoID != "" {
+		if findTodoIndex(task, in.TodoID) < 0 {
+			return nil, transport.NotFound("todo not found")
+		}
+	}
+
+	now := time.Now().UTC()
+	s.markAgentSeenUnsafe(agent.ID, now)
+	comment := s.addCommentUnsafe(task, in.TodoID, "agent", agent.ID, agent.Name, in.Content, now)
+	if err := s.persistCommentUnsafe(comment); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.publishTaskUnsafe(task.ID)
+	return comment, nil
+}
+
+func (s *Store) AddTaskComment(userID, taskID string, in TaskCommentInput) (*model.Comment, *transport.AppError) {
+	taskID = strings.TrimSpace(taskID)
+	in.Content = strings.TrimSpace(in.Content)
+	in.TodoID = strings.TrimSpace(in.TodoID)
+	if taskID == "" || in.Content == "" {
+		return nil, transport.Validation("invalid comment payload", map[string]any{"task_id": "required", "content": "required"})
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[taskID]
+	if !ok || task.UserID != userID {
+		return nil, transport.NotFound("task not found")
+	}
+	if in.TodoID != "" {
+		if findTodoIndex(task, in.TodoID) < 0 {
+			return nil, transport.NotFound("todo not found")
+		}
+	}
+
+	now := time.Now().UTC()
+	userName := ""
+	if u, ok := s.users[userID]; ok {
+		userName = u.Name
+	}
+	comment := s.addCommentUnsafe(task, in.TodoID, "user", userID, userName, in.Content, now)
+	if err := s.persistCommentUnsafe(comment); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.publishTaskUnsafe(task.ID)
+	return comment, nil
+}
+
+func (s *Store) ListTaskComments(userID, taskID string) ([]model.Comment, *transport.AppError) {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return nil, transport.Validation("task_id required", nil)
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	task, ok := s.tasks[taskID]
+	if !ok || task.UserID != userID {
+		return nil, transport.NotFound("task not found")
+	}
+	comments := s.taskComments[taskID]
+	out := make([]model.Comment, len(comments))
+	copy(out, comments)
+	return out, nil
+}
+
+func (s *Store) addCommentUnsafe(task *model.TaskDetail, todoID, actorType, actorID, actorName, content string, at time.Time) *model.Comment {
+	comment := &model.Comment{
+		ID:        newID(),
+		UserID:    task.UserID,
+		TaskID:    task.ID,
+		TodoID:    todoID,
+		ActorType: actorType,
+		ActorID:   actorID,
+		ActorName: actorName,
+		Content:   content,
+		CreatedAt: at,
+	}
+	s.taskComments[task.ID] = append(s.taskComments[task.ID], *comment)
+
+	// 只有 Agent 评论才添加到活动时间线，用户评论不进入 events
+	if actorType == "agent" {
+		brief := content
+		if len(brief) > 80 {
+			brief = brief[:80] + "..."
+		}
+		metadata := map[string]any{"comment_id": comment.ID}
+		if todoID != "" {
+			metadata["todo_id"] = todoID
+		}
+		s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todoID, actorType, actorID, actorName, "task_comment", &brief, metadata, at)
+	}
+
+	task.UpdatedAt = at
+	task.Version++
+	return comment
 }
 
 func (s *Store) updateTaskStatusUnsafe(task *model.TaskDetail, now time.Time) {

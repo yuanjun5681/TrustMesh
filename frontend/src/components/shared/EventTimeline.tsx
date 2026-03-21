@@ -89,9 +89,20 @@ export function EventTimeline({
                   {formatDateTime(event.created_at)}
                 </span>
               </div>
-              {event.content && (
+              {event.content && event.event_type === 'task_comment' ? (
+                <div
+                  className={cn(
+                    'mt-1 rounded-md px-3 py-2 text-sm whitespace-pre-wrap',
+                    event.actor_type === 'agent'
+                      ? 'bg-muted'
+                      : 'bg-primary/5'
+                  )}
+                >
+                  {event.content}
+                </div>
+              ) : event.content ? (
                 <p className="text-sm text-muted-foreground mt-0.5">{event.content}</p>
-              )}
+              ) : null}
             </div>
           </div>
         )

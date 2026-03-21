@@ -37,6 +37,8 @@ type Store struct {
 	agentEvents       map[string][]*model.Event
 	processedMessages map[string]processedMessage
 
+	taskComments map[string][]model.Comment
+
 	notifications     map[string]*model.Notification
 	userNotifications map[string][]string
 
@@ -48,6 +50,7 @@ type Store struct {
 	mongoConversations     *mongo.Collection
 	mongoTasks             *mongo.Collection
 	mongoEvents            *mongo.Collection
+	mongoComments          *mongo.Collection
 	mongoProcessedMessages *mongo.Collection
 	mongoNotifications     *mongo.Collection
 	mongoTimeout           time.Duration
@@ -83,6 +86,7 @@ func New() *Store {
 		userEvents:              make(map[string][]*model.Event),
 		agentEvents:             make(map[string][]*model.Event),
 		processedMessages:       make(map[string]processedMessage),
+		taskComments:            make(map[string][]model.Comment),
 		notifications:           make(map[string]*model.Notification),
 		userNotifications:       make(map[string][]string),
 		taskSubscribers:         make(map[string]map[chan model.TaskStreamSnapshot]struct{}),

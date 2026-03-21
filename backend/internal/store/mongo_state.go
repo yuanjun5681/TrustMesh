@@ -41,6 +41,7 @@ func (s *Store) enableMongo(cfg config.Config, log *zap.Logger) error {
 	s.mongoConversations = db.Collection("conversations")
 	s.mongoTasks = db.Collection("tasks")
 	s.mongoEvents = db.Collection("events")
+	s.mongoComments = db.Collection("comments")
 	s.mongoProcessedMessages = db.Collection("processed_messages")
 	s.mongoNotifications = db.Collection("notifications")
 	s.mongoTimeout = cfg.MongoTimeout
@@ -84,6 +85,7 @@ func (s *Store) clearMongoCollections() {
 	s.mongoConversations = nil
 	s.mongoTasks = nil
 	s.mongoEvents = nil
+	s.mongoComments = nil
 	s.mongoProcessedMessages = nil
 	s.mongoNotifications = nil
 }
@@ -119,6 +121,9 @@ func (s *Store) ensureMongoIndexes() error {
 			{Keys: bson.D{{Key: "task_id", Value: 1}, {Key: "created_at", Value: 1}}},
 			{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "created_at", Value: 1}}},
 			{Keys: bson.D{{Key: "actor_id", Value: 1}, {Key: "created_at", Value: 1}}},
+		},
+		s.mongoComments: {
+			{Keys: bson.D{{Key: "task_id", Value: 1}, {Key: "created_at", Value: 1}}},
 		},
 		s.mongoNotifications: {
 			{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "is_read", Value: 1}, {Key: "created_at", Value: -1}}},
@@ -167,6 +172,10 @@ func (s *Store) loadMongoState() error {
 	if err != nil {
 		return err
 	}
+	taskComments, err := s.loadComments()
+	if err != nil {
+		return err
+	}
 	processedMessages, err := s.loadProcessedMessages()
 	if err != nil {
 		return err
@@ -200,6 +209,7 @@ func (s *Store) loadMongoState() error {
 	s.taskEvents = taskEvents
 	s.userEvents = userEvents
 	s.agentEvents = agentEvents
+	s.taskComments = taskComments
 	s.processedMessages = processedMessages
 	s.notifications = notifications
 	s.userNotifications = userNotifications
@@ -583,4 +593,37 @@ func (s *Store) persistTaskBundleUnsafe(taskID string) error {
 		return err
 	}
 	return s.persistTaskEventsUnsafe(taskID)
+}
+
+func (s *Store) loadComments() (map[string][]model.Comment, error) {
+	taskComments := make(map[string][]model.Comment)
+	if s.mongoComments == nil {
+		return taskComments, nil
+	}
+	ctx, cancel := s.mongoContext()
+	defer cancel()
+	cursor, err := s.mongoComments.Find(ctx, bson.D{}, options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}}))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var comments []model.Comment
+	if err := cursor.All(ctx, &comments); err != nil {
+		return nil, err
+	}
+	for _, c := range comments {
+		taskComments[c.TaskID] = append(taskComments[c.TaskID], c)
+	}
+	return taskComments, nil
+}
+
+func (s *Store) persistCommentUnsafe(c *model.Comment) error {
+	if !s.mongoEnabled || s.mongoComments == nil || c == nil {
+		return nil
+	}
+	ctx, cancel := s.mongoContext()
+	defer cancel()
+	_, err := s.mongoComments.ReplaceOne(ctx, bson.M{"_id": c.ID}, c, options.Replace().SetUpsert(true))
+	return err
 }
