@@ -5,6 +5,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ApiRequestError } from '@/api/client'
 import { getTaskArtifactContent, getTaskArtifactTransfer } from '@/api/tasks'
+import { cn } from '@/lib/utils'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { toast } from 'sonner'
 import type { TaskResult, TaskArtifact, TransferDetail } from '@/types'
 
@@ -23,6 +26,18 @@ function normalizeArtifactKind(kind: string | null | undefined) {
   return normalizedKind
 }
 
+function normalizeResultText(value: string | null | undefined) {
+  if (!value) {
+    return ''
+  }
+
+  return value
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+}
+
 interface TaskResultViewProps {
   taskId: string
   result: TaskResult
@@ -31,7 +46,9 @@ interface TaskResultViewProps {
 
 export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProps) {
   const safeArtifacts = artifacts ?? []
-  const hasResult = result.summary || result.final_output
+  const summaryText = normalizeResultText(result.summary)
+  const finalOutputText = normalizeResultText(result.final_output)
+  const hasResult = summaryText || finalOutputText
   const hasArtifacts = safeArtifacts.length > 0
   const [loadingArtifactId, setLoadingArtifactId] = useState<string | null>(null)
   const [downloadingArtifactId, setDownloadingArtifactId] = useState<string | null>(null)
@@ -83,17 +100,29 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
       {hasResult && (
         <Card>
           <CardContent className="flex flex-col gap-2 p-4">
-            {result.summary && (
+            {summaryText && (
               <div>
                 <h4 className="text-sm font-medium mb-1">摘要</h4>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{result.summary}</p>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{summaryText}</p>
               </div>
             )}
-            {result.final_output && (
+            {finalOutputText && (
               <div>
                 <h4 className="text-sm font-medium mb-1">最终产出</h4>
-                <div className="rounded-md bg-muted p-3 text-sm whitespace-pre-wrap font-mono text-xs">
-                  {result.final_output}
+                <div className="rounded-md bg-muted p-3">
+                  <div
+                    className={cn(
+                      'prose prose-sm max-w-none text-foreground dark:prose-invert',
+                      'prose-p:my-2 prose-headings:my-3',
+                      'prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5',
+                      'prose-pre:overflow-x-auto prose-pre:text-xs',
+                      'prose-code:text-xs prose-table:text-xs'
+                    )}
+                  >
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {finalOutputText}
+                    </ReactMarkdown>
+                  </div>
                 </div>
               </div>
             )}
