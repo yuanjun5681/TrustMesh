@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as projectsApi from '@/api/projects'
-import type { CreateProjectRequest, UpdateProjectRequest } from '@/types'
+import type { CreateProjectRequest, Project, UpdateProjectRequest } from '@/types'
 
 export function useProjects() {
   return useQuery({
@@ -36,7 +36,14 @@ export function useUpdateProject() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateProjectRequest }) =>
       projectsApi.updateProject(id, input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
+    onSuccess: (res, { id }) => {
+      const updatedProject = res.data
+      qc.setQueryData<Project | undefined>(['projects', id], updatedProject)
+      qc.setQueryData<Project[] | undefined>(['projects'], (projects) =>
+        projects?.map((project) => (project.id === updatedProject.id ? updatedProject : project)),
+      )
+      qc.invalidateQueries({ queryKey: ['projects'] })
+    },
   })
 }
 

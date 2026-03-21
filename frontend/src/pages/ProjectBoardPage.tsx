@@ -7,6 +7,7 @@ import { AgentStatusDot } from '@/components/shared/StatusBadge'
 import { TaskListView } from '@/components/task/TaskListView'
 import { TaskDetailPanel } from '@/components/task/TaskDetailPanel'
 import { ConversationSheet } from '@/components/conversation/ConversationSheet'
+import { EditProjectDialog } from '@/components/project/EditProjectDialog'
 import { useProject } from '@/hooks/useProjects'
 import { useTasks } from '@/hooks/useTasks'
 
@@ -16,6 +17,7 @@ export function ProjectBoardPage() {
   const { data: tasks, isLoading } = useTasks(projectId)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
 
   return (
     <div className="flex h-full flex-col">
@@ -42,7 +44,7 @@ export function ProjectBoardPage() {
               <MoreHorizontal className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent>
-              <DropdownMenuItem>
+              <DropdownMenuItem disabled={!project} onClick={() => setEditOpen(true)}>
                 <Pencil className="size-3.5 mr-2" />
                 编辑项目
               </DropdownMenuItem>
@@ -97,6 +99,8 @@ export function ProjectBoardPage() {
           }}
         />
       )}
+
+      <EditProjectDialog open={editOpen} onOpenChange={setEditOpen} project={project} />
     </div>
   )
 }
