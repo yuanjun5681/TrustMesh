@@ -561,6 +561,11 @@ func (s *Store) addCommentUnsafe(task *model.TaskDetail, todoID, actorType, acto
 		CreatedAt: at,
 	}
 	s.taskComments[task.ID] = append(s.taskComments[task.ID], *comment)
+	s.publishUserEventUnsafe(task.UserID, "task.comment.created", map[string]any{
+		"task_id":    task.ID,
+		"project_id": task.ProjectID,
+		"comment":    *comment,
+	}, at)
 
 	// 只有 Agent 评论才添加到活动时间线，用户评论不进入 events
 	if actorType == "agent" {

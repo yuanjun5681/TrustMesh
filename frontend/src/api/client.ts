@@ -1,5 +1,6 @@
 import ky from 'ky'
 import type { ApiError } from '@/types'
+import { apiBaseUrl } from '@/lib/apiBase'
 
 export class ApiRequestError extends Error {
   code: string
@@ -16,7 +17,7 @@ export class ApiRequestError extends Error {
 }
 
 export const api = ky.create({
-  prefixUrl: '/api/v1',
+  prefixUrl: apiBaseUrl,
   hooks: {
     beforeRequest: [
       (request) => {

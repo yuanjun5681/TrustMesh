@@ -9,7 +9,6 @@ export function useDashboardStats() {
       return res.data
     },
     staleTime: 30_000,
-    refetchInterval: 30_000,
   })
 }
 
@@ -21,7 +20,6 @@ export function useDashboardEvents(limit = 20) {
       return res.data.items
     },
     staleTime: 15_000,
-    refetchInterval: 15_000,
   })
 }
 
@@ -33,7 +31,6 @@ export function useDashboardTasks(limit = 10) {
       return res.data.items
     },
     staleTime: 15_000,
-    refetchInterval: 15_000,
   })
 }
 

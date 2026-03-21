@@ -29,10 +29,6 @@ type ConversationDetail struct {
 	UpdatedAt  time.Time             `json:"updated_at" bson:"updated_at"`
 }
 
-type ConversationStreamSnapshot struct {
-	Conversation ConversationDetail `json:"conversation"`
-}
-
 // Internal conversation record for mutable state.
 type Conversation struct {
 	ID        string                `bson:"_id"`

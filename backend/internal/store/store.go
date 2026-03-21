@@ -56,8 +56,7 @@ type Store struct {
 	mongoTimeout           time.Duration
 	log                    *zap.Logger
 
-	taskSubscribers         map[string]map[chan model.TaskStreamSnapshot]struct{}
-	conversationSubscribers map[string]map[chan model.ConversationStreamSnapshot]struct{}
+	userSubscribers map[string]map[chan model.UserStreamEvent]struct{}
 }
 
 type processedMessage struct {
@@ -72,25 +71,24 @@ type AgentPresence struct {
 
 func New() *Store {
 	return &Store{
-		users:                   make(map[string]*model.User),
-		usersByMail:             make(map[string]string),
-		agents:                  make(map[string]*model.Agent),
-		agentByNode:             make(map[string]string),
-		projects:                make(map[string]*model.Project),
-		conversations:           make(map[string]*model.Conversation),
-		projectConversations:    make(map[string][]string),
-		tasks:                   make(map[string]*model.TaskDetail),
-		projectTasks:            make(map[string][]string),
-		conversationTasks:       make(map[string]string),
-		taskEvents:              make(map[string][]model.Event),
-		userEvents:              make(map[string][]*model.Event),
-		agentEvents:             make(map[string][]*model.Event),
-		processedMessages:       make(map[string]processedMessage),
-		taskComments:            make(map[string][]model.Comment),
-		notifications:           make(map[string]*model.Notification),
-		userNotifications:       make(map[string][]string),
-		taskSubscribers:         make(map[string]map[chan model.TaskStreamSnapshot]struct{}),
-		conversationSubscribers: make(map[string]map[chan model.ConversationStreamSnapshot]struct{}),
+		users:                make(map[string]*model.User),
+		usersByMail:          make(map[string]string),
+		agents:               make(map[string]*model.Agent),
+		agentByNode:          make(map[string]string),
+		projects:             make(map[string]*model.Project),
+		conversations:        make(map[string]*model.Conversation),
+		projectConversations: make(map[string][]string),
+		tasks:                make(map[string]*model.TaskDetail),
+		projectTasks:         make(map[string][]string),
+		conversationTasks:    make(map[string]string),
+		taskEvents:           make(map[string][]model.Event),
+		userEvents:           make(map[string][]*model.Event),
+		agentEvents:          make(map[string][]*model.Event),
+		processedMessages:    make(map[string]processedMessage),
+		taskComments:         make(map[string][]model.Comment),
+		notifications:        make(map[string]*model.Notification),
+		userNotifications:    make(map[string][]string),
+		userSubscribers:      make(map[string]map[chan model.UserStreamEvent]struct{}),
 	}
 }
 

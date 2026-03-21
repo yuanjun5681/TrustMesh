@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as tasksApi from '@/api/tasks'
 import { usePageVisibility } from './usePageVisibility'
-import type { ListProjectTasksQuery, TaskDetail, TaskListItem } from '@/types'
+import { useRealtimeStatus } from '@/realtime/hooks/useRealtimeStatus'
+import type { ListProjectTasksQuery, TaskDetail } from '@/types'
 
 function normalizeTaskDetail(task: TaskDetail): TaskDetail {
   return {
@@ -12,8 +13,6 @@ function normalizeTaskDetail(task: TaskDetail): TaskDetail {
 }
 
 export function useTasks(projectId: string | undefined, query?: ListProjectTasksQuery) {
-  const isPageVisible = usePageVisibility()
-
   return useQuery({
     queryKey: ['tasks', projectId, query],
     queryFn: async () => {
@@ -22,20 +21,12 @@ export function useTasks(projectId: string | undefined, query?: ListProjectTasks
     },
     enabled: !!projectId,
     staleTime: 30_000,
-    refetchInterval: (currentQuery) => {
-      if (!isPageVisible) {
-        return false
-      }
-
-      const tasks = currentQuery.state.data as TaskListItem[] | undefined
-      return tasks?.some((task) => task.status === 'in_progress') ? 15_000 : false
-    },
-    refetchIntervalInBackground: false,
   })
 }
 
 export function useTask(id: string | undefined) {
   const isPageVisible = usePageVisibility()
+  const realtimeStatus = useRealtimeStatus()
 
   return useQuery({
     queryKey: ['tasks', 'detail', id],
@@ -47,6 +38,9 @@ export function useTask(id: string | undefined) {
     staleTime: 5_000,
     refetchInterval: (currentQuery) => {
       if (!isPageVisible || !id) {
+        return false
+      }
+      if (realtimeStatus !== 'reconnecting' && realtimeStatus !== 'disconnected') {
         return false
       }
 

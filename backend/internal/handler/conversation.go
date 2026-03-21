@@ -73,22 +73,6 @@ func (h *ConversationHandler) Get(c *gin.Context) {
 	transport.WriteData(c, http.StatusOK, detail)
 }
 
-func (h *ConversationHandler) Stream(c *gin.Context) {
-	userID, ok := currentUserID(c)
-	if !ok {
-		return
-	}
-
-	updates, unsubscribe, appErr := h.store.SubscribeConversation(userID, c.Param("id"))
-	if appErr != nil {
-		transport.WriteError(c, appErr)
-		return
-	}
-	defer unsubscribe()
-
-	streamEvents(c, updates)
-}
-
 func (h *ConversationHandler) AppendMessage(c *gin.Context) {
 	userID, ok := currentUserID(c)
 	if !ok {

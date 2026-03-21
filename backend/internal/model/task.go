@@ -96,8 +96,3 @@ type TaskDetail struct {
 	CreatedAt      time.Time      `json:"created_at" bson:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at" bson:"updated_at"`
 }
-
-type TaskStreamSnapshot struct {
-	Task   TaskDetail `json:"task"`
-	Events []Event    `json:"events"`
-}

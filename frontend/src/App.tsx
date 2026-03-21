@@ -11,6 +11,7 @@ import { AgentDetailPage } from '@/pages/AgentDetailPage'
 import { InboxPage } from '@/pages/InboxPage'
 import { useAuthStore } from '@/stores/authStore'
 import { Toaster } from '@/components/ui/sonner'
+import { RealtimeProvider } from '@/realtime/provider'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,32 +38,34 @@ function GuestRoute({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          {/* Guest Routes */}
-          <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
-          <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
+      <RealtimeProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* Guest Routes */}
+            <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
+            <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
 
-          {/* Protected Routes */}
-          <Route
-            element={
-              <ProtectedRoute>
-                <MainLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/inbox" element={<InboxPage />} />
-            <Route path="/projects" element={<ProjectListPage />} />
-            <Route path="/projects/:projectId" element={<ProjectBoardPage />} />
-            <Route path="/agents" element={<AgentListPage />} />
-            <Route path="/agents/:id" element={<AgentDetailPage />} />
-          </Route>
+            {/* Protected Routes */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <MainLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/inbox" element={<InboxPage />} />
+              <Route path="/projects" element={<ProjectListPage />} />
+              <Route path="/projects/:projectId" element={<ProjectBoardPage />} />
+              <Route path="/agents" element={<AgentListPage />} />
+              <Route path="/agents/:id" element={<AgentDetailPage />} />
+            </Route>
 
-          {/* Redirect */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </BrowserRouter>
+            {/* Redirect */}
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </RealtimeProvider>
       <Toaster position="top-center" />
     </QueryClientProvider>
   )

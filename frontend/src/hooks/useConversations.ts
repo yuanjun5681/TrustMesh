@@ -1,11 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as conversationsApi from '@/api/conversations'
 import { usePageVisibility } from './usePageVisibility'
+import { useRealtimeStatus } from '@/realtime/hooks/useRealtimeStatus'
 import type {
   AppendConversationMessageRequest,
   ConversationDetail,
   CreateConversationRequest,
 } from '@/types'
+
+interface UseConversationOptions {
+  isActiveHint?: boolean
+}
 
 export function useConversations(projectId: string | undefined) {
   return useQuery({
@@ -19,8 +24,9 @@ export function useConversations(projectId: string | undefined) {
   })
 }
 
-export function useConversation(id: string | undefined, isActiveHint: boolean) {
+export function useConversation(id: string | undefined, options: UseConversationOptions) {
   const isPageVisible = usePageVisibility()
+  const realtimeStatus = useRealtimeStatus()
 
   return useQuery({
     queryKey: ['conversations', 'detail', id],
@@ -34,9 +40,12 @@ export function useConversation(id: string | undefined, isActiveHint: boolean) {
       if (!isPageVisible || !id) {
         return false
       }
+      if (realtimeStatus !== 'reconnecting' && realtimeStatus !== 'disconnected') {
+        return false
+      }
 
       const conversation = currentQuery.state.data as ConversationDetail | undefined
-      return conversation?.status === 'active' || (!conversation && isActiveHint) ? 3_000 : false
+      return conversation?.status === 'active' || (!conversation && options.isActiveHint) ? 3_000 : false
     },
     refetchIntervalInBackground: false,
   })

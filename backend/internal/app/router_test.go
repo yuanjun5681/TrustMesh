@@ -33,7 +33,6 @@ func TestHappyPathAuthToConversation(t *testing.T) {
 		LogLevel:      "error",
 		AllowAllCORS:  true,
 		ReadTimeout:   3 * time.Second,
-		WriteTimeout:  3 * time.Second,
 		ShutdownGrace: 3 * time.Second,
 	}, log)
 	if err != nil {
@@ -154,7 +153,6 @@ func TestCreateConversationPublishesInitialPMBrief(t *testing.T) {
 		LogLevel:           "error",
 		AllowAllCORS:       true,
 		ReadTimeout:        3 * time.Second,
-		WriteTimeout:       3 * time.Second,
 		ShutdownGrace:      3 * time.Second,
 		ClawSynapseAPIURL:  clawServer.URL,
 		ClawSynapseTimeout: time.Second,
@@ -325,7 +323,6 @@ func TestDispatchTodoPublishesAssignmentToAssignee(t *testing.T) {
 		LogLevel:           "error",
 		AllowAllCORS:       true,
 		ReadTimeout:        3 * time.Second,
-		WriteTimeout:       3 * time.Second,
 		ShutdownGrace:      3 * time.Second,
 		ClawSynapseAPIURL:  clawServer.URL,
 		ClawSynapseTimeout: time.Second,
@@ -445,7 +442,7 @@ func TestDispatchTodoPublishesAssignmentToAssignee(t *testing.T) {
 	}
 }
 
-func TestConversationStreamPushesUpdatedSnapshot(t *testing.T) {
+func TestUserRealtimeStreamPushesDomainEvents(t *testing.T) {
 	log, err := logger.New("error")
 	if err != nil {
 		t.Fatalf("new logger: %v", err)
@@ -459,7 +456,6 @@ func TestConversationStreamPushesUpdatedSnapshot(t *testing.T) {
 		LogLevel:      "error",
 		AllowAllCORS:  true,
 		ReadTimeout:   3 * time.Second,
-		WriteTimeout:  3 * time.Second,
 		ShutdownGrace: 3 * time.Second,
 	}, log)
 	if err != nil {
@@ -475,94 +471,8 @@ func TestConversationStreamPushesUpdatedSnapshot(t *testing.T) {
 	defer testServer.Close()
 
 	registerResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/auth/register", "", map[string]any{
-		"email":    "stream@example.com",
-		"name":     "Stream User",
-		"password": "StrongPass123!",
-	})
-	registerData := decodeBody(t, registerResp)
-	token := nestedString(registerData, "data", "token")
-	userID := nestedString(registerData, "data", "user", "id")
-
-	pm, appErr := application.Store.CreateAgent(userID, "node-pm-001", "PM Agent", "pm", "PM", []string{"plan"})
-	if appErr != nil {
-		t.Fatalf("create pm: %v", appErr)
-	}
-	application.Store.SyncAgentPresence([]store.AgentPresence{
-		{NodeID: pm.NodeID, LastSeenAt: time.Now().UTC()},
-	}, time.Now().UTC())
-
-	project, appErr := application.Store.CreateProject(userID, "Conversation Stream", "demo", pm.ID)
-	if appErr != nil {
-		t.Fatalf("create project: %v", appErr)
-	}
-	conversation, appErr := application.Store.CreateConversation(userID, project.ID, "Need login flow")
-	if appErr != nil {
-		t.Fatalf("create conversation: %v", appErr)
-	}
-
-	streamResp := openSSE(t, testServer.Client(), testServer.URL+"/api/v1/conversations/"+conversation.ID+"/stream", token)
-	defer streamResp.Body.Close()
-	reader := bufio.NewReader(streamResp.Body)
-
-	eventName, initial := readSSEEvent(t, reader)
-	if eventName != "snapshot" {
-		t.Fatalf("unexpected initial event: %s", eventName)
-	}
-	if nestedString(initial, "conversation", "status") != "active" {
-		t.Fatalf("unexpected conversation status: %#v", initial)
-	}
-
-	if _, appErr := application.Store.AppendPMReplyByNode(pm.NodeID, conversation.ID, "先确认一下登录方式"); appErr != nil {
-		t.Fatalf("append pm reply: %v", appErr)
-	}
-
-	_, updated := readSSEEvent(t, reader)
-	conv, ok := updated["conversation"].(map[string]any)
-	if !ok {
-		t.Fatalf("unexpected conversation payload: %#v", updated)
-	}
-	messages, ok := conv["messages"].([]any)
-	if !ok || len(messages) != 2 {
-		t.Fatalf("unexpected messages: %#v", conv["messages"])
-	}
-	lastMessage, ok := messages[len(messages)-1].(map[string]any)
-	if !ok || lastMessage["content"] != "先确认一下登录方式" {
-		t.Fatalf("unexpected last message: %#v", lastMessage)
-	}
-}
-
-func TestTaskStreamPushesUpdatedSnapshot(t *testing.T) {
-	log, err := logger.New("error")
-	if err != nil {
-		t.Fatalf("new logger: %v", err)
-	}
-	defer func() { _ = log.Sync() }()
-
-	application, err := New(config.Config{
-		Port:          "0",
-		JWTSecret:     "test-secret",
-		TokenTTL:      time.Hour,
-		LogLevel:      "error",
-		AllowAllCORS:  true,
-		ReadTimeout:   3 * time.Second,
-		WriteTimeout:  3 * time.Second,
-		ShutdownGrace: 3 * time.Second,
-	}, log)
-	if err != nil {
-		t.Fatalf("new app: %v", err)
-	}
-	defer func() {
-		if closeErr := application.Close(); closeErr != nil {
-			t.Fatalf("close app: %v", closeErr)
-		}
-	}()
-
-	testServer := httptest.NewServer(application.Engine)
-	defer testServer.Close()
-
-	registerResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/auth/register", "", map[string]any{
-		"email":    "task-stream@example.com",
-		"name":     "Task Stream User",
+		"email":    "user-stream@example.com",
+		"name":     "Realtime User",
 		"password": "StrongPass123!",
 	})
 	registerData := decodeBody(t, registerResp)
@@ -575,14 +485,14 @@ func TestTaskStreamPushesUpdatedSnapshot(t *testing.T) {
 	}
 	dev, appErr := application.Store.CreateAgent(userID, "node-dev-001", "Developer", "developer", "Dev", []string{"backend"})
 	if appErr != nil {
-		t.Fatalf("create developer: %v", appErr)
+		t.Fatalf("create dev: %v", appErr)
 	}
 	application.Store.SyncAgentPresence([]store.AgentPresence{
 		{NodeID: pm.NodeID, LastSeenAt: time.Now().UTC()},
 		{NodeID: dev.NodeID, LastSeenAt: time.Now().UTC()},
 	}, time.Now().UTC())
 
-	project, appErr := application.Store.CreateProject(userID, "Task Stream", "demo", pm.ID)
+	project, appErr := application.Store.CreateProject(userID, "Realtime Project", "demo", pm.ID)
 	if appErr != nil {
 		t.Fatalf("create project: %v", appErr)
 	}
@@ -590,6 +500,29 @@ func TestTaskStreamPushesUpdatedSnapshot(t *testing.T) {
 	if appErr != nil {
 		t.Fatalf("create conversation: %v", appErr)
 	}
+
+	streamResp := openSSE(t, testServer.Client(), testServer.URL+"/api/v1/events/stream", token)
+	defer streamResp.Body.Close()
+	reader := bufio.NewReader(streamResp.Body)
+
+	if _, appErr := application.Store.AppendPMReplyByNode(pm.NodeID, conversation.ID, "先确认一下登录方式"); appErr != nil {
+		t.Fatalf("append pm reply: %v", appErr)
+	}
+
+	notificationCreated := readUserStreamEventOfType(t, reader, "notification.created")
+	if nestedString(notificationCreated, "payload", "notification", "category") != "conversation" {
+		t.Fatalf("unexpected notification.created payload: %#v", notificationCreated)
+	}
+
+	conversationUpdated := readUserStreamEventOfType(t, reader, "conversation.updated")
+	if nestedString(conversationUpdated, "payload", "conversation", "id") != conversation.ID {
+		t.Fatalf("unexpected conversation.updated payload: %#v", conversationUpdated)
+	}
+	messages, ok := conversationUpdated["payload"].(map[string]any)["conversation"].(map[string]any)["messages"].([]any)
+	if !ok || len(messages) != 2 {
+		t.Fatalf("unexpected conversation messages payload: %#v", conversationUpdated)
+	}
+
 	task, appErr := application.Store.CreateTaskByPMNode(pm.NodeID, store.TaskCreateInput{
 		ProjectID:      project.ID,
 		ConversationID: conversation.ID,
@@ -608,18 +541,6 @@ func TestTaskStreamPushesUpdatedSnapshot(t *testing.T) {
 		t.Fatalf("create task: %v", appErr)
 	}
 
-	streamResp := openSSE(t, testServer.Client(), testServer.URL+"/api/v1/tasks/"+task.ID+"/stream", token)
-	defer streamResp.Body.Close()
-	reader := bufio.NewReader(streamResp.Body)
-
-	eventName, initial := readSSEEvent(t, reader)
-	if eventName != "snapshot" {
-		t.Fatalf("unexpected initial event: %s", eventName)
-	}
-	if nestedString(initial, "task", "status") != "pending" {
-		t.Fatalf("unexpected initial task status: %#v", initial)
-	}
-
 	if _, appErr := application.Store.UpdateTodoProgressByNode(dev.NodeID, store.TodoProgressInput{
 		TaskID:  task.ID,
 		TodoID:  "todo-1",
@@ -628,17 +549,148 @@ func TestTaskStreamPushesUpdatedSnapshot(t *testing.T) {
 		t.Fatalf("update todo progress: %v", appErr)
 	}
 
-	_, updated := readSSEEvent(t, reader)
-	if nestedString(updated, "task", "status") != "in_progress" {
-		t.Fatalf("unexpected updated task status: %#v", updated)
+	taskEventCreated := readUserStreamEventOfType(t, reader, "task.event.created")
+	if nestedString(taskEventCreated, "payload", "task_id") != task.ID {
+		t.Fatalf("unexpected task.event.created payload: %#v", taskEventCreated)
 	}
-	events, ok := updated["events"].([]any)
-	if !ok || len(events) < 3 {
-		t.Fatalf("unexpected task events: %#v", updated["events"])
+
+	taskUpdated := readUserStreamEventMatching(t, reader, func(payload map[string]any) bool {
+		return nestedString(payload, "type") == "task.updated" &&
+			nestedString(payload, "payload", "task", "id") == task.ID &&
+			nestedString(payload, "payload", "task", "status") == "in_progress"
+	})
+	if nestedString(taskUpdated, "payload", "task", "status") != "in_progress" {
+		t.Fatalf("unexpected task.updated payload: %#v", taskUpdated)
 	}
-	lastEvent, ok := events[len(events)-1].(map[string]any)
-	if !ok || lastEvent["event_type"] != "task_status_changed" {
-		t.Fatalf("unexpected last event: %#v", lastEvent)
+
+	if _, appErr := application.Store.AddTaskComment(userID, task.ID, store.TaskCommentInput{
+		TaskID:  task.ID,
+		Content: "Please add refresh token support as well",
+	}); appErr != nil {
+		t.Fatalf("add task comment: %v", appErr)
+	}
+
+	taskCommentCreated := readUserStreamEventOfType(t, reader, "task.comment.created")
+	if nestedString(taskCommentCreated, "payload", "comment", "content") != "Please add refresh token support as well" {
+		t.Fatalf("unexpected task.comment.created payload: %#v", taskCommentCreated)
+	}
+
+	application.Store.SyncAgentPresence([]store.AgentPresence{
+		{NodeID: pm.NodeID, LastSeenAt: time.Now().UTC()},
+	}, time.Now().UTC())
+
+	agentStatusChanged := readUserStreamEventOfType(t, reader, "agent.status.changed")
+	if nestedString(agentStatusChanged, "payload", "agent", "id") != dev.ID {
+		t.Fatalf("unexpected agent.status.changed payload: %#v", agentStatusChanged)
+	}
+	if nestedString(agentStatusChanged, "payload", "agent", "status") != "offline" {
+		t.Fatalf("unexpected agent status payload: %#v", agentStatusChanged)
+	}
+}
+
+func TestUserRealtimeStreamPushesNotificationReadLifecycle(t *testing.T) {
+	log, err := logger.New("error")
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	defer func() { _ = log.Sync() }()
+
+	application, err := New(config.Config{
+		Port:          "0",
+		JWTSecret:     "test-secret",
+		TokenTTL:      time.Hour,
+		LogLevel:      "error",
+		AllowAllCORS:  true,
+		ReadTimeout:   3 * time.Second,
+		ShutdownGrace: 3 * time.Second,
+	}, log)
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
+	defer func() {
+		if closeErr := application.Close(); closeErr != nil {
+			t.Fatalf("close app: %v", closeErr)
+		}
+	}()
+
+	testServer := httptest.NewServer(application.Engine)
+	defer testServer.Close()
+
+	registerResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/auth/register", "", map[string]any{
+		"email":    "notification-stream@example.com",
+		"name":     "Notification User",
+		"password": "StrongPass123!",
+	})
+	registerData := decodeBody(t, registerResp)
+	token := nestedString(registerData, "data", "token")
+	userID := nestedString(registerData, "data", "user", "id")
+
+	pm, appErr := application.Store.CreateAgent(userID, "node-pm-001", "PM Agent", "pm", "PM", []string{"plan"})
+	if appErr != nil {
+		t.Fatalf("create pm: %v", appErr)
+	}
+	application.Store.SyncAgentPresence([]store.AgentPresence{
+		{NodeID: pm.NodeID, LastSeenAt: time.Now().UTC()},
+	}, time.Now().UTC())
+
+	project, appErr := application.Store.CreateProject(userID, "Notification Project", "demo", pm.ID)
+	if appErr != nil {
+		t.Fatalf("create project: %v", appErr)
+	}
+	conversation, appErr := application.Store.CreateConversation(userID, project.ID, "Need notification coverage")
+	if appErr != nil {
+		t.Fatalf("create conversation: %v", appErr)
+	}
+
+	streamResp := openSSE(t, testServer.Client(), testServer.URL+"/api/v1/events/stream", token)
+	defer streamResp.Body.Close()
+	reader := bufio.NewReader(streamResp.Body)
+
+	if _, appErr := application.Store.AppendPMReplyByNode(pm.NodeID, conversation.ID, "收到，我来分析"); appErr != nil {
+		t.Fatalf("append pm reply: %v", appErr)
+	}
+	created := readUserStreamEventOfType(t, reader, "notification.created")
+	notificationID := nestedString(created, "payload", "notification", "id")
+	if notificationID == "" {
+		t.Fatalf("missing notification id in created payload: %#v", created)
+	}
+
+	readResp := doJSON(t, testServer.Client(), http.MethodPatch, testServer.URL+"/api/v1/notifications/"+notificationID+"/read", token, nil)
+	if readResp.StatusCode != http.StatusOK {
+		t.Fatalf("mark read status=%d", readResp.StatusCode)
+	}
+	readEvent := readUserStreamEventOfType(t, reader, "notification.read")
+	if nestedString(readEvent, "payload", "notification_id") != notificationID {
+		t.Fatalf("unexpected notification.read payload: %#v", readEvent)
+	}
+
+	if _, appErr := application.Store.AppendPMReplyByNode(pm.NodeID, conversation.ID, "补充一个细节"); appErr != nil {
+		t.Fatalf("append second pm reply: %v", appErr)
+	}
+	secondCreated := readUserStreamEventOfType(t, reader, "notification.created")
+	secondID := nestedString(secondCreated, "payload", "notification", "id")
+	if secondID == "" {
+		t.Fatalf("missing second notification id: %#v", secondCreated)
+	}
+
+	allReadResp := doJSON(t, testServer.Client(), http.MethodPost, testServer.URL+"/api/v1/notifications/mark-all-read", token, nil)
+	if allReadResp.StatusCode != http.StatusOK {
+		t.Fatalf("mark all read status=%d", allReadResp.StatusCode)
+	}
+	allReadEvent := readUserStreamEventOfType(t, reader, "notifications.all_read")
+	ids, ok := allReadEvent["payload"].(map[string]any)["notification_ids"].([]any)
+	if !ok || len(ids) == 0 {
+		t.Fatalf("unexpected notifications.all_read payload: %#v", allReadEvent)
+	}
+	found := false
+	for _, id := range ids {
+		if id == secondID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected notifications.all_read payload to include %s: %#v", secondID, allReadEvent)
 	}
 }
 
@@ -667,7 +719,6 @@ func TestGetTaskArtifactTransfer(t *testing.T) {
 		LogLevel:           "error",
 		AllowAllCORS:       true,
 		ReadTimeout:        3 * time.Second,
-		WriteTimeout:       3 * time.Second,
 		ShutdownGrace:      3 * time.Second,
 		ClawSynapseAPIURL:  clawServer.URL,
 		ClawSynapseTimeout: time.Second,
@@ -770,7 +821,6 @@ func TestGetTaskArtifactContent(t *testing.T) {
 		LogLevel:      "error",
 		AllowAllCORS:  true,
 		ReadTimeout:   3 * time.Second,
-		WriteTimeout:  3 * time.Second,
 		ShutdownGrace: 3 * time.Second,
 	}, log)
 	if err != nil {
@@ -1009,6 +1059,29 @@ func readSSEEvent(t *testing.T, reader *bufio.Reader) (string, map[string]any) {
 		t.Fatal("timed out waiting for sse event")
 		return "", nil
 	}
+}
+
+func readUserStreamEventOfType(t *testing.T, reader *bufio.Reader, eventType string) map[string]any {
+	t.Helper()
+
+	return readUserStreamEventMatching(t, reader, func(payload map[string]any) bool {
+		return nestedString(payload, "type") == eventType
+	})
+}
+
+func readUserStreamEventMatching(t *testing.T, reader *bufio.Reader, match func(payload map[string]any) bool) map[string]any {
+	t.Helper()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		_, payload := readSSEEvent(t, reader)
+		if match(payload) {
+			return payload
+		}
+	}
+
+	t.Fatal("timed out waiting for matching user stream event")
+	return nil
 }
 
 func decodeBody(t *testing.T, resp *http.Response) map[string]any {

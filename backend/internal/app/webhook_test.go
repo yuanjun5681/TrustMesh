@@ -54,7 +54,6 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 		LogLevel:           "error",
 		AllowAllCORS:       true,
 		ReadTimeout:        3 * time.Second,
-		WriteTimeout:       3 * time.Second,
 		ShutdownGrace:      3 * time.Second,
 		ClawSynapseNodeID:  "trustmesh-server",
 		ClawSynapseAPIURL:  clawServer.URL,
