@@ -93,7 +93,7 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
             </TabsList>
 
             <TabsContent value="todos" className="mt-3">
-              <TodoList taskId={task.id} todos={task.todos} artifacts={task.artifacts} />
+              <TodoList todos={task.todos} artifacts={task.artifacts} />
             </TabsContent>
 
             <TabsContent value="comments" className="mt-3">

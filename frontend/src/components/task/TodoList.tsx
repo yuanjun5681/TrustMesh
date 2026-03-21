@@ -1,11 +1,7 @@
-import { CheckCircle2, Circle, Loader2, Play, XCircle, ChevronDown, ChevronRight } from 'lucide-react'
+import { CheckCircle2, Circle, Loader2, XCircle, ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { useDispatchTodo } from '@/hooks/useTasks'
-import { ApiRequestError } from '@/api/client'
-import { toast } from 'sonner'
 import type { Todo, TaskArtifact } from '@/types'
 
 const statusIcons = {
@@ -23,30 +19,15 @@ const statusColors = {
 }
 
 interface TodoListProps {
-  taskId: string
   todos: Todo[]
   artifacts: TaskArtifact[]
 }
 
-export function TodoList({ taskId, todos, artifacts }: TodoListProps) {
+export function TodoList({ todos, artifacts }: TodoListProps) {
   const safeArtifacts = artifacts ?? []
-  const dispatchTodo = useDispatchTodo()
-  const [dispatchError, setDispatchError] = useState<{ todoId: string; message: string } | null>(null)
 
   if (todos.length === 0) {
     return <p className="py-8 text-center text-sm text-muted-foreground">暂无 Todo</p>
-  }
-
-  const handleDispatch = async (todo: Todo) => {
-    setDispatchError(null)
-    try {
-      await dispatchTodo.mutateAsync({ taskId, todoId: todo.id })
-      toast.success(`Todo "${todo.title}" 已派发`)
-    } catch (err) {
-      const message = err instanceof ApiRequestError ? err.message : '手动派发失败'
-      toast.error(message)
-      setDispatchError({ todoId: todo.id, message })
-    }
   }
 
   return (
@@ -56,9 +37,6 @@ export function TodoList({ taskId, todos, artifacts }: TodoListProps) {
           key={todo.id}
           todo={todo}
           artifacts={safeArtifacts}
-          onDispatch={() => handleDispatch(todo)}
-          isDispatching={dispatchTodo.isPending && dispatchTodo.variables?.todoId === todo.id}
-          dispatchError={dispatchError?.todoId === todo.id ? dispatchError.message : null}
         />
       ))}
     </div>
@@ -68,15 +46,9 @@ export function TodoList({ taskId, todos, artifacts }: TodoListProps) {
 function TodoItem({
   todo,
   artifacts,
-  onDispatch,
-  isDispatching,
-  dispatchError,
 }: {
   todo: Todo
   artifacts: TaskArtifact[]
-  onDispatch: () => void
-  isDispatching: boolean
-  dispatchError: string | null
 }) {
   const [expanded, setExpanded] = useState(false)
   const Icon = statusIcons[todo.status]
@@ -102,9 +74,6 @@ function TodoItem({
             <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
               <span>{todo.assignee.name}</span>
             </div>
-            {dispatchError && (
-              <p className="mt-2 text-xs text-destructive">{dispatchError}</p>
-            )}
           </div>
           {hasDetails && (
             expanded
@@ -112,28 +81,6 @@ function TodoItem({
               : <ChevronRight className="size-4 shrink-0 text-muted-foreground mt-0.5" />
           )}
         </button>
-        {todo.status === 'pending' && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            disabled={isDispatching}
-            onClick={() => void onDispatch()}
-          >
-            {isDispatching ? (
-              <>
-                <Loader2 className="size-3.5 animate-spin" />
-                派发中
-              </>
-            ) : (
-              <>
-                <Play className="size-3.5" />
-                手动触发
-              </>
-            )}
-          </Button>
-        )}
       </div>
 
       {expanded && hasDetails && (
