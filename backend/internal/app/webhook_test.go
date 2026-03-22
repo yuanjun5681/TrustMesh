@@ -128,8 +128,16 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 		"todos": []map[string]any{
 			{
 				"id":               "todo-1",
+				"order":            1,
 				"title":            "Build backend API",
 				"description":      "Implement auth endpoints",
+				"assignee_node_id": "node-dev-001",
+			},
+			{
+				"id":               "todo-2",
+				"order":            2,
+				"title":            "Build frontend UI",
+				"description":      "Implement login form after backend API is ready",
 				"assignee_node_id": "node-dev-001",
 			},
 		},
@@ -160,14 +168,14 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 		t.Fatalf("expected %d publish requests after task.create, got %d", initialPublishCount+2, len(publishRequests))
 	}
 	taskCreatedReq := publishRequests[initialPublishCount]
-	todoAssignedReq := publishRequests[initialPublishCount+1]
+	firstTodoAssignedReq := publishRequests[initialPublishCount+1]
 	mu.Unlock()
 
 	if taskCreatedReq["type"] != "task.created" || taskCreatedReq["targetNode"] != "node-pm-001" {
 		t.Fatalf("unexpected task.created publish request: %#v", taskCreatedReq)
 	}
-	if todoAssignedReq["type"] != "todo.assigned" || todoAssignedReq["targetNode"] != "node-dev-001" {
-		t.Fatalf("unexpected todo.assigned publish request: %#v", todoAssignedReq)
+	if firstTodoAssignedReq["type"] != "todo.assigned" || firstTodoAssignedReq["targetNode"] != "node-dev-001" {
+		t.Fatalf("unexpected todo.assigned publish request: %#v", firstTodoAssignedReq)
 	}
 
 	todoCompleteMessage, err := json.Marshal(map[string]any{
@@ -211,11 +219,12 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 	}
 
 	mu.Lock()
-	if len(publishRequests) != initialPublishCount+4 {
-		t.Fatalf("expected %d publish requests after todo.complete, got %d", initialPublishCount+4, len(publishRequests))
+	if len(publishRequests) != initialPublishCount+5 {
+		t.Fatalf("expected %d publish requests after todo.complete, got %d", initialPublishCount+5, len(publishRequests))
 	}
 	taskStatusReq := publishRequests[initialPublishCount+2]
 	todoStatusReq := publishRequests[initialPublishCount+3]
+	secondTodoAssignedReq := publishRequests[initialPublishCount+4]
 	mu.Unlock()
 
 	if taskStatusReq["type"] != "task.status_changed" || taskStatusReq["targetNode"] != "node-pm-001" {
@@ -223,6 +232,9 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 	}
 	if todoStatusReq["type"] != "todo.status_changed" || todoStatusReq["targetNode"] != "node-pm-001" {
 		t.Fatalf("unexpected todo.status_changed publish request: %#v", todoStatusReq)
+	}
+	if secondTodoAssignedReq["type"] != "todo.assigned" || secondTodoAssignedReq["targetNode"] != "node-dev-001" {
+		t.Fatalf("unexpected sequential todo.assigned publish request: %#v", secondTodoAssignedReq)
 	}
 
 	rawTaskStatus, ok := taskStatusReq["message"].(string)
@@ -257,7 +269,7 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 
 	taskResp := doJSON(t, testServer.Client(), "GET", testServer.URL+"/api/v1/tasks/"+taskID, token, nil)
 	taskData := decodeBody(t, taskResp)
-	if nestedString(taskData, "data", "status") != "done" {
+	if nestedString(taskData, "data", "status") != "in_progress" {
 		t.Fatalf("unexpected task status: %s", nestedString(taskData, "data", "status"))
 	}
 	artifacts, ok := nestedMap(taskData, "data")["artifacts"].([]any)

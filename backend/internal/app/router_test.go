@@ -553,8 +553,8 @@ func TestDispatchTodoPublishesAssignmentToAssignee(t *testing.T) {
 			assignedCount++
 		}
 	}
-	if assignedCount != 2 {
-		t.Fatalf("expected 2 todo_assigned events, got %d", assignedCount)
+	if assignedCount != 1 {
+		t.Fatalf("expected 1 todo_assigned event, got %d", assignedCount)
 	}
 }
 

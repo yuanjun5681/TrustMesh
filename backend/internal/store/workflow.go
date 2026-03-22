@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 type TaskCreateTodoInput struct {
 	ID             string
+	Order          int
 	Title          string
 	Description    string
 	AssigneeNodeID string
@@ -73,6 +75,9 @@ func (s *Store) RecordTodoDispatch(userID, taskID, todoID string) (*model.TaskDe
 	if todo.Status != "pending" {
 		return nil, transport.Conflict("TODO_NOT_PENDING", "todo is not pending")
 	}
+	if !task.CanDispatchTodo(todoID) {
+		return nil, transport.Conflict("TODO_BLOCKED_BY_PREVIOUS", "todo is blocked by previous todos")
+	}
 
 	now := time.Now().UTC()
 	userName := ""
@@ -80,13 +85,54 @@ func (s *Store) RecordTodoDispatch(userID, taskID, todoID string) (*model.TaskDe
 		userName = u.Name
 	}
 	message := fmt.Sprintf("手动派发给 %s", todo.Assignee.Name)
-	s.addEventUnsafe(userID, task.ProjectID, task.ID, todo.ID, "user", userID, userName, "todo_assigned", &message, map[string]any{
+	s.recordTodoDispatchUnsafe(task, todo, "user", userID, userName, &message, map[string]any{
 		"todo_id":           todo.ID,
 		"assignee_agent_id": todo.Assignee.AgentID,
 		"manual":            true,
 	}, now)
-	task.UpdatedAt = now
-	task.Version++
+	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.publishTaskUnsafe(task.ID)
+	return copyTask(task), nil
+}
+
+func (s *Store) RecordSequentialTodoDispatch(taskID, todoID string) (*model.TaskDetail, *transport.AppError) {
+	taskID = strings.TrimSpace(taskID)
+	todoID = strings.TrimSpace(todoID)
+	if taskID == "" || todoID == "" {
+		return nil, transport.Validation("invalid todo dispatch payload", map[string]any{"task_id": "required", "todo_id": "required"})
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[taskID]
+	if !ok {
+		return nil, transport.NotFound("task not found")
+	}
+
+	todoIdx := findTodoIndex(task, todoID)
+	if todoIdx < 0 {
+		return nil, transport.NotFound("todo not found")
+	}
+
+	todo := &task.Todos[todoIdx]
+	if todo.Status != "pending" {
+		return nil, transport.Conflict("TODO_NOT_PENDING", "todo is not pending")
+	}
+	if !task.CanDispatchTodo(todoID) {
+		return nil, transport.Conflict("TODO_BLOCKED_BY_PREVIOUS", "todo is blocked by previous todos")
+	}
+
+	now := time.Now().UTC()
+	message := fmt.Sprintf("按顺序派发给 %s", todo.Assignee.Name)
+	s.recordTodoDispatchUnsafe(task, todo, "system", "system", "System", &message, map[string]any{
+		"todo_id":           todo.ID,
+		"assignee_agent_id": todo.Assignee.AgentID,
+		"dispatch_mode":     "sequential",
+		"manual":            false,
+	}, now)
 	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
 		return nil, mongoWriteError(err)
 	}
@@ -111,6 +157,10 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 	}
 	if len(in.Todos) == 0 {
 		return nil, transport.Validation("invalid task.create payload", map[string]any{"todos": "must not be empty"})
+	}
+	normalizedTodos, todoErr := normalizeTaskCreateTodos(in.Todos)
+	if todoErr != nil {
+		return nil, todoErr
 	}
 
 	s.mu.Lock()
@@ -152,9 +202,9 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 
 	now := time.Now().UTC()
 	s.markAgentSeenUnsafe(pmAgent.ID, now)
-	seenTodoIDs := make(map[string]struct{}, len(in.Todos))
-	todos := make([]model.Todo, 0, len(in.Todos))
-	for i, todoIn := range in.Todos {
+	seenTodoIDs := make(map[string]struct{}, len(normalizedTodos))
+	todos := make([]model.Todo, 0, len(normalizedTodos))
+	for i, todoIn := range normalizedTodos {
 		title := strings.TrimSpace(todoIn.Title)
 		desc := strings.TrimSpace(todoIn.Description)
 		assigneeNode := strings.TrimSpace(todoIn.AssigneeNodeID)
@@ -181,6 +231,7 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 
 		todos = append(todos, model.Todo{
 			ID:          todoID,
+			Order:       todoIn.Order,
 			Title:       title,
 			Description: desc,
 			Status:      "pending",
@@ -235,10 +286,6 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 
 	taskTitle := task.Title
 	s.addEventUnsafe(project.UserID, project.ID, task.ID, "", "agent", pmAgent.ID, pmAgent.Name, "task_created", &taskTitle, map[string]any{"conversation_id": task.ConversationID}, now)
-	for _, todo := range task.Todos {
-		title := fmt.Sprintf("assigned todo: %s", todo.Title)
-		s.addEventUnsafe(project.UserID, project.ID, task.ID, todo.ID, "agent", pmAgent.ID, pmAgent.Name, "todo_assigned", &title, map[string]any{"todo_id": todo.ID, "assignee_agent_id": todo.Assignee.AgentID}, now)
-	}
 
 	s.rememberProcessedMessageUnsafe(processedMessageKey("task.create", nodeID, messageID), "task.create", task.ID)
 	if err := s.persistConversationUnsafe(conv); err != nil {
@@ -257,6 +304,50 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 	s.publishTaskUnsafe(task.ID)
 
 	return copyTask(task), nil
+}
+
+func (s *Store) recordTodoDispatchUnsafe(task *model.TaskDetail, todo *model.Todo, actorType, actorID, actorName string, message *string, metadata map[string]any, now time.Time) {
+	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, actorType, actorID, actorName, "todo_assigned", message, metadata, now)
+	task.UpdatedAt = now
+	task.Version++
+}
+
+func normalizeTaskCreateTodos(in []TaskCreateTodoInput) ([]TaskCreateTodoInput, *transport.AppError) {
+	out := make([]TaskCreateTodoInput, len(in))
+	copy(out, in)
+
+	seenOrders := make(map[int]struct{}, len(out))
+	for i := range out {
+		order := out[i].Order
+		if order == 0 {
+			order = i + 1
+		}
+		if order <= 0 {
+			return nil, transport.Validation("invalid todo order", map[string]any{"todo_index": i, "order": "must be greater than zero"})
+		}
+		if _, exists := seenOrders[order]; exists {
+			return nil, transport.Validation("duplicated todo order", map[string]any{"todo_index": i, "order": order})
+		}
+		seenOrders[order] = struct{}{}
+		out[i].Order = order
+	}
+
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].Order < out[j].Order
+	})
+	return out, nil
+}
+
+func hasIncompletePredecessor(task *model.TaskDetail, todoIdx int) bool {
+	if task == nil || todoIdx <= 0 {
+		return false
+	}
+	for i := 0; i < todoIdx; i++ {
+		if task.Todos[i].Status != "done" {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Store) UpdateTodoProgressByNode(nodeID string, in TodoProgressInput) (*model.TaskDetail, *transport.AppError) {
@@ -289,6 +380,9 @@ func (s *Store) UpdateTodoProgressByNode(nodeID string, in TodoProgressInput) (*
 	}
 	if todo.Status == "done" || todo.Status == "failed" {
 		return nil, transport.Conflict("TODO_FINALIZED", "todo already finalized")
+	}
+	if hasIncompletePredecessor(task, todoIdx) {
+		return nil, transport.Conflict("TODO_BLOCKED_BY_PREVIOUS", "todo is blocked by previous todos")
 	}
 
 	now := time.Now().UTC()
@@ -353,6 +447,9 @@ func (s *Store) CompleteTodoByNodeWithMessageID(nodeID, messageID string, in Tod
 	}
 	if todo.Status == "failed" {
 		return nil, transport.Conflict("TODO_ALREADY_FAILED", "todo already failed")
+	}
+	if hasIncompletePredecessor(task, todoIdx) {
+		return nil, transport.Conflict("TODO_BLOCKED_BY_PREVIOUS", "todo is blocked by previous todos")
 	}
 
 	now := time.Now().UTC()
@@ -429,6 +526,9 @@ func (s *Store) FailTodoByNodeWithMessageID(nodeID, messageID string, in TodoFai
 	}
 	if todo.Status == "failed" {
 		return nil, transport.Conflict("TODO_ALREADY_FAILED", "todo already failed")
+	}
+	if hasIncompletePredecessor(task, todoIdx) {
+		return nil, transport.Conflict("TODO_BLOCKED_BY_PREVIOUS", "todo is blocked by previous todos")
 	}
 
 	now := time.Now().UTC()

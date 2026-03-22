@@ -26,6 +26,7 @@ type TaskCreatePayload struct {
 
 type TaskCreateTodoPayload struct {
 	ID             string `json:"id"`
+	Order          int    `json:"order,omitempty"`
 	Title          string `json:"title"`
 	Description    string `json:"description"`
 	AssigneeNodeID string `json:"assignee_node_id"`
