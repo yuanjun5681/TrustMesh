@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
-import type { Comment, Event, TaskDetail, TaskListItem } from '@/types'
+import type { Comment, Event, TaskDetail, TaskListItem, TaskStatus } from '@/types'
+import { applyProjectTaskUpdated } from './projects'
 
 function sortEventsAscending(items: Event[]) {
   return items.slice().sort((left, right) => left.created_at.localeCompare(right.created_at))
@@ -46,14 +47,51 @@ function toTaskListItem(task: TaskDetail): TaskListItem {
   }
 }
 
+function findPreviousTaskStatus(
+  task: TaskDetail,
+  taskQueries: Array<[readonly unknown[], TaskListItem[] | undefined]>,
+  previousTaskDetail: TaskDetail | undefined
+): TaskStatus | null {
+  if (previousTaskDetail) {
+    return previousTaskDetail.status
+  }
+
+  for (const [, items] of taskQueries) {
+    const previousTask = items?.find((item) => item.id === task.id)
+    if (previousTask) {
+      return previousTask.status
+    }
+  }
+
+  return null
+}
+
+function hasFullProjectTaskListSnapshot(
+  task: TaskDetail,
+  taskQueries: Array<[readonly unknown[], TaskListItem[] | undefined]>
+) {
+  return taskQueries.some(([queryKey, items]) => (
+    Array.isArray(queryKey) &&
+    queryKey[0] === 'tasks' &&
+    queryKey[1] === task.project_id &&
+    queryKey.length >= 3 &&
+    queryKey[2] === undefined &&
+    Array.isArray(items)
+  ))
+}
+
 export function applyTaskUpdated(queryClient: QueryClient, payload: { task: TaskDetail }) {
   const { task } = payload
   const listItem = toTaskListItem(task)
+  const previousTaskDetail = queryClient.getQueryData<TaskDetail>(['tasks', 'detail', task.id])
+  const taskQueries = queryClient.getQueriesData<TaskListItem[]>({ queryKey: ['tasks', task.project_id] })
+  const previousTaskStatus = findPreviousTaskStatus(task, taskQueries, previousTaskDetail)
+  const hasFullListSnapshot = hasFullProjectTaskListSnapshot(task, taskQueries)
+  const isNewTask = previousTaskStatus === null && hasFullListSnapshot
 
   // Cancel any in-flight refetch so it doesn't overwrite this SSE-delivered data
   void queryClient.cancelQueries({ queryKey: ['tasks', 'detail', task.id] })
   queryClient.setQueryData(['tasks', 'detail', task.id], task)
-  const taskQueries = queryClient.getQueriesData<TaskListItem[]>({ queryKey: ['tasks', task.project_id] })
   for (const [queryKey, items] of taskQueries) {
     if (!Array.isArray(queryKey) || queryKey[0] !== 'tasks' || queryKey[1] !== task.project_id || queryKey.length < 3) {
       continue
@@ -84,6 +122,14 @@ export function applyTaskUpdated(queryClient: QueryClient, payload: { task: Task
       return next.slice(0, queryKey[2])
     })
   }
+
+  applyProjectTaskUpdated(queryClient, {
+    task,
+    previousTaskStatus,
+    isNewTask,
+    hasEnoughContext: previousTaskStatus !== null || isNewTask,
+  })
+
   void queryClient.invalidateQueries({ queryKey: ['dashboard', 'stats'] })
 }
 

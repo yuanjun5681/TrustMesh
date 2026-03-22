@@ -38,11 +38,25 @@ export interface PMAgentSummary {
   status: 'online' | 'offline' | 'busy'
 }
 
+export type ProjectStatus = 'active' | 'archived'
+export type ProjectWorkStatus = 'empty' | 'idle' | 'queued' | 'running' | 'attention' | 'archived'
+
+export interface ProjectTaskSummary {
+  task_total: number
+  pending_count: number
+  in_progress_count: number
+  done_count: number
+  failed_count: number
+  work_status: ProjectWorkStatus
+  latest_task_at: string | null
+}
+
 export interface Project {
   id: string
   name: string
   description: string
-  status: 'active' | 'archived'
+  status: ProjectStatus
+  task_summary: ProjectTaskSummary
   pm_agent: PMAgentSummary
   created_at: string
   updated_at: string

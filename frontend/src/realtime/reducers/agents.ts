@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
 import type { Agent, Event } from '@/types'
+import { applyProjectAgentStatusChanged } from './projects'
 
 const DEFAULT_DASHBOARD_EVENTS_LIMIT = 20
 const DEFAULT_AGENT_EVENTS_LIMIT = 50
@@ -54,7 +55,7 @@ export function applyAgentStatusChanged(
     }
   )
 
-  void queryClient.invalidateQueries({ queryKey: ['projects'] })
+  applyProjectAgentStatusChanged(queryClient, payload.agent)
   void queryClient.invalidateQueries({ queryKey: ['tasks'] })
   void queryClient.invalidateQueries({ queryKey: ['dashboard', 'stats'] })
 }

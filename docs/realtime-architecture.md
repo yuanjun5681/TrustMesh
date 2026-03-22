@@ -143,6 +143,13 @@
 | `conversation.updated` | `conversations/detail`、项目会话列表 |
 | `agent.status.changed` | `agents`、`agents/:id`、`dashboard/events`、`dashboard/stats`，必要时失效 `projects` / `tasks` |
 
+补充约束：
+
+- 项目卡片和项目页头部如果展示的是“由任务聚合得出的工作态”，则该状态属于 `task.updated` 的派生缓存。
+- 前端应优先根据 `task.updated` patch `projects` / `projects/:id` 中的项目摘要，而不是等待页面重查。
+- 当 reducer 无法确认前置任务状态时，可以对受影响的 `projects` 做定向 invalidate，作为 patch 失败兜底。
+- `agent.status.changed` 如果只影响项目绑定 PM 的在线状态，优先 patch 项目缓存中的 `pm_agent`，而不是直接全量失效项目列表。
+
 ## 五、目录约定
 
 前端实时逻辑集中在：

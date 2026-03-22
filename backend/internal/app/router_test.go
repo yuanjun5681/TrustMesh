@@ -132,6 +132,12 @@ func TestHappyPathAuthToConversation(t *testing.T) {
 	if projectID == "" {
 		t.Fatal("empty project id")
 	}
+	if nestedString(projectData, "data", "task_summary", "work_status") != "empty" {
+		t.Fatalf("unexpected initial project work status: %s", nestedString(projectData, "data", "task_summary", "work_status"))
+	}
+	if nestedFloat(projectData, "data", "task_summary", "task_total") != 0 {
+		t.Fatalf("unexpected initial project task count: %v", nestedFloat(projectData, "data", "task_summary", "task_total"))
+	}
 
 	conversationResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/projects/"+projectID+"/conversations", token, map[string]any{
 		"content": "我需要一个登录功能",

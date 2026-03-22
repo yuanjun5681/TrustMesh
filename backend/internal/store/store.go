@@ -119,6 +119,10 @@ func copyAgent(a *model.Agent) *model.Agent {
 
 func copyProject(p *model.Project) *model.Project {
 	clone := *p
+	if p.TaskSummary.LatestTaskAt != nil {
+		t := *p.TaskSummary.LatestTaskAt
+		clone.TaskSummary.LatestTaskAt = &t
+	}
 	return &clone
 }
 

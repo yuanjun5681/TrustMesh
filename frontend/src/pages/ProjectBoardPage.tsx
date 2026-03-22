@@ -2,9 +2,8 @@ import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { MessageSquarePlus, MoreHorizontal, Pencil, Archive, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
-import { AgentStatusDot } from '@/components/shared/StatusBadge'
+import { AgentStatusDot, ProjectStatusBadge, ProjectWorkStatusBadge } from '@/components/shared/StatusBadge'
 import { TaskListView } from '@/components/task/TaskListView'
 import { TaskDetailPanel } from '@/components/task/TaskDetailPanel'
 import { ConversationSheet } from '@/components/conversation/ConversationSheet'
@@ -12,11 +11,6 @@ import { EditProjectDialog } from '@/components/project/EditProjectDialog'
 import { useProject } from '@/hooks/useProjects'
 import { useTasks } from '@/hooks/useTasks'
 import { formatDateTime, formatRelativeTime } from '@/lib/utils'
-
-const projectStatusConfig = {
-  active: { label: '进行中', variant: 'success' as const },
-  archived: { label: '已归档', variant: 'secondary' as const },
-}
 
 export function ProjectBoardPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -34,9 +28,10 @@ export function ProjectBoardPage() {
           <div className="flex min-w-0 items-center gap-3">
             <h1 className="truncate text-lg font-semibold">{project?.name ?? '...'}</h1>
             {project && (
-              <Badge variant={projectStatusConfig[project.status].variant}>
-                {projectStatusConfig[project.status].label}
-              </Badge>
+              <>
+                <ProjectStatusBadge status={project.status} />
+                <ProjectWorkStatusBadge status={project.task_summary.work_status} />
+              </>
             )}
           </div>
           {project?.description && (
@@ -50,10 +45,20 @@ export function ProjectBoardPage() {
                 <AgentStatusDot status={project.pm_agent.status} />
                 <span>PM: {project.pm_agent.name}</span>
               </div>
-              <span>任务数: {tasks?.length ?? 0}</span>
+              <span>
+                任务: {project.task_summary.task_total}
+                {project.task_summary.in_progress_count > 0 && ` · ${project.task_summary.in_progress_count} 执行中`}
+                {project.task_summary.pending_count > 0 && ` · ${project.task_summary.pending_count} 待处理`}
+                {project.task_summary.failed_count > 0 && ` · ${project.task_summary.failed_count} 失败`}
+              </span>
               <span title={formatDateTime(project.updated_at)}>
                 最后更新: {formatRelativeTime(project.updated_at)}
               </span>
+              {project.task_summary.latest_task_at && (
+                <span title={formatDateTime(project.task_summary.latest_task_at)}>
+                  最近任务: {formatRelativeTime(project.task_summary.latest_task_at)}
+                </span>
+              )}
               <span title={formatDateTime(project.created_at)}>
                 创建于: {formatDateTime(project.created_at)}
               </span>

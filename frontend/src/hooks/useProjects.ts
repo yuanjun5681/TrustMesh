@@ -1,13 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as projectsApi from '@/api/projects'
 import type { CreateProjectRequest, Project, UpdateProjectRequest } from '@/types'
+import { normalizeProject } from '@/lib/projects'
 
 export function useProjects() {
   return useQuery({
     queryKey: ['projects'],
     queryFn: async () => {
       const res = await projectsApi.listProjects()
-      return res.data.items
+      return res.data.items.map(normalizeProject)
     },
   })
 }
@@ -17,7 +18,7 @@ export function useProject(id: string | undefined) {
     queryKey: ['projects', id],
     queryFn: async () => {
       const res = await projectsApi.getProject(id!)
-      return res.data
+      return normalizeProject(res.data)
     },
     enabled: !!id,
   })
@@ -37,7 +38,7 @@ export function useUpdateProject() {
     mutationFn: ({ id, input }: { id: string; input: UpdateProjectRequest }) =>
       projectsApi.updateProject(id, input),
     onSuccess: (res, { id }) => {
-      const updatedProject = res.data
+      const updatedProject = normalizeProject(res.data)
       qc.setQueryData<Project | undefined>(['projects', id], updatedProject)
       qc.setQueryData<Project[] | undefined>(['projects'], (projects) =>
         projects?.map((project) => (project.id === updatedProject.id ? updatedProject : project)),
