@@ -7,7 +7,7 @@ description: >
 compatibility: Requires clawsynapse CLI and a running clawsynapsed daemon
 metadata:
   author: TrustMesh
-  version: "2.0"
+  version: "2.1"
 allowed-tools:
   - "Bash(clawsynapse:*)"
 ---
@@ -40,9 +40,27 @@ allowed-tools:
 
 1. **先澄清，后创建任务。** 收到首次需求时，不要立刻创建 task.create。先复述理解、提出问题。
 2. **只创建一次任务。** 一个 Conversation 只能对应一个 Task，重复创建会被服务端拒绝（`CONVERSATION_TASK_EXISTS`）。
-3. **Todo 要可独立验收。** 每个 Todo 应有清晰的边界、明确的输入输出，可以由一个执行 Agent 独立完成。
-4. **基于事实分派。** 结合 `candidate_agents` 中的 `role`、`status`、`capabilities` 分派 Todo，不要虚构能力。优先分派给 `status=online` 的 Agent。
-5. **所有回复都走 ClawSynapse。** 不要在聊天界面直接输出文本作为回复，必须使用 `clawsynapse publish`。
+3. **Todo 必须有强顺序。** 你产出的 Todo 列表不是无序清单，而是按执行先后排列的工作流。后一个 Todo 必须建立在前一个 Todo 的完成结果之上，避免并行前提不成立。
+4. **Todo 要可独立验收。** 每个 Todo 应有清晰的边界、明确的输入输出，可以由一个执行 Agent 独立完成。
+5. **基于事实分派。** 结合 `candidate_agents` 中的 `role`、`status`、`capabilities` 分派 Todo，不要虚构能力。优先分派给 `status=online` 的 Agent。
+6. **所有回复都走 ClawSynapse。** 不要在聊天界面直接输出文本作为回复，必须使用 `clawsynapse publish`。
+
+### Todo 顺序规划要求
+
+创建 `task.create` 前，必须先把 Todo 按依赖顺序排好：
+
+1. 先放上游 Todo：需求分析、后端接口、数据结构、协议调整等。
+2. 再放依赖上游产物的 Todo：前端接入、联调、文档、回归验证等。
+3. 不要把“依赖前序结果”的工作放到前面，也不要把只是主题相关但逻辑独立的工作混在同一顺序链里。
+4. 若两个工作确实必须串行，直接按顺序拆成两个 Todo；不要在 description 里写“可以等前一个完成后再做”但列表顺序却无体现。
+5. `order` 必须从 `1` 开始连续递增，并与列表中的逻辑顺序一致。
+6. `id` 使用简单稳定的编号规则，不要混入优先级、状态、assignee 等可变语义。推荐格式：`TD_01`、`TD_02`、`TD_03`。
+
+判断标准：
+- 如果 Todo B 需要 Todo A 的代码、接口、结论、交付物或决策结果，B 必须排在 A 后面。
+- 如果两个 Todo 可以真正独立并行，可以在同一个 Task 内保留它们，但仍需给出一个明确顺序。
+- 对可并行 Todo，顺序可以按以下标准任选其一确定：更基础的能力优先、更高风险或不确定性更高的工作优先、更早产生可验证结果的工作优先，或直接按 PM 认为最清晰的叙事顺序排列。
+- 对可并行 Todo，不要求你虚构依赖关系；只需要保证顺序是明确、稳定、可解释的。
 
 ## 二、incoming 消息格式
 
@@ -147,14 +165,16 @@ TARGET_NODE="trustmesh-server"  # ← 替换为实际 from 值
 todos='[
   {
     "id": "todo_1",
+    "order": 1,
     "title": "实现后端登录接口",
     "description": "完成邮箱密码登录 API",
     "assignee_node_id": "node-backend-001"
   },
   {
     "id": "todo_2",
+    "order": 2,
     "title": "实现前端登录页",
-    "description": "完成登录页和表单交互",
+    "description": "在后端接口完成后，接入登录页和表单交互",
     "assignee_node_id": "node-frontend-001"
   }
 ]'
@@ -181,10 +201,16 @@ clawsynapse publish \
 ```
 
 Todo 字段说明：
-- `id`：你自己生成的唯一标识（如 `todo_1`, `todo_2`）
+- `id`：你自己生成的唯一标识。推荐使用稳定的顺序编号格式：`TD_01`、`TD_02`、`TD_03`
+- `order`：Todo 的强顺序编号，从 `1` 开始递增；TrustMesh 会按顺序逐个派发
 - `title`：简洁描述这个 Todo 要做什么
-- `description`：详细说明输入、输出、验收标准
+- `description`：详细说明输入、输出、验收标准，并明确说明它依赖哪些前序结果
 - `assignee_node_id`：从 `candidate_agents` 中选择的执行 Agent 的 `node_id`
+
+`id` 规则补充：
+- `id` 应在当前 Task 内唯一。
+- `id` 只表达稳定编号，不表达优先级、状态或人员信息。
+- 推荐直接与 `order` 对齐，例如 `order=1 -> TD_01`，`order=2 -> TD_02`。
 
 ### 获取结构化发送结果
 
