@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import type { TaskStatus, TaskPriority, AgentStatus } from '@/types'
+import type { TaskStatus, TaskPriority, AgentStatus, ProjectStatus, ProjectWorkStatus } from '@/types'
 
 const taskStatusConfig: Record<TaskStatus, { label: string; variant: 'secondary' | 'info' | 'success' | 'destructive' }> = {
   pending: { label: '待处理', variant: 'secondary' },
@@ -22,6 +22,20 @@ const agentStatusConfig: Record<AgentStatus, { label: string; className: string 
   busy: { label: '忙碌', className: 'bg-status-busy/15 text-status-busy' },
 }
 
+const projectStatusConfig: Record<ProjectStatus, { label: string; variant: 'outline' | 'secondary' }> = {
+  active: { label: '开放中', variant: 'outline' },
+  archived: { label: '已归档', variant: 'secondary' },
+}
+
+const projectWorkStatusConfig: Record<ProjectWorkStatus, { label: string; variant: 'secondary' | 'info' | 'success' | 'warning' | 'destructive' }> = {
+  empty: { label: '暂无任务', variant: 'secondary' },
+  idle: { label: '空闲', variant: 'success' },
+  queued: { label: '待处理', variant: 'warning' },
+  running: { label: '执行中', variant: 'info' },
+  attention: { label: '需关注', variant: 'destructive' },
+  archived: { label: '已归档', variant: 'secondary' },
+}
+
 export function TaskStatusBadge({ status }: { status: TaskStatus }) {
   const config = taskStatusConfig[status]
   return <Badge variant={config.variant}>{config.label}</Badge>
@@ -39,6 +53,25 @@ export function PriorityBadge({ priority }: { priority: TaskPriority }) {
 export function AgentStatusBadge({ status }: { status: AgentStatus }) {
   const config = agentStatusConfig[status]
   return <Badge className={config.className}>{config.label}</Badge>
+}
+
+export function ProjectStatusBadge({ status }: { status: ProjectStatus }) {
+  const config = projectStatusConfig[status]
+  return <Badge variant={config.variant}>{config.label}</Badge>
+}
+
+export function ProjectWorkStatusBadge({ status }: { status: ProjectWorkStatus }) {
+  const config = projectWorkStatusConfig[status]
+  return <Badge variant={config.variant}>{config.label}</Badge>
+}
+
+export function ProjectWorkStatusDot({ status }: { status: ProjectWorkStatus }) {
+  const colorClass =
+    status === 'running' ? 'bg-info' :
+    status === 'attention' ? 'bg-destructive' :
+    status === 'queued' ? 'bg-warning' :
+    status === 'idle' ? 'bg-success' : 'bg-muted-foreground/40'
+  return <span className={cn('inline-block size-2 rounded-full', colorClass)} />
 }
 
 export function AgentStatusDot({ status }: { status: AgentStatus }) {

@@ -1,17 +1,53 @@
 import { ApiRequestError } from '@/api/client'
 import type { ApiError } from '@/types'
+import { apiUrl } from '@/lib/apiBase'
 
 type MessageHandler<T> = (message: T) => void
+
+const DEFAULT_SSE_IDLE_TIMEOUT_MS = 60_000
 
 interface SubscribeSSEOptions<T> {
   path: string
   onMessage: MessageHandler<T>
+  onOpen?: () => void
+  onError?: (error: unknown) => void
   signal?: AbortSignal
+  idleTimeoutMs?: number
 }
 
 interface SSEFrame {
   event: string
   data: string
+}
+
+async function readChunkWithIdleTimeout(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal: AbortSignal | undefined,
+  idleTimeoutMs: number
+) {
+  let timer = 0
+  let abortListener: (() => void) | undefined
+
+  try {
+    return await Promise.race([
+      reader.read(),
+      new Promise<never>((_, reject) => {
+        timer = window.setTimeout(() => {
+          reject(new Error(`SSE idle timeout after ${idleTimeoutMs}ms`))
+        }, idleTimeoutMs)
+
+        abortListener = () => {
+          window.clearTimeout(timer)
+        }
+        signal?.addEventListener('abort', abortListener, { once: true })
+      }),
+    ])
+  } finally {
+    window.clearTimeout(timer)
+    if (abortListener) {
+      signal?.removeEventListener('abort', abortListener)
+    }
+  }
 }
 
 function parseFrame(chunk: string): SSEFrame | null {
@@ -45,7 +81,8 @@ function parseFrame(chunk: string): SSEFrame | null {
 async function readStream<T>(
   response: Response,
   onMessage: MessageHandler<T>,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  idleTimeoutMs = DEFAULT_SSE_IDLE_TIMEOUT_MS
 ) {
   const reader = response.body?.getReader()
   if (!reader) {
@@ -56,7 +93,16 @@ async function readStream<T>(
   let buffer = ''
 
   while (true) {
-    const { done, value } = await reader.read()
+    let done: boolean
+    let value: Uint8Array | undefined
+    try {
+      ;({ done, value } = await readChunkWithIdleTimeout(reader, signal, idleTimeoutMs))
+    } catch (error) {
+      if (!signal?.aborted) {
+        await reader.cancel().catch(() => undefined)
+      }
+      throw error
+    }
     if (done) {
       break
     }
@@ -65,7 +111,8 @@ async function readStream<T>(
       return
     }
 
-    buffer += decoder.decode(value, { stream: true })
+    const chunk = decoder.decode(value!, { stream: true })
+    buffer += chunk
     const frames = buffer.split(/\r?\n\r?\n/)
     buffer = frames.pop() ?? ''
 
@@ -74,7 +121,12 @@ async function readStream<T>(
       if (!parsed || parsed.event === 'ping') {
         continue
       }
-      onMessage(JSON.parse(parsed.data) as T)
+      try {
+        const obj = JSON.parse(parsed.data) as T
+        onMessage(obj)
+      } catch {
+        throw new Error('Invalid SSE payload')
+      }
     }
   }
 }
@@ -92,7 +144,7 @@ async function connectOnce<T>(
   signal?: AbortSignal
 ) {
   const token = localStorage.getItem('auth-token')
-  const response = await fetch(`/api/v1/${options.path}`, {
+  const response = await fetch(apiUrl(options.path), {
     headers: {
       Accept: 'text/event-stream',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -112,7 +164,8 @@ async function connectOnce<T>(
     throw new Error(`SSE request failed with status ${response.status}`)
   }
 
-  await readStream(response, options.onMessage, signal)
+  options.onOpen?.()
+  await readStream(response, options.onMessage, signal, options.idleTimeoutMs)
 }
 
 export function subscribeSSE<T>(options: SubscribeSSEOptions<T>) {
@@ -140,6 +193,8 @@ export function subscribeSSE<T>(options: SubscribeSSEOptions<T>) {
         if (stopped || currentAbort.signal.aborted) {
           return
         }
+        currentAbort.abort()
+        options.onError?.(error)
         if (error instanceof ApiRequestError && error.status < 500 && error.status !== 429) {
           return
         }

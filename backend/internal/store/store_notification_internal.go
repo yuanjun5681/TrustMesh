@@ -82,6 +82,10 @@ func (s *Store) maybeCreateNotificationUnsafe(event *model.Event) {
 	s.notifications[notification.ID] = notification
 	s.userNotifications[event.UserID] = append(s.userNotifications[event.UserID], notification.ID)
 	s.persistNotificationUnsafe(notification)
+	s.publishUserEventUnsafe(event.UserID, "notification.created", map[string]any{
+		"notification": *notification,
+		"unread_count": unreadNotificationCountUnsafe(s.notifications, s.userNotifications[event.UserID]),
+	}, now)
 }
 
 func stringOrDefault(s *string, def string) string {

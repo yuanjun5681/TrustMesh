@@ -27,6 +27,9 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 
 	clawServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/v1/peers":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(clawsynapsePeersResponse(t, "node-pm-001", "node-dev-001")))
 		case "/v1/publish":
 			defer r.Body.Close()
 			var payload map[string]any
@@ -54,7 +57,6 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 		LogLevel:           "error",
 		AllowAllCORS:       true,
 		ReadTimeout:        3 * time.Second,
-		WriteTimeout:       3 * time.Second,
 		ShutdownGrace:      3 * time.Second,
 		ClawSynapseNodeID:  "trustmesh-server",
 		ClawSynapseAPIURL:  clawServer.URL,

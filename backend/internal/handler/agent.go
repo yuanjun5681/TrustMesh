@@ -1,19 +1,23 @@
 package handler
 
 import (
+	"context"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"trustmesh/backend/internal/clawsynapse"
 	"trustmesh/backend/internal/store"
 	"trustmesh/backend/internal/transport"
 )
 
 type AgentHandler struct {
-	store *store.Store
+	store      *store.Store
+	clawClient *clawsynapse.Client
 }
 
-func NewAgentHandler(s *store.Store) *AgentHandler {
-	return &AgentHandler{store: s}
+func NewAgentHandler(s *store.Store, clawClient *clawsynapse.Client) *AgentHandler {
+	return &AgentHandler{store: s, clawClient: clawClient}
 }
 
 type createAgentRequest struct {
@@ -34,6 +38,12 @@ func (h *AgentHandler) Create(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		transport.WriteError(c, transport.BadRequest("BAD_REQUEST", "invalid json body"))
 		return
+	}
+	if nodeID := strings.TrimSpace(req.NodeID); nodeID != "" {
+		if appErr := h.ensureNodeOnline(c.Request.Context(), nodeID); appErr != nil {
+			transport.WriteError(c, appErr)
+			return
+		}
 	}
 
 	agent, appErr := h.store.CreateAgent(userID, req.NodeID, req.Name, req.Role, req.Description, req.Capabilities)
@@ -113,4 +123,32 @@ func (h *AgentHandler) Delete(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+func (h *AgentHandler) ensureNodeOnline(ctx context.Context, nodeID string) *transport.AppError {
+	if h.clawClient == nil {
+		err := transport.NewError(http.StatusServiceUnavailable, "CLAWSYNAPSE_UNAVAILABLE", "暂时无法校验节点在线状态")
+		err.Details = map[string]any{"node_id": nodeID}
+		return err
+	}
+
+	peers, err := h.clawClient.GetPeers(ctx)
+	if err != nil {
+		appErr := transport.NewError(http.StatusServiceUnavailable, "CLAWSYNAPSE_UNAVAILABLE", "暂时无法校验节点在线状态")
+		appErr.Details = map[string]any{
+			"node_id": nodeID,
+			"cause":   err.Error(),
+		}
+		return appErr
+	}
+
+	for _, peer := range peers {
+		if strings.TrimSpace(peer.NodeID) == nodeID {
+			return nil
+		}
+	}
+
+	return transport.Validation("node_id 必须对应一个在线中的 ClawSynapse 节点", map[string]any{
+		"node_id": "offline_or_not_found",
+	})
 }

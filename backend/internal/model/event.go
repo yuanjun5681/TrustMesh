@@ -32,3 +32,10 @@ type Notification struct {
 	ReadAt         *time.Time `json:"read_at" bson:"read_at"`
 	CreatedAt      time.Time  `json:"created_at" bson:"created_at"`
 }
+
+type UserStreamEvent struct {
+	ID         string         `json:"id"`
+	Type       string         `json:"type"`
+	OccurredAt time.Time      `json:"occurred_at"`
+	Payload    map[string]any `json:"payload"`
+}

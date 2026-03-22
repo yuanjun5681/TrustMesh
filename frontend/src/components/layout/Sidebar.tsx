@@ -9,22 +9,58 @@ import {
   LogOut,
   LayoutDashboard,
   Inbox,
+  Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Avatar } from '@/components/ui/avatar'
-import { AgentStatusDot } from '@/components/shared/StatusBadge'
+import { AgentStatusDot, ProjectWorkStatusDot } from '@/components/shared/StatusBadge'
 import { useProjects } from '@/hooks/useProjects'
 import { useAgents } from '@/hooks/useAgents'
 import { useUnreadCount } from '@/hooks/useNotifications'
 import { useAuthStore } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
 import { useState, useEffect } from 'react'
+import type { ProjectWorkStatus } from '@/types'
 
 interface SidebarProps {
   onCreateProject: () => void
+}
+
+function ProjectSidebarStatus({ status }: { status: ProjectWorkStatus }) {
+  if (status === 'running') {
+    return (
+      <Badge variant="info" className="ml-auto gap-1.5">
+        <Loader2 className="size-3 animate-spin" />
+        执行中
+      </Badge>
+    )
+  }
+
+  if (status === 'attention') {
+    return (
+      <Badge variant="destructive" className="ml-auto">
+        需关注
+      </Badge>
+    )
+  }
+
+  if (status === 'queued') {
+    return (
+      <Badge variant="warning" className="ml-auto">
+        待处理
+      </Badge>
+    )
+  }
+
+  return (
+    <span className="ml-auto flex items-center gap-1.5 shrink-0 text-xs text-muted-foreground">
+      <ProjectWorkStatusDot status={status} />
+    </span>
+  )
 }
 
 export function Sidebar({ onCreateProject }: SidebarProps) {
@@ -152,16 +188,10 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
             >
               <FolderKanban className="size-4 shrink-0" />
               {!collapsed && (
-                <span className="truncate">{project.name}</span>
-              )}
-              {!collapsed && (
-                <span
-                  className={cn(
-                    'ml-auto size-2 rounded-full shrink-0',
-                    project.pm_agent.status === 'online' ? 'bg-status-online' :
-                    project.pm_agent.status === 'busy' ? 'bg-status-busy' : 'bg-status-offline'
-                  )}
-                />
+                <>
+                  <span className="truncate">{project.name}</span>
+                  <ProjectSidebarStatus status={project.task_summary.work_status} />
+                </>
               )}
             </Link>
           ))}

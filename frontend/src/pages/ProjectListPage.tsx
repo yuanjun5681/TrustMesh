@@ -5,7 +5,7 @@ import { PageContainer } from '@/components/layout/PageContainer'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AgentStatusDot } from '@/components/shared/StatusBadge'
+import { AgentStatusDot, ProjectWorkStatusBadge } from '@/components/shared/StatusBadge'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { CreateProjectDialog } from '@/components/project/CreateProjectDialog'
 import { useProjects } from '@/hooks/useProjects'
@@ -65,17 +65,32 @@ export function ProjectListPage() {
                     <FolderKanban className="size-4 shrink-0" />
                     {project.name}
                   </CardTitle>
+                  <div>
+                    <ProjectWorkStatusBadge status={project.task_summary.work_status} />
+                  </div>
                   <CardDescription className="line-clamp-2">
                     {project.description}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1.5">
+                  <div className="space-y-2 text-xs text-muted-foreground">
+                    <div className="flex items-center justify-between">
+                      <span>
+                        {project.task_summary.task_total} 个任务
+                        {project.task_summary.in_progress_count > 0 && ` · ${project.task_summary.in_progress_count} 执行中`}
+                        {project.task_summary.failed_count > 0 && ` · ${project.task_summary.failed_count} 失败`}
+                      </span>
+                      <span>{formatRelativeTime(project.updated_at)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
                       <AgentStatusDot status={project.pm_agent.status} />
                       <span>{project.pm_agent.name}</span>
+                      </div>
+                      {project.task_summary.latest_task_at && (
+                        <span>任务更新 {formatRelativeTime(project.task_summary.latest_task_at)}</span>
+                      )}
                     </div>
-                    <span>{formatRelativeTime(project.updated_at)}</span>
                   </div>
                 </CardContent>
               </Card>

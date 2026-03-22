@@ -39,13 +39,14 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	}
 
 	authHandler := handler.NewAuthHandler(s, jwtManager)
-	agentHandler := handler.NewAgentHandler(s)
+	agentHandler := handler.NewAgentHandler(s, clawClient)
 	projectHandler := handler.NewProjectHandler(s)
 	conversationHandler := handler.NewConversationHandler(s, clawClient, log)
 	taskHandler := handler.NewTaskHandler(s, clawClient, log)
 	transferHandler := handler.NewTransferHandler(s, clawClient)
 	dashboardHandler := handler.NewDashboardHandler(s)
 	notificationHandler := handler.NewNotificationHandler(s)
+	realtimeHandler := handler.NewRealtimeHandler(s)
 
 	engine.GET("/healthz", handler.Health)
 	engine.POST("/webhook/clawsynapse", webhookHandler.HandleWebhook)
@@ -72,12 +73,10 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	authed.POST("/projects/:projectId/conversations", conversationHandler.Create)
 	authed.GET("/projects/:projectId/conversations", conversationHandler.ListByProject)
 	authed.GET("/conversations/:id", conversationHandler.Get)
-	authed.GET("/conversations/:id/stream", conversationHandler.Stream)
 	authed.POST("/conversations/:id/messages", conversationHandler.AppendMessage)
 
 	authed.GET("/projects/:projectId/tasks", taskHandler.ListByProject)
 	authed.GET("/tasks/:id", taskHandler.Get)
-	authed.GET("/tasks/:id/stream", taskHandler.Stream)
 	authed.GET("/tasks/:id/events", taskHandler.ListEvents)
 	authed.POST("/tasks/:id/todos/:todoId/dispatch", taskHandler.DispatchTodo)
 	authed.GET("/tasks/:id/comments", taskHandler.ListComments)
@@ -94,6 +93,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	authed.GET("/notifications/unread-count", notificationHandler.UnreadCount)
 	authed.PATCH("/notifications/:id/read", notificationHandler.MarkRead)
 	authed.POST("/notifications/mark-all-read", notificationHandler.MarkAllRead)
+	authed.GET("/events/stream", realtimeHandler.Stream)
 
 	return &App{Engine: engine, Store: s, PeerSyncer: peerSyncer}, nil
 }

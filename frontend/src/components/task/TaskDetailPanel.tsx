@@ -8,7 +8,6 @@ import { TaskComments } from './TaskComments'
 import { TaskResultView } from './TaskResult'
 import { ConversationSheet } from '@/components/conversation/ConversationSheet'
 import { useTask, useAddTaskComment } from '@/hooks/useTasks'
-import { useTaskStream } from '@/hooks/useLiveStreams'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useState, useRef, useCallback } from 'react'
 
@@ -19,8 +18,6 @@ interface TaskDetailPanelProps {
 
 export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
   const { data: task } = useTask(taskId)
-  const shouldStream = !task || task.status === 'pending' || task.status === 'in_progress'
-  useTaskStream(taskId, shouldStream)
   const [tab, setTab] = useState('todos')
   const [chatOpen, setChatOpen] = useState(false)
   const [comment, setComment] = useState('')
@@ -96,7 +93,7 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
             </TabsList>
 
             <TabsContent value="todos" className="mt-3">
-              <TodoList taskId={task.id} todos={task.todos} artifacts={task.artifacts} />
+              <TodoList todos={task.todos} artifacts={task.artifacts} />
             </TabsContent>
 
             <TabsContent value="comments" className="mt-3">

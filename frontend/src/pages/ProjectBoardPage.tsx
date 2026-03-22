@@ -3,12 +3,14 @@ import { useParams } from 'react-router-dom'
 import { MessageSquarePlus, MoreHorizontal, Pencil, Archive, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
-import { AgentStatusDot } from '@/components/shared/StatusBadge'
+import { AgentStatusDot, ProjectStatusBadge, ProjectWorkStatusBadge } from '@/components/shared/StatusBadge'
 import { TaskListView } from '@/components/task/TaskListView'
 import { TaskDetailPanel } from '@/components/task/TaskDetailPanel'
 import { ConversationSheet } from '@/components/conversation/ConversationSheet'
+import { EditProjectDialog } from '@/components/project/EditProjectDialog'
 import { useProject } from '@/hooks/useProjects'
 import { useTasks } from '@/hooks/useTasks'
+import { formatDateTime, formatRelativeTime } from '@/lib/utils'
 
 export function ProjectBoardPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -16,22 +18,53 @@ export function ProjectBoardPage() {
   const { data: tasks, isLoading } = useTasks(projectId)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
 
   return (
     <div className="flex h-full flex-col">
       {/* Project Header */}
-      <div className="flex items-center justify-between border-b px-6 py-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div>
-            <h1 className="text-lg font-semibold truncate">{project?.name ?? '...'}</h1>
+      <div className="flex items-start justify-between gap-4 border-b px-6 py-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-3">
+            <h1 className="truncate text-lg font-semibold">{project?.name ?? '...'}</h1>
             {project && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <>
+                <ProjectStatusBadge status={project.status} />
+                <ProjectWorkStatusBadge status={project.task_summary.work_status} />
+              </>
+            )}
+          </div>
+          {project?.description && (
+            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+              {project.description}
+            </p>
+          )}
+          {project && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1.5">
                 <AgentStatusDot status={project.pm_agent.status} />
                 <span>PM: {project.pm_agent.name}</span>
               </div>
-            )}
+              <span>
+                任务: {project.task_summary.task_total}
+                {project.task_summary.in_progress_count > 0 && ` · ${project.task_summary.in_progress_count} 执行中`}
+                {project.task_summary.pending_count > 0 && ` · ${project.task_summary.pending_count} 待处理`}
+                {project.task_summary.failed_count > 0 && ` · ${project.task_summary.failed_count} 失败`}
+              </span>
+              <span title={formatDateTime(project.updated_at)}>
+                最后更新: {formatRelativeTime(project.updated_at)}
+              </span>
+              {project.task_summary.latest_task_at && (
+                <span title={formatDateTime(project.task_summary.latest_task_at)}>
+                  最近任务: {formatRelativeTime(project.task_summary.latest_task_at)}
+                </span>
+              )}
+              <span title={formatDateTime(project.created_at)}>
+                创建于: {formatDateTime(project.created_at)}
+              </span>
+            </div>
+          )}
           </div>
-        </div>
         <div className="flex items-center gap-2">
           <Button size="sm" onClick={() => setSheetOpen(true)}>
             <MessageSquarePlus className="size-4 mr-1.5" />
@@ -42,7 +75,7 @@ export function ProjectBoardPage() {
               <MoreHorizontal className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent>
-              <DropdownMenuItem>
+              <DropdownMenuItem disabled={!project} onClick={() => setEditOpen(true)}>
                 <Pencil className="size-3.5 mr-2" />
                 编辑项目
               </DropdownMenuItem>
@@ -97,6 +130,8 @@ export function ProjectBoardPage() {
           }}
         />
       )}
+
+      <EditProjectDialog open={editOpen} onOpenChange={setEditOpen} project={project} />
     </div>
   )
 }

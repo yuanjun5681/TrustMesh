@@ -7,6 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const sseHeartbeatInterval = 15 * time.Second
+
 func beginSSE(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache, no-transform")
@@ -24,7 +26,13 @@ func streamEvents[T any](c *gin.Context, updates <-chan T) {
 		return
 	}
 
-	heartbeat := time.NewTicker(25 * time.Second)
+	// Force-write HTTP headers immediately so the client's fetch() resolves.
+	// Without this, Gin defers header writing until the first body write,
+	// causing streams with no initial data (e.g. user event stream) to hang.
+	c.Writer.WriteHeaderNow()
+	flusher.Flush()
+
+	heartbeat := time.NewTicker(sseHeartbeatInterval)
 	defer heartbeat.Stop()
 
 	for {

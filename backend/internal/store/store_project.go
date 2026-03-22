@@ -14,6 +14,60 @@ type UpdateProjectInput struct {
 	Description *string
 }
 
+func (s *Store) buildProjectViewUnsafe(project *model.Project) *model.Project {
+	clone := copyProject(project)
+	clone.TaskSummary = s.aggregateProjectTaskSummaryUnsafe(project)
+	return clone
+}
+
+func (s *Store) aggregateProjectTaskSummaryUnsafe(project *model.Project) model.ProjectTaskSummary {
+	summary := model.ProjectTaskSummary{
+		WorkStatus: "empty",
+	}
+
+	ids := s.projectTasks[project.ID]
+	for _, id := range ids {
+		task, ok := s.tasks[id]
+		if !ok || task.UserID != project.UserID {
+			continue
+		}
+
+		summary.TaskTotal++
+		switch task.Status {
+		case "pending":
+			summary.PendingCount++
+		case "in_progress":
+			summary.InProgressCount++
+		case "done":
+			summary.DoneCount++
+		case "failed":
+			summary.FailedCount++
+		}
+
+		if summary.LatestTaskAt == nil || task.UpdatedAt.After(*summary.LatestTaskAt) {
+			at := task.UpdatedAt
+			summary.LatestTaskAt = &at
+		}
+	}
+
+	switch {
+	case project.Status == "archived":
+		summary.WorkStatus = "archived"
+	case summary.TaskTotal == 0:
+		summary.WorkStatus = "empty"
+	case summary.InProgressCount > 0:
+		summary.WorkStatus = "running"
+	case summary.FailedCount > 0:
+		summary.WorkStatus = "attention"
+	case summary.PendingCount > 0:
+		summary.WorkStatus = "queued"
+	default:
+		summary.WorkStatus = "idle"
+	}
+
+	return summary
+}
+
 func (s *Store) CreateProject(userID, name, description, pmAgentID string) (*model.Project, *transport.AppError) {
 	name = strings.TrimSpace(name)
 	description = strings.TrimSpace(description)
@@ -49,7 +103,7 @@ func (s *Store) CreateProject(userID, name, description, pmAgentID string) (*mod
 	if err := s.persistProjectUnsafe(project); err != nil {
 		return nil, mongoWriteError(err)
 	}
-	return copyProject(project), nil
+	return s.buildProjectViewUnsafe(project), nil
 }
 
 func (s *Store) ListProjects(userID string) []model.Project {
@@ -59,7 +113,7 @@ func (s *Store) ListProjects(userID string) []model.Project {
 	items := make([]model.Project, 0)
 	for _, p := range s.projects {
 		if p.UserID == userID {
-			items = append(items, *copyProject(p))
+			items = append(items, *s.buildProjectViewUnsafe(p))
 		}
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.After(items[j].CreatedAt) })
@@ -73,7 +127,7 @@ func (s *Store) GetProject(userID, projectID string) (*model.Project, *transport
 	if !ok || p.UserID != userID {
 		return nil, transport.NotFound("project not found")
 	}
-	return copyProject(p), nil
+	return s.buildProjectViewUnsafe(p), nil
 }
 
 func (s *Store) UpdateProject(userID, projectID string, in UpdateProjectInput) (*model.Project, *transport.AppError) {
@@ -101,7 +155,7 @@ func (s *Store) UpdateProject(userID, projectID string, in UpdateProjectInput) (
 	if err := s.persistProjectUnsafe(p); err != nil {
 		return nil, mongoWriteError(err)
 	}
-	return copyProject(p), nil
+	return s.buildProjectViewUnsafe(p), nil
 }
 
 func (s *Store) ArchiveProject(userID, projectID string) (*model.Project, *transport.AppError) {
@@ -116,7 +170,7 @@ func (s *Store) ArchiveProject(userID, projectID string) (*model.Project, *trans
 	if err := s.persistProjectUnsafe(p); err != nil {
 		return nil, mongoWriteError(err)
 	}
-	return copyProject(p), nil
+	return s.buildProjectViewUnsafe(p), nil
 }
 
 func (s *Store) GetProjectPMNode(userID, projectID string) (string, *transport.AppError) {

@@ -64,5 +64,21 @@ func (s *Store) addEventUnsafe(userID, projectID, taskID, todoID, actorType, act
 		s.agentEvents[actorID] = append(s.agentEvents[actorID], &event)
 	}
 	s.maybeCreateNotificationUnsafe(&event)
+	if taskID != "" {
+		s.publishUserEventUnsafe(userID, "task.event.created", map[string]any{
+			"task_id":    taskID,
+			"project_id": projectID,
+			"event":      event,
+		}, at)
+	}
+	if eventType == "agent_status_changed" {
+		payload := map[string]any{
+			"event": event,
+		}
+		if agent, ok := s.agents[actorID]; ok {
+			payload["agent"] = *copyAgent(agent)
+		}
+		s.publishUserEventUnsafe(userID, "agent.status.changed", payload, at)
+	}
 	return &event
 }

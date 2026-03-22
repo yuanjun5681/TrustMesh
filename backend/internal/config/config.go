@@ -13,7 +13,6 @@ type Config struct {
 	LogLevel            string
 	AllowAllCORS        bool
 	ReadTimeout         time.Duration
-	WriteTimeout        time.Duration
 	ShutdownGrace       time.Duration
 	MongoEnabled        bool
 	MongoURI            string
@@ -33,7 +32,6 @@ func Load() Config {
 		LogLevel:            getEnv("LOG_LEVEL", "info"),
 		AllowAllCORS:        getEnvBool("ALLOW_ALL_CORS", true),
 		ReadTimeout:         getEnvDuration("READ_TIMEOUT", 10*time.Second),
-		WriteTimeout:        getEnvDuration("WRITE_TIMEOUT", 15*time.Second),
 		ShutdownGrace:       getEnvDuration("SHUTDOWN_GRACE", 8*time.Second),
 		MongoEnabled:        getEnvBool("MONGO_ENABLED", true),
 		MongoURI:            getEnv("MONGO_URI", "mongodb://127.0.0.1:27017"),

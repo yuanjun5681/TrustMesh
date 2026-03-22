@@ -10,7 +10,6 @@ import {
   useCreateConversation,
   useAppendMessage,
 } from '@/hooks/useConversations'
-import { useConversationStream } from '@/hooks/useLiveStreams'
 import { useProject } from '@/hooks/useProjects'
 import { ApiRequestError } from '@/api/client'
 import { toast } from 'sonner'
@@ -45,11 +44,10 @@ export function ConversationSheet({ projectId, open, onOpenChange, initialConver
 
   const { data: conversation } = useConversation(
     open && conversationId ? conversationId : undefined,
-    !isHistoryMode
+    {
+      isActiveHint: !isHistoryMode,
+    }
   )
-
-  const shouldStream = open && !!conversationId && conversation?.status !== 'resolved' && !isHistoryMode
-  useConversationStream(conversationId ?? undefined, shouldStream)
 
   const createConversation = useCreateConversation()
   const appendMessage = useAppendMessage()

@@ -68,6 +68,11 @@ func (s *Store) MarkNotificationRead(userID, notificationID string) *transport.A
 	n.IsRead = true
 	n.ReadAt = &now
 	s.persistNotificationUnsafe(n)
+	s.publishUserEventUnsafe(userID, "notification.read", map[string]any{
+		"notification_id": notificationID,
+		"read_at":         now,
+		"unread_count":    unreadNotificationCountUnsafe(s.notifications, s.userNotifications[userID]),
+	}, now)
 	return nil
 }
 
@@ -77,6 +82,7 @@ func (s *Store) MarkAllNotificationsRead(userID string) int {
 
 	count := 0
 	now := time.Now().UTC()
+	markedIDs := make([]string, 0)
 	for _, id := range s.userNotifications[userID] {
 		n, ok := s.notifications[id]
 		if !ok || n.IsRead {
@@ -85,7 +91,25 @@ func (s *Store) MarkAllNotificationsRead(userID string) int {
 		n.IsRead = true
 		n.ReadAt = &now
 		s.persistNotificationUnsafe(n)
+		markedIDs = append(markedIDs, id)
 		count++
+	}
+	if count > 0 {
+		s.publishUserEventUnsafe(userID, "notifications.all_read", map[string]any{
+			"notification_ids": markedIDs,
+			"read_at":          now,
+			"unread_count":     0,
+		}, now)
+	}
+	return count
+}
+
+func unreadNotificationCountUnsafe(notifications map[string]*model.Notification, ids []string) int {
+	count := 0
+	for _, id := range ids {
+		if n, ok := notifications[id]; ok && !n.IsRead {
+			count++
+		}
 	}
 	return count
 }
