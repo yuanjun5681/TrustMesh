@@ -19,13 +19,13 @@ export function DashboardPage() {
         <h1 className="text-2xl font-bold">Dashboard</h1>
       </div>
 
-      {/* Agent 状态卡片 */}
+      {/* Agent 状态卡片 + 最近活动 */}
       {agents && agents.length > 0 && (
         <div className="shrink-0">
           <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
             Agents
           </h2>
-          <div className="flex gap-3 pb-2 overflow-x-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {agents.map((agent) => (
               <AgentStatusCard key={agent.id} agent={agent} />
             ))}
