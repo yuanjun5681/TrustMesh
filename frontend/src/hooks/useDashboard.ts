@@ -12,7 +12,7 @@ export function useDashboardStats() {
   })
 }
 
-export function useDashboardEvents(limit = 20) {
+export function useDashboardEvents(limit = 10) {
   return useQuery({
     queryKey: ['dashboard', 'events', limit],
     queryFn: async () => {

@@ -25,7 +25,8 @@ func NewConversationHandler(s *store.Store, publisher *clawsynapse.Client, log *
 }
 
 type createConversationRequest struct {
-	Content string `json:"content"`
+	Content    string           `json:"content"`
+	UIResponse *model.UIResponse `json:"ui_response,omitempty"`
 }
 
 func (h *ConversationHandler) Create(c *gin.Context) {
@@ -43,7 +44,7 @@ func (h *ConversationHandler) Create(c *gin.Context) {
 		transport.WriteError(c, appErr)
 		return
 	}
-	h.notifyPM(userID, detail.ProjectID, detail.ID, req.Content, true)
+	h.notifyPM(userID, detail.ProjectID, detail.ID, req.Content, true, nil)
 	transport.WriteData(c, http.StatusCreated, detail)
 }
 
@@ -83,16 +84,16 @@ func (h *ConversationHandler) AppendMessage(c *gin.Context) {
 		transport.WriteError(c, transport.BadRequest("BAD_REQUEST", "invalid json body"))
 		return
 	}
-	detail, appErr := h.store.AppendConversationMessage(userID, c.Param("id"), req.Content)
+	detail, appErr := h.store.AppendConversationMessage(userID, c.Param("id"), req.Content, req.UIResponse)
 	if appErr != nil {
 		transport.WriteError(c, appErr)
 		return
 	}
-	h.notifyPM(userID, detail.ProjectID, detail.ID, req.Content, false)
+	h.notifyPM(userID, detail.ProjectID, detail.ID, req.Content, false, req.UIResponse)
 	transport.WriteData(c, http.StatusOK, detail)
 }
 
-func (h *ConversationHandler) notifyPM(userID, projectID, conversationID, content string, initial bool) {
+func (h *ConversationHandler) notifyPM(userID, projectID, conversationID, content string, initial bool, uiResponse *model.UIResponse) {
 	if h.publisher == nil || h.log == nil {
 		return
 	}
@@ -101,18 +102,19 @@ func (h *ConversationHandler) notifyPM(userID, projectID, conversationID, conten
 		h.log.Warn("skip notify conversation.message", zap.String("project_id", projectID), zap.String("code", appErr.Code), zap.String("message", appErr.Message))
 		return
 	}
-	payload := h.buildPMConversationMessage(userID, projectID, conversationID, content, initial)
+	payload := h.buildPMConversationMessage(userID, projectID, conversationID, content, initial, uiResponse)
 	if _, err := h.publisher.Publish(context.Background(), pmNodeID, "conversation.message", payload, conversationID, nil); err != nil {
 		h.log.Warn("notify conversation.message failed", zap.String("project_id", projectID), zap.String("conversation_id", conversationID), zap.Error(err))
 	}
 }
 
-func (h *ConversationHandler) buildPMConversationMessage(userID, projectID, conversationID, userContent string, initial bool) protocol.PMConversationMessage {
+func (h *ConversationHandler) buildPMConversationMessage(userID, projectID, conversationID, userContent string, initial bool, uiResponse *model.UIResponse) protocol.PMConversationMessage {
 	payload := protocol.PMConversationMessage{
 		ConversationID: conversationID,
 		ProjectID:      projectID,
 		UserContent:    userContent,
 		IsInitial:      initial,
+		UserUIResponse: uiResponse,
 	}
 	if initial {
 		payload.Content = "请使用 /tm-task-plan skill 处理本次需求。首先理解用户需求，澄清不明确之处，待需求明确后再创建任务。"

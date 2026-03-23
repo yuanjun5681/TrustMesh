@@ -34,6 +34,7 @@ type TodoResult struct {
 
 type Todo struct {
 	ID          string       `json:"id" bson:"id"`
+	Order       int          `json:"order" bson:"order"`
 	Title       string       `json:"title" bson:"title"`
 	Description string       `json:"description" bson:"description"`
 	Status      string       `json:"status" bson:"status"`
@@ -95,4 +96,27 @@ type TaskDetail struct {
 	Version        int            `json:"version" bson:"version"`
 	CreatedAt      time.Time      `json:"created_at" bson:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at" bson:"updated_at"`
+}
+
+func (t *TaskDetail) NextDispatchableTodo() *Todo {
+	if t == nil {
+		return nil
+	}
+	for i := range t.Todos {
+		todo := &t.Todos[i]
+		switch todo.Status {
+		case "done":
+			continue
+		case "pending":
+			return todo
+		default:
+			return nil
+		}
+	}
+	return nil
+}
+
+func (t *TaskDetail) CanDispatchTodo(todoID string) bool {
+	next := t.NextDispatchableTodo()
+	return next != nil && next.ID == todoID
 }

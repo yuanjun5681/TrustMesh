@@ -7,7 +7,7 @@ description: >
 compatibility: Requires clawsynapse CLI and a running clawsynapsed daemon
 metadata:
   author: TrustMesh
-  version: "2.0"
+  version: "2.2"
 allowed-tools:
   - "Bash(clawsynapse:*)"
 ---
@@ -40,9 +40,27 @@ allowed-tools:
 
 1. **先澄清，后创建任务。** 收到首次需求时，不要立刻创建 task.create。先复述理解、提出问题。
 2. **只创建一次任务。** 一个 Conversation 只能对应一个 Task，重复创建会被服务端拒绝（`CONVERSATION_TASK_EXISTS`）。
-3. **Todo 要可独立验收。** 每个 Todo 应有清晰的边界、明确的输入输出，可以由一个执行 Agent 独立完成。
-4. **基于事实分派。** 结合 `candidate_agents` 中的 `role`、`status`、`capabilities` 分派 Todo，不要虚构能力。优先分派给 `status=online` 的 Agent。
-5. **所有回复都走 ClawSynapse。** 不要在聊天界面直接输出文本作为回复，必须使用 `clawsynapse publish`。
+3. **Todo 必须有强顺序。** 你产出的 Todo 列表不是无序清单，而是按执行先后排列的工作流。后一个 Todo 必须建立在前一个 Todo 的完成结果之上，避免并行前提不成立。
+4. **Todo 要可独立验收。** 每个 Todo 应有清晰的边界、明确的输入输出，可以由一个执行 Agent 独立完成。
+5. **基于事实分派。** 结合 `candidate_agents` 中的 `role`、`status`、`capabilities` 分派 Todo，不要虚构能力。优先分派给 `status=online` 的 Agent。
+6. **所有回复都走 ClawSynapse。** 不要在聊天界面直接输出文本作为回复，必须使用 `clawsynapse publish`。
+
+### Todo 顺序规划要求
+
+创建 `task.create` 前，必须先把 Todo 按依赖顺序排好：
+
+1. 先放上游 Todo：需求分析、后端接口、数据结构、协议调整等。
+2. 再放依赖上游产物的 Todo：前端接入、联调、文档、回归验证等。
+3. 不要把“依赖前序结果”的工作放到前面，也不要把只是主题相关但逻辑独立的工作混在同一顺序链里。
+4. 若两个工作确实必须串行，直接按顺序拆成两个 Todo；不要在 description 里写“可以等前一个完成后再做”但列表顺序却无体现。
+5. `order` 必须从 `1` 开始连续递增，并与列表中的逻辑顺序一致。
+6. `id` 使用简单稳定的编号规则，不要混入优先级、状态、assignee 等可变语义。推荐格式：`TD_01`、`TD_02`、`TD_03`。
+
+判断标准：
+- 如果 Todo B 需要 Todo A 的代码、接口、结论、交付物或决策结果，B 必须排在 A 后面。
+- 如果两个 Todo 可以真正独立并行，可以在同一个 Task 内保留它们，但仍需给出一个明确顺序。
+- 对可并行 Todo，顺序可以按以下标准任选其一确定：更基础的能力优先、更高风险或不确定性更高的工作优先、更早产生可验证结果的工作优先，或直接按 PM 认为最清晰的叙事顺序排列。
+- 对可并行 Todo，不要求你虚构依赖关系；只需要保证顺序是明确、稳定、可解释的。
 
 ## 二、incoming 消息格式
 
@@ -120,6 +138,8 @@ allowed-tools:
 
 用于向用户提问澄清、确认理解、或告知任务已创建。
 
+#### 纯文本回复
+
 ```bash
 # TARGET_NODE = incoming header 中 from 的值（TrustMesh 节点）
 # ⚠️ 绝对不能是你自己的 node ID
@@ -137,6 +157,101 @@ clawsynapse publish \
   --message "$payload"
 ```
 
+#### 交互式澄清回复（ui_blocks）
+
+当澄清问题可以结构化为选项、文本输入或确认时，**应该**使用 `ui_blocks` 提供交互式 UI。前端会逐步呈现每个 block，用户逐个回答后确认提交。
+
+`ui_blocks` 是可选字段。`content` 必须始终有值，作为可读 fallback。
+
+支持的 block 类型：
+
+| type | 用途 | 关键字段 |
+|------|------|----------|
+| `single_select` | 单选/多选 | `label`, `options[{value, label, description?}]`, `multiple?`, `default?` |
+| `text_input` | 自由文本 | `label`, `placeholder?`, `required?`（默认 true） |
+| `confirm` | 二次确认 | `label`, `confirm_label?`, `cancel_label?` |
+| `info` | 只读信息 | `label`, `content`（支持 markdown） |
+
+```bash
+TARGET_NODE="trustmesh-server"  # ← 替换为实际 from 值
+
+ui_blocks='[
+  {
+    "id": "blk_1",
+    "type": "single_select",
+    "label": "登录方式需要支持哪些？",
+    "options": [
+      {"value": "email_password", "label": "邮箱 + 密码"},
+      {"value": "phone_sms", "label": "手机号 + 短信验证码"},
+      {"value": "oauth", "label": "第三方 OAuth（Google/GitHub）"}
+    ],
+    "multiple": true
+  },
+  {
+    "id": "blk_2",
+    "type": "single_select",
+    "label": "是否需要「记住登录」功能？",
+    "options": [
+      {"value": "yes", "label": "需要"},
+      {"value": "no", "label": "不需要"},
+      {"value": "later", "label": "先不考虑，后续再加"}
+    ]
+  },
+  {
+    "id": "blk_3",
+    "type": "text_input",
+    "label": "其他补充说明（可选）",
+    "placeholder": "如有特殊需求请在此说明...",
+    "required": false
+  }
+]'
+
+payload="$(jq -nc \
+  --arg conversation_id "conv_123" \
+  --arg content "我理解你需要用户登录功能。请确认以下几点：" \
+  --argjson ui_blocks "$ui_blocks" \
+  '{conversation_id: $conversation_id, content: $content, ui_blocks: $ui_blocks}')"
+
+clawsynapse publish \
+  --target "$TARGET_NODE" \
+  --type conversation.reply \
+  --session-key conv_123 \
+  --message "$payload"
+```
+
+#### ui_blocks 使用规则
+
+1. `content` 必须始终有值，概述你的问题，作为纯文本 fallback
+2. 每条消息不超过 **5 个** blocks
+3. 每个 `single_select` 不超过 **8 个** options
+4. `id` 在同一消息内唯一，建议使用 `blk_1`、`blk_2` 格式
+5. 当问题有明确的可选答案时用 `single_select`，开放性问题用 `text_input`
+6. 任务创建前的最终确认可用 `confirm` 类型展示任务摘要并让用户确认
+7. `info` 类型用于展示补充说明，不需要用户回答
+
+#### 用户回复中的 ui_response
+
+用户通过交互式 UI 提交后，后续的 `conversation.message` 会携带 `user_ui_response` 字段：
+
+```json
+{
+  "conversation_id": "conv_123",
+  "user_content": "登录方式：邮箱+密码、手机号+短信验证码；需要记住登录；无额外补充",
+  "user_ui_response": {
+    "blocks": {
+      "blk_1": { "selected": ["email_password", "phone_sms"] },
+      "blk_2": { "selected": ["yes"] },
+      "blk_3": { "text": "" }
+    }
+  },
+  "is_initial_message": false
+}
+```
+
+- `user_content` 包含自动生成的可读摘要
+- `user_ui_response.blocks` 按 block id 索引，包含结构化选择结果
+- 优先使用 `user_ui_response` 解析用户选择，`user_content` 作为补充
+
 ### task.create — 创建任务
 
 需求明确后，创建一个 Task 并拆分为多个 Todo。
@@ -147,14 +262,16 @@ TARGET_NODE="trustmesh-server"  # ← 替换为实际 from 值
 todos='[
   {
     "id": "todo_1",
+    "order": 1,
     "title": "实现后端登录接口",
     "description": "完成邮箱密码登录 API",
     "assignee_node_id": "node-backend-001"
   },
   {
     "id": "todo_2",
+    "order": 2,
     "title": "实现前端登录页",
-    "description": "完成登录页和表单交互",
+    "description": "在后端接口完成后，接入登录页和表单交互",
     "assignee_node_id": "node-frontend-001"
   }
 ]'
@@ -181,10 +298,16 @@ clawsynapse publish \
 ```
 
 Todo 字段说明：
-- `id`：你自己生成的唯一标识（如 `todo_1`, `todo_2`）
+- `id`：你自己生成的唯一标识。推荐使用稳定的顺序编号格式：`TD_01`、`TD_02`、`TD_03`
+- `order`：Todo 的强顺序编号，从 `1` 开始递增；TrustMesh 会按顺序逐个派发
 - `title`：简洁描述这个 Todo 要做什么
-- `description`：详细说明输入、输出、验收标准
+- `description`：详细说明输入、输出、验收标准，并明确说明它依赖哪些前序结果
 - `assignee_node_id`：从 `candidate_agents` 中选择的执行 Agent 的 `node_id`
+
+`id` 规则补充：
+- `id` 应在当前 Task 内唯一。
+- `id` 只表达稳定编号，不表达优先级、状态或人员信息。
+- 推荐直接与 `order` 对齐，例如 `order=1 -> TD_01`，`order=2 -> TD_02`。
 
 ### 获取结构化发送结果
 

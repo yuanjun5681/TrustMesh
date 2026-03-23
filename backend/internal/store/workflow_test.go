@@ -430,6 +430,49 @@ func TestTaskArtifactAggregationIncludesTransferMetadata(t *testing.T) {
 	}
 }
 
+func TestRecordTodoDispatchMarksTaskInProgress(t *testing.T) {
+	s, userID, pm, developer, project, conversation := seedWorkflowState(t)
+
+	task, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: conversation.ID,
+		Title:          "Implement login",
+		Description:    "Support email password login",
+		Todos: []TaskCreateTodoInput{
+			{
+				ID:             "todo-1",
+				Title:          "Build backend API",
+				Description:    "Implement auth endpoints",
+				AssigneeNodeID: developer.NodeID,
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("create task: %v", appErr)
+	}
+
+	task, appErr = s.RecordTodoDispatch(userID, task.ID, "todo-1")
+	if appErr != nil {
+		t.Fatalf("dispatch todo: %v", appErr)
+	}
+
+	if task.Status != "in_progress" {
+		t.Fatalf("expected task in_progress after dispatch, got %s", task.Status)
+	}
+	if task.Todos[0].Status != "in_progress" {
+		t.Fatalf("expected todo in_progress after dispatch, got %s", task.Todos[0].Status)
+	}
+	if task.Todos[0].StartedAt == nil {
+		t.Fatal("expected todo started_at to be set after dispatch")
+	}
+	if s.agents[developer.ID].Status != "busy" {
+		t.Fatalf("expected developer to be busy after dispatch, got %s", s.agents[developer.ID].Status)
+	}
+	if task.Result.Summary == "" {
+		t.Fatalf("expected in-progress task result summary after dispatch, got %+v", task.Result)
+	}
+}
+
 func TestTaskResultAggregationOnTodoFailure(t *testing.T) {
 	s, _, pm, developer, project, conversation := seedWorkflowState(t)
 
@@ -471,6 +514,85 @@ func TestTaskResultAggregationOnTodoFailure(t *testing.T) {
 	}
 	if len(task.Artifacts) != 0 {
 		t.Fatalf("expected no artifacts on failed todo, got %d", len(task.Artifacts))
+	}
+}
+
+func TestTaskTodoOrderAndSequentialExecutionGuards(t *testing.T) {
+	s, _, pm, developer, project, conversation := seedWorkflowState(t)
+
+	task, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: conversation.ID,
+		Title:          "Implement login",
+		Description:    "Support email password login",
+		Todos: []TaskCreateTodoInput{
+			{
+				ID:             "todo-2",
+				Order:          2,
+				Title:          "Build frontend UI",
+				Description:    "Implement the login form after backend API is ready",
+				AssigneeNodeID: developer.NodeID,
+			},
+			{
+				ID:             "todo-1",
+				Order:          1,
+				Title:          "Build backend API",
+				Description:    "Implement auth endpoints first",
+				AssigneeNodeID: developer.NodeID,
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("create task: %v", appErr)
+	}
+
+	if len(task.Todos) != 2 {
+		t.Fatalf("expected 2 todos, got %d", len(task.Todos))
+	}
+	if task.Todos[0].ID != "todo-1" || task.Todos[0].Order != 1 {
+		t.Fatalf("expected first todo to be todo-1/order=1, got %+v", task.Todos[0])
+	}
+	if task.Todos[1].ID != "todo-2" || task.Todos[1].Order != 2 {
+		t.Fatalf("expected second todo to be todo-2/order=2, got %+v", task.Todos[1])
+	}
+
+	_, appErr = s.UpdateTodoProgressByNode(developer.NodeID, TodoProgressInput{
+		TaskID:  task.ID,
+		TodoID:  "todo-2",
+		Message: "trying to skip ahead",
+	})
+	if appErr == nil || appErr.Code != "TODO_BLOCKED_BY_PREVIOUS" {
+		t.Fatalf("expected TODO_BLOCKED_BY_PREVIOUS for out-of-order progress, got %#v", appErr)
+	}
+
+	task, appErr = s.CompleteTodoByNode(developer.NodeID, TodoCompleteInput{
+		TaskID: task.ID,
+		TodoID: "todo-1",
+		Result: model.TodoResult{
+			Summary:  "API ready",
+			Output:   "backend done",
+			Metadata: map[string]any{},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("complete first todo: %v", appErr)
+	}
+
+	task, appErr = s.CompleteTodoByNode(developer.NodeID, TodoCompleteInput{
+		TaskID: task.ID,
+		TodoID: "todo-2",
+		Result: model.TodoResult{
+			Summary:  "UI ready",
+			Output:   "frontend done",
+			Metadata: map[string]any{},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("complete second todo: %v", appErr)
+	}
+
+	if task.Status != "done" {
+		t.Fatalf("expected task done after ordered completion, got %s", task.Status)
 	}
 }
 

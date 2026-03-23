@@ -48,13 +48,9 @@ func TestProjectTaskSummaryReflectsTaskState(t *testing.T) {
 		t.Fatal("expected latest task timestamp to be set")
 	}
 
-	_, appErr = s.UpdateTodoProgressByNode(developer.NodeID, TodoProgressInput{
-		TaskID:  task.ID,
-		TodoID:  "todo-1",
-		Message: "started",
-	})
+	_, appErr = s.RecordSequentialTodoDispatch(task.ID, "todo-1")
 	if appErr != nil {
-		t.Fatalf("start todo: %v", appErr)
+		t.Fatalf("dispatch todo: %v", appErr)
 	}
 
 	projectState, appErr = s.GetProject(userID, project.ID)

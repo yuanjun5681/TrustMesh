@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import {
   CheckCircle2,
   Circle,
@@ -8,9 +9,12 @@ import {
   Cog,
   MessageSquare,
   Radio,
+  ArrowRight,
+  FileText,
 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { formatDateTime } from '@/lib/utils'
+import { formatRelativeTime } from '@/lib/utils'
 import type { Event, EventType } from '@/types'
 
 const eventConfig: Record<EventType, { icon: typeof Circle; color: string; label: string }> = {
@@ -30,6 +34,128 @@ const actorIcons = {
   user: UserCircle,
   agent: Bot,
   system: Cog,
+}
+
+const taskStatusBadge: Record<string, { label: string; variant: 'secondary' | 'info' | 'success' | 'destructive' }> = {
+  pending: { label: '待处理', variant: 'secondary' },
+  in_progress: { label: '进行中', variant: 'info' },
+  done: { label: '已完成', variant: 'success' },
+  failed: { label: '失败', variant: 'destructive' },
+}
+
+const agentStatusBadge: Record<string, { label: string; className: string }> = {
+  online: { label: '在线', className: 'bg-status-online/15 text-status-online' },
+  offline: { label: '离线', className: 'bg-status-offline/15 text-status-offline' },
+  busy: { label: '忙碌', className: 'bg-status-busy/15 text-status-busy' },
+}
+
+function TaskContext({ event }: { event: Event }) {
+  const taskTitle = event.metadata.task_title as string | undefined
+  const todoTitle = event.metadata.todo_title as string | undefined
+  if (!taskTitle) return null
+
+  return (
+    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5 min-w-0">
+      <FileText className="size-3 shrink-0" />
+      <span className="truncate">{taskTitle}</span>
+      {todoTitle && (
+        <>
+          <span className="shrink-0">›</span>
+          <span className="truncate">{todoTitle}</span>
+        </>
+      )}
+    </div>
+  )
+}
+
+function StatusTransition({ from, to }: { from: string; to: string }) {
+  const fromCfg = taskStatusBadge[from]
+  const toCfg = taskStatusBadge[to]
+  if (!fromCfg || !toCfg) return null
+
+  return (
+    <div className="flex items-center gap-1.5 mt-1">
+      <Badge variant={fromCfg.variant} className="text-[10px] px-1.5 py-0">
+        {fromCfg.label}
+      </Badge>
+      <ArrowRight className="size-3 text-muted-foreground" />
+      <Badge variant={toCfg.variant} className="text-[10px] px-1.5 py-0">
+        {toCfg.label}
+      </Badge>
+    </div>
+  )
+}
+
+function AgentStatusTransition({ from, to }: { from: string; to: string }) {
+  const fromCfg = agentStatusBadge[from]
+  const toCfg = agentStatusBadge[to]
+  if (!fromCfg || !toCfg) return null
+
+  return (
+    <div className="flex items-center gap-1.5 mt-1">
+      <Badge className={cn('text-[10px] px-1.5 py-0', fromCfg.className)} variant="outline">
+        {fromCfg.label}
+      </Badge>
+      <ArrowRight className="size-3 text-muted-foreground" />
+      <Badge className={cn('text-[10px] px-1.5 py-0', toCfg.className)} variant="outline">
+        {toCfg.label}
+      </Badge>
+    </div>
+  )
+}
+
+function EventDetail({ event }: { event: Event }) {
+  if (event.event_type === 'task_status_changed') {
+    const from = event.metadata.from as string | undefined
+    const to = event.metadata.to as string | undefined
+    if (from && to) return <StatusTransition from={from} to={to} />
+  }
+
+  if (event.event_type === 'agent_status_changed') {
+    const from = event.metadata.prev_status as string | undefined
+    const to = event.metadata.new_status as string | undefined
+    if (from && to) return <AgentStatusTransition from={from} to={to} />
+  }
+
+  if (event.event_type === 'todo_failed') {
+    const error = event.metadata.error as string | undefined
+    if (error) {
+      return (
+        <p className="text-xs text-destructive mt-0.5 truncate">
+          {error}
+        </p>
+      )
+    }
+  }
+
+  if (event.event_type === 'task_comment' && event.content) {
+    return (
+      <div
+        className={cn(
+          'mt-1 rounded-md px-3 py-2 text-sm whitespace-pre-wrap line-clamp-3',
+          event.actor_type === 'agent' ? 'bg-muted' : 'bg-primary/5'
+        )}
+      >
+        {event.content}
+      </div>
+    )
+  }
+
+  if (event.content && event.event_type === 'conversation_reply') {
+    return <p className="text-xs text-muted-foreground mt-0.5 truncate">{event.content}</p>
+  }
+
+  return null
+}
+
+function buildEventLink(event: Event): string | null {
+  if (event.project_id && event.task_id) {
+    return `/projects/${event.project_id}`
+  }
+  if (event.metadata.conversation_id && event.project_id) {
+    return `/projects/${event.project_id}`
+  }
+  return null
 }
 
 interface EventTimelineProps {
@@ -64,9 +190,10 @@ export function EventTimeline({
         const Icon = config.icon
         const ActorIcon = actorIcons[event.actor_type]
         const isLast = index === events.length - 1
+        const link = buildEventLink(event)
 
-        return (
-          <div key={event.id} className="flex gap-3">
+        const content = (
+          <div className="flex gap-3">
             <div className="flex flex-col items-center">
               <div
                 className={cn(
@@ -78,34 +205,36 @@ export function EventTimeline({
               </div>
               {!isLast && <div className="w-px flex-1 bg-border" />}
             </div>
-            <div className={cn('pb-4 flex-1', isLast && 'pb-0')}>
+            <div className={cn('pb-4 flex-1 min-w-0', isLast && 'pb-0')}>
               <div className="flex items-center gap-1.5">
-                <ActorIcon className="size-3.5 text-muted-foreground" />
+                <ActorIcon className="size-3.5 text-muted-foreground shrink-0" />
                 {showActorName && event.actor_name && (
                   <span className="text-xs text-muted-foreground">{event.actor_name}</span>
                 )}
                 <span className="text-sm font-medium">{config.label}</span>
-                <span className="text-xs text-muted-foreground ml-auto">
-                  {formatDateTime(event.created_at)}
+                <span className="text-xs text-muted-foreground ml-auto shrink-0">
+                  {formatRelativeTime(event.created_at)}
                 </span>
               </div>
-              {event.content && event.event_type === 'task_comment' ? (
-                <div
-                  className={cn(
-                    'mt-1 rounded-md px-3 py-2 text-sm whitespace-pre-wrap',
-                    event.actor_type === 'agent'
-                      ? 'bg-muted'
-                      : 'bg-primary/5'
-                  )}
-                >
-                  {event.content}
-                </div>
-              ) : event.content ? (
-                <p className="text-sm text-muted-foreground mt-0.5">{event.content}</p>
-              ) : null}
+              <TaskContext event={event} />
+              <EventDetail event={event} />
             </div>
           </div>
         )
+
+        if (link) {
+          return (
+            <Link
+              key={event.id}
+              to={link}
+              className="block rounded-md -mx-1 px-1 hover:bg-accent/50 transition-colors"
+            >
+              {content}
+            </Link>
+          )
+        }
+
+        return <div key={event.id}>{content}</div>
       })}
     </div>
   )

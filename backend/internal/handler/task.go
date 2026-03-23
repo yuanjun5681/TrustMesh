@@ -84,6 +84,10 @@ func (h *TaskHandler) DispatchTodo(c *gin.Context) {
 		transport.WriteError(c, transport.Conflict("TODO_NOT_PENDING", "todo is not pending"))
 		return
 	}
+	if !task.CanDispatchTodo(todo.ID) {
+		transport.WriteError(c, transport.Conflict("TODO_BLOCKED_BY_PREVIOUS", "todo is blocked by previous todos"))
+		return
+	}
 	if h.publisher == nil {
 		transport.WriteError(c, transport.NewError(http.StatusServiceUnavailable, "CLAWSYNAPSE_DISABLED", "clawsynapse client is disabled"))
 		return

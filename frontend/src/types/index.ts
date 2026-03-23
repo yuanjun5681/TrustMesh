@@ -62,10 +62,46 @@ export interface Project {
   updated_at: string
 }
 
+// ─── UI Block 类型（交互式问题澄清） ───
+
+export type UIBlockType = 'single_select' | 'text_input' | 'confirm' | 'info'
+
+export interface UIBlockOption {
+  value: string
+  label: string
+  description?: string
+}
+
+export interface UIBlock {
+  id: string
+  type: UIBlockType
+  label: string
+  options?: UIBlockOption[]
+  multiple?: boolean
+  placeholder?: string
+  required?: boolean
+  content?: string
+  default?: string[]
+  confirm_label?: string
+  cancel_label?: string
+}
+
+export interface UIBlockResponse {
+  selected?: string[]
+  text?: string
+  confirmed?: boolean
+}
+
+export interface UIResponse {
+  blocks: Record<string, UIBlockResponse>
+}
+
 export interface ConversationMessage {
   id: string
   role: 'user' | 'pm_agent'
   content: string
+  ui_blocks?: UIBlock[]
+  ui_response?: UIResponse
   created_at: string
 }
 
@@ -321,6 +357,7 @@ export interface CreateConversationRequest {
 
 export interface AppendConversationMessageRequest {
   content: string
+  ui_response?: UIResponse
 }
 
 export interface ListProjectTasksQuery {

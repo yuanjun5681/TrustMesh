@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 type TaskCreateTodoInput struct {
 	ID             string
+	Order          int
 	Title          string
 	Description    string
 	AssigneeNodeID string
@@ -73,6 +75,9 @@ func (s *Store) RecordTodoDispatch(userID, taskID, todoID string) (*model.TaskDe
 	if todo.Status != "pending" {
 		return nil, transport.Conflict("TODO_NOT_PENDING", "todo is not pending")
 	}
+	if !task.CanDispatchTodo(todoID) {
+		return nil, transport.Conflict("TODO_BLOCKED_BY_PREVIOUS", "todo is blocked by previous todos")
+	}
 
 	now := time.Now().UTC()
 	userName := ""
@@ -80,14 +85,73 @@ func (s *Store) RecordTodoDispatch(userID, taskID, todoID string) (*model.TaskDe
 		userName = u.Name
 	}
 	message := fmt.Sprintf("手动派发给 %s", todo.Assignee.Name)
-	s.addEventUnsafe(userID, task.ProjectID, task.ID, todo.ID, "user", userID, userName, "todo_assigned", &message, map[string]any{
+	s.recordTodoDispatchUnsafe(task, todo, "user", userID, userName, &message, map[string]any{
 		"todo_id":           todo.ID,
 		"assignee_agent_id": todo.Assignee.AgentID,
 		"manual":            true,
 	}, now)
-	task.UpdatedAt = now
-	task.Version++
+	if todo.Status == "pending" {
+		todo.Status = "in_progress"
+		todo.StartedAt = &now
+	}
+	s.updateTaskStatusUnsafe(task, now)
 	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.refreshAgentExecutionStatusUnsafe(todo.Assignee.AgentID, now)
+	if err := s.persistAgentGraphUnsafe(todo.Assignee.AgentID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.publishTaskUnsafe(task.ID)
+	return copyTask(task), nil
+}
+
+func (s *Store) RecordSequentialTodoDispatch(taskID, todoID string) (*model.TaskDetail, *transport.AppError) {
+	taskID = strings.TrimSpace(taskID)
+	todoID = strings.TrimSpace(todoID)
+	if taskID == "" || todoID == "" {
+		return nil, transport.Validation("invalid todo dispatch payload", map[string]any{"task_id": "required", "todo_id": "required"})
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[taskID]
+	if !ok {
+		return nil, transport.NotFound("task not found")
+	}
+
+	todoIdx := findTodoIndex(task, todoID)
+	if todoIdx < 0 {
+		return nil, transport.NotFound("todo not found")
+	}
+
+	todo := &task.Todos[todoIdx]
+	if todo.Status != "pending" {
+		return nil, transport.Conflict("TODO_NOT_PENDING", "todo is not pending")
+	}
+	if !task.CanDispatchTodo(todoID) {
+		return nil, transport.Conflict("TODO_BLOCKED_BY_PREVIOUS", "todo is blocked by previous todos")
+	}
+
+	now := time.Now().UTC()
+	message := fmt.Sprintf("按顺序派发给 %s", todo.Assignee.Name)
+	s.recordTodoDispatchUnsafe(task, todo, "system", "system", "System", &message, map[string]any{
+		"todo_id":           todo.ID,
+		"assignee_agent_id": todo.Assignee.AgentID,
+		"dispatch_mode":     "sequential",
+		"manual":            false,
+	}, now)
+	if todo.Status == "pending" {
+		todo.Status = "in_progress"
+		todo.StartedAt = &now
+	}
+	s.updateTaskStatusUnsafe(task, now)
+	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.refreshAgentExecutionStatusUnsafe(todo.Assignee.AgentID, now)
+	if err := s.persistAgentGraphUnsafe(todo.Assignee.AgentID); err != nil {
 		return nil, mongoWriteError(err)
 	}
 	s.publishTaskUnsafe(task.ID)
@@ -111,6 +175,10 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 	}
 	if len(in.Todos) == 0 {
 		return nil, transport.Validation("invalid task.create payload", map[string]any{"todos": "must not be empty"})
+	}
+	normalizedTodos, todoErr := normalizeTaskCreateTodos(in.Todos)
+	if todoErr != nil {
+		return nil, todoErr
 	}
 
 	s.mu.Lock()
@@ -152,9 +220,9 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 
 	now := time.Now().UTC()
 	s.markAgentSeenUnsafe(pmAgent.ID, now)
-	seenTodoIDs := make(map[string]struct{}, len(in.Todos))
-	todos := make([]model.Todo, 0, len(in.Todos))
-	for i, todoIn := range in.Todos {
+	seenTodoIDs := make(map[string]struct{}, len(normalizedTodos))
+	todos := make([]model.Todo, 0, len(normalizedTodos))
+	for i, todoIn := range normalizedTodos {
 		title := strings.TrimSpace(todoIn.Title)
 		desc := strings.TrimSpace(todoIn.Description)
 		assigneeNode := strings.TrimSpace(todoIn.AssigneeNodeID)
@@ -181,6 +249,7 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 
 		todos = append(todos, model.Todo{
 			ID:          todoID,
+			Order:       todoIn.Order,
 			Title:       title,
 			Description: desc,
 			Status:      "pending",
@@ -234,11 +303,7 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 	conv.UpdatedAt = now
 
 	taskTitle := task.Title
-	s.addEventUnsafe(project.UserID, project.ID, task.ID, "", "agent", pmAgent.ID, pmAgent.Name, "task_created", &taskTitle, map[string]any{"conversation_id": task.ConversationID}, now)
-	for _, todo := range task.Todos {
-		title := fmt.Sprintf("assigned todo: %s", todo.Title)
-		s.addEventUnsafe(project.UserID, project.ID, task.ID, todo.ID, "agent", pmAgent.ID, pmAgent.Name, "todo_assigned", &title, map[string]any{"todo_id": todo.ID, "assignee_agent_id": todo.Assignee.AgentID}, now)
-	}
+	s.addEventUnsafe(project.UserID, project.ID, task.ID, "", "agent", pmAgent.ID, pmAgent.Name, "task_created", &taskTitle, map[string]any{"conversation_id": task.ConversationID, "task_title": task.Title}, now)
 
 	s.rememberProcessedMessageUnsafe(processedMessageKey("task.create", nodeID, messageID), "task.create", task.ID)
 	if err := s.persistConversationUnsafe(conv); err != nil {
@@ -257,6 +322,52 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 	s.publishTaskUnsafe(task.ID)
 
 	return copyTask(task), nil
+}
+
+func (s *Store) recordTodoDispatchUnsafe(task *model.TaskDetail, todo *model.Todo, actorType, actorID, actorName string, message *string, metadata map[string]any, now time.Time) {
+	metadata["task_title"] = task.Title
+	metadata["todo_title"] = todo.Title
+	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, actorType, actorID, actorName, "todo_assigned", message, metadata, now)
+	task.UpdatedAt = now
+	task.Version++
+}
+
+func normalizeTaskCreateTodos(in []TaskCreateTodoInput) ([]TaskCreateTodoInput, *transport.AppError) {
+	out := make([]TaskCreateTodoInput, len(in))
+	copy(out, in)
+
+	seenOrders := make(map[int]struct{}, len(out))
+	for i := range out {
+		order := out[i].Order
+		if order == 0 {
+			order = i + 1
+		}
+		if order <= 0 {
+			return nil, transport.Validation("invalid todo order", map[string]any{"todo_index": i, "order": "must be greater than zero"})
+		}
+		if _, exists := seenOrders[order]; exists {
+			return nil, transport.Validation("duplicated todo order", map[string]any{"todo_index": i, "order": order})
+		}
+		seenOrders[order] = struct{}{}
+		out[i].Order = order
+	}
+
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].Order < out[j].Order
+	})
+	return out, nil
+}
+
+func hasIncompletePredecessor(task *model.TaskDetail, todoIdx int) bool {
+	if task == nil || todoIdx <= 0 {
+		return false
+	}
+	for i := 0; i < todoIdx; i++ {
+		if task.Todos[i].Status != "done" {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Store) UpdateTodoProgressByNode(nodeID string, in TodoProgressInput) (*model.TaskDetail, *transport.AppError) {
@@ -290,6 +401,9 @@ func (s *Store) UpdateTodoProgressByNode(nodeID string, in TodoProgressInput) (*
 	if todo.Status == "done" || todo.Status == "failed" {
 		return nil, transport.Conflict("TODO_FINALIZED", "todo already finalized")
 	}
+	if hasIncompletePredecessor(task, todoIdx) {
+		return nil, transport.Conflict("TODO_BLOCKED_BY_PREVIOUS", "todo is blocked by previous todos")
+	}
 
 	now := time.Now().UTC()
 	s.markAgentSeenUnsafe(agent.ID, now)
@@ -297,10 +411,10 @@ func (s *Store) UpdateTodoProgressByNode(nodeID string, in TodoProgressInput) (*
 		todo.Status = "in_progress"
 		todo.StartedAt = &now
 		started := fmt.Sprintf("todo started: %s", todo.Title)
-		s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_started", &started, map[string]any{"todo_id": todo.ID}, now)
+		s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_started", &started, map[string]any{"todo_id": todo.ID, "task_title": task.Title, "todo_title": todo.Title}, now)
 	}
 	progress := in.Message
-	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_progress", &progress, map[string]any{"todo_id": todo.ID}, now)
+	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_progress", &progress, map[string]any{"todo_id": todo.ID, "task_title": task.Title, "todo_title": todo.Title}, now)
 
 	s.updateTaskStatusUnsafe(task, now)
 	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
@@ -354,6 +468,9 @@ func (s *Store) CompleteTodoByNodeWithMessageID(nodeID, messageID string, in Tod
 	if todo.Status == "failed" {
 		return nil, transport.Conflict("TODO_ALREADY_FAILED", "todo already failed")
 	}
+	if hasIncompletePredecessor(task, todoIdx) {
+		return nil, transport.Conflict("TODO_BLOCKED_BY_PREVIOUS", "todo is blocked by previous todos")
+	}
 
 	now := time.Now().UTC()
 	s.markAgentSeenUnsafe(agent.ID, now)
@@ -371,7 +488,7 @@ func (s *Store) CompleteTodoByNodeWithMessageID(nodeID, messageID string, in Tod
 		Metadata:     copyMap(in.Result.Metadata),
 	}
 	completed := fmt.Sprintf("todo completed: %s", todo.Title)
-	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_completed", &completed, map[string]any{"todo_id": todo.ID}, now)
+	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_completed", &completed, map[string]any{"todo_id": todo.ID, "task_title": task.Title, "todo_title": todo.Title}, now)
 
 	s.updateTaskStatusUnsafe(task, now)
 	s.rememberProcessedMessageUnsafe(processedMessageKey("todo.complete", nodeID, messageID), "todo.complete", task.ID)
@@ -430,6 +547,9 @@ func (s *Store) FailTodoByNodeWithMessageID(nodeID, messageID string, in TodoFai
 	if todo.Status == "failed" {
 		return nil, transport.Conflict("TODO_ALREADY_FAILED", "todo already failed")
 	}
+	if hasIncompletePredecessor(task, todoIdx) {
+		return nil, transport.Conflict("TODO_BLOCKED_BY_PREVIOUS", "todo is blocked by previous todos")
+	}
 
 	now := time.Now().UTC()
 	s.markAgentSeenUnsafe(agent.ID, now)
@@ -442,7 +562,7 @@ func (s *Store) FailTodoByNodeWithMessageID(nodeID, messageID string, in TodoFai
 	errCopy := in.Error
 	todo.Error = &errCopy
 	failed := fmt.Sprintf("todo failed: %s", todo.Title)
-	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_failed", &failed, map[string]any{"todo_id": todo.ID, "error": in.Error}, now)
+	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_failed", &failed, map[string]any{"todo_id": todo.ID, "error": in.Error, "task_title": task.Title, "todo_title": todo.Title}, now)
 
 	s.updateTaskStatusUnsafe(task, now)
 	s.rememberProcessedMessageUnsafe(processedMessageKey("todo.fail", nodeID, messageID), "todo.fail", task.ID)
@@ -569,15 +689,17 @@ func (s *Store) addCommentUnsafe(task *model.TaskDetail, todoID, actorType, acto
 
 	// 只有 Agent 评论才添加到活动时间线，用户评论不进入 events
 	if actorType == "agent" {
-		brief := content
-		if len(brief) > 80 {
-			brief = brief[:80] + "..."
-		}
-		metadata := map[string]any{"comment_id": comment.ID}
+		metadata := map[string]any{"comment_id": comment.ID, "task_title": task.Title}
 		if todoID != "" {
 			metadata["todo_id"] = todoID
+			for i := range task.Todos {
+				if task.Todos[i].ID == todoID {
+					metadata["todo_title"] = task.Todos[i].Title
+					break
+				}
+			}
 		}
-		s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todoID, actorType, actorID, actorName, "task_comment", &brief, metadata, at)
+		s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todoID, actorType, actorID, actorName, "task_comment", &content, metadata, at)
 	}
 
 	task.UpdatedAt = at
@@ -597,7 +719,7 @@ func (s *Store) updateTaskStatusUnsafe(task *model.TaskDetail, now time.Time) {
 	task.Version++
 	if prev != next {
 		msg := fmt.Sprintf("task status changed: %s -> %s", prev, next)
-		s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, "", "system", "system", "System", "task_status_changed", &msg, map[string]any{"from": prev, "to": next}, now)
+		s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, "", "system", "system", "System", "task_status_changed", &msg, map[string]any{"from": prev, "to": next, "task_title": task.Title}, now)
 	}
 }
 

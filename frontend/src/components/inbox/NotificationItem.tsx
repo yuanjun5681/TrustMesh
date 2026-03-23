@@ -16,10 +16,8 @@ const priorityDotColors: Record<string, string> = {
   low: 'bg-muted-foreground',
 }
 
-function truncateBody(body: string, maxLen = 80): string {
-  // Strip markdown formatting for preview
-  const plain = body.replace(/[*_~`#>\-\[\]()]/g, '').replace(/\n+/g, ' ').trim()
-  return plain.length > maxLen ? plain.slice(0, maxLen) + '...' : plain
+function stripMarkdown(body: string): string {
+  return body.replace(/[*_~`#>\-\[\]()]/g, '').replace(/\n+/g, ' ').trim()
 }
 
 interface NotificationItemProps {
@@ -88,7 +86,7 @@ export function NotificationItem({ notification, onMarkRead, onViewConversation 
             </span>
           </div>
           <p className="text-sm text-muted-foreground mt-0.5 truncate">
-            {truncateBody(notification.body)}
+            {stripMarkdown(notification.body)}
           </p>
           {linkInfo && (
             <div className="mt-1.5">

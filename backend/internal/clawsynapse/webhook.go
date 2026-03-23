@@ -67,7 +67,7 @@ func (h *WebhookHandler) handleConversationReply(c *gin.Context, webhook protoco
 		return
 	}
 
-	detail, appErr := h.store.AppendPMReplyByNode(webhook.From, payload.ConversationID, payload.Content)
+	detail, appErr := h.store.AppendPMReplyByNode(webhook.From, payload.ConversationID, payload.Content, payload.UIBlocks)
 	if appErr != nil {
 		transport.WriteError(c, appErr)
 		return
@@ -92,6 +92,7 @@ func (h *WebhookHandler) handleTaskCreate(c *gin.Context, webhook protocol.Webho
 	for _, todo := range payload.Todos {
 		in.Todos = append(in.Todos, store.TaskCreateTodoInput{
 			ID:             todo.ID,
+			Order:          todo.Order,
 			Title:          todo.Title,
 			Description:    todo.Description,
 			AssigneeNodeID: todo.AssigneeNodeID,
@@ -105,16 +106,7 @@ func (h *WebhookHandler) handleTaskCreate(c *gin.Context, webhook protocol.Webho
 	}
 
 	h.publishTaskCreated(task)
-	for _, todo := range task.Todos {
-		h.publish(context.Background(), todo.Assignee.NodeID, "todo.assigned", protocol.TodoAssignedPayload{
-			TaskID:      task.ID,
-			TodoID:      todo.ID,
-			Title:       todo.Title,
-			Description: todo.Description,
-			Content:     "你收到了一个新的 Todo 任务。请使用 /tm-task-exec skill 执行此任务，按要求回报进度和结果。",
-			ExecBrief:   defaultExecBrief(),
-		}, task.ID)
-	}
+	task = h.dispatchNextTodo(context.Background(), task)
 	transport.WriteData(c, http.StatusOK, task)
 }
 
@@ -158,6 +150,7 @@ func (h *WebhookHandler) handleTodoComplete(c *gin.Context, webhook protocol.Web
 	}
 
 	h.publishTaskAndTodoStatusChanges(task, payload.TodoID, "completed", webhook.From, "todo.complete")
+	task = h.dispatchNextTodo(context.Background(), task)
 	transport.WriteData(c, http.StatusOK, task)
 }
 
@@ -311,6 +304,40 @@ func (h *WebhookHandler) publishTaskCreated(task *model.TaskDetail) {
 		ConversationID: task.ConversationID,
 		Title:          task.Title,
 	}, task.ID)
+}
+
+func (h *WebhookHandler) dispatchNextTodo(ctx context.Context, task *model.TaskDetail) *model.TaskDetail {
+	if h == nil || task == nil || h.client == nil {
+		return task
+	}
+
+	todo := task.NextDispatchableTodo()
+	if todo == nil {
+		return task
+	}
+
+	if _, err := h.client.Publish(ctx, todo.Assignee.NodeID, "todo.assigned", protocol.TodoAssignedPayload{
+		TaskID:      task.ID,
+		TodoID:      todo.ID,
+		Title:       todo.Title,
+		Description: todo.Description,
+		Content:     "你收到了一个新的 Todo 任务。请使用 /tm-task-exec skill 执行此任务，按要求回报进度和结果。",
+		ExecBrief:   defaultExecBrief(),
+	}, task.ID, nil); err != nil {
+		if h.log != nil {
+			h.log.Warn("sequential todo dispatch failed", zap.String("task_id", task.ID), zap.String("todo_id", todo.ID), zap.String("target_node", todo.Assignee.NodeID), zap.Error(err))
+		}
+		return task
+	}
+
+	updatedTask, appErr := h.store.RecordSequentialTodoDispatch(task.ID, todo.ID)
+	if appErr != nil {
+		if h.log != nil {
+			h.log.Warn("failed to persist sequential todo dispatch", zap.String("task_id", task.ID), zap.String("todo_id", todo.ID), zap.Error(appErr))
+		}
+		return task
+	}
+	return updatedTask
 }
 
 func (h *WebhookHandler) publishTaskAndTodoStatusChanges(task *model.TaskDetail, todoID, message, actorNodeID, cause string) {

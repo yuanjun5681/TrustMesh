@@ -7,7 +7,7 @@ description: >
 compatibility: Requires clawsynapse CLI and a running clawsynapsed daemon
 metadata:
   author: TrustMesh
-  version: "2.2"
+  version: "2.3"
 allowed-tools:
   - "Bash(clawsynapse:*)"
 ---
@@ -22,18 +22,23 @@ allowed-tools:
 收到 todo.assigned
   │
   1. 阅读 Todo 的 title 和 description，理解要做什么
-  2. 开始执行，发送 todo.progress 报告进度
-  3. 执行过程中可多次发送 todo.progress
-  4. 执行过程中可随时发送 task.comment 记录详细过程
-  5. 成功 → 发送 todo.complete（附带结果）
-  6. 失败 → 发送 todo.fail（附带错误原因）
+  2. 一开始处理就先发送 1 条 task.comment，作为开工记录
+  3. 开始执行，发送 todo.progress 报告进度
+  4. 执行过程中，把 task.comment 当作默认工作日志持续发送
+  5. 在关键里程碑发送 todo.progress
+  6. 成功前先发总结 comment，再发送 todo.complete（附带结果）
+  7. 失败前先发总结 comment，再发送 todo.fail（附带错误原因）
 ```
 
 ### 关键规则
 
 1. **收到 todo.assigned 才开始工作。** 不要主动寻找任务。
 2. **及时回报进度。** 在关键里程碑发送 `todo.progress`，让 PM 和用户了解执行状态。
-2.1. **记录详细过程。** 使用 `task.comment` 记录思考过程、推理链、执行命令、关键决策等细节，帮助用户理解执行过程。
+2.1. **`task.comment` 是默认工作日志，不是可选补充。** 把它当作草稿和工作笔记来发，不需要等整理完成，也不需要润色。
+2.2. **开工即发 comment。** 收到 `todo.assigned` 并开始处理后，先发 1 条 `task.comment`，说明你准备检查什么、先做什么。
+2.3. **每个明显步骤后继续发 comment。** 读完代码、执行命令、完成一段修改、做出关键判断、发现风险、遇到阻塞后，都应补 1 条 `task.comment`。
+2.4. **拿不准要不要发时，默认发。** 宁可多发简短 comment，也不要长时间沉默。
+2.5. **`todo.progress` 负责里程碑，`task.comment` 负责过程。** `todo.progress` 用于状态推进；`task.comment` 用于记录观察、动作、决定、问题和下一步。
 3. **结果要具体。** `todo.complete` 的 result 应包含有意义的 summary 和 output；如果交付物里包含文件，**必须先上传文件**，再在结果里引用。
 4. **失败要说明原因。** `todo.fail` 的 error 应清晰描述失败原因，帮助诊断。
 5. **所有回报都走 ClawSynapse。** 不要在聊天界面直接输出结果。
@@ -280,7 +285,85 @@ clawsynapse publish \
 
 ### task.comment — 发送评论
 
-在执行过程中随时发送，记录思考过程、推理链、执行的命令、关键决策、遇到的问题等详细信息。评论不影响 Todo 状态，纯粹用于过程追踪。
+把 `task.comment` 当作默认工作日志来发送。它不是“整理好的说明文”，而是执行过程中的草稿、观察和笔记。短句也可以，不需要等全部想清楚才发。评论不影响 Todo 状态，但它是任务可观测性的主要来源。
+
+**发送原则**
+
+- 开工就发，不要等到第一个里程碑再发
+- 每个明显步骤都发 1 条：分析、命令、修改、实验、判断、阻塞、回退、下一步
+- 如果不确定这条信息值不值得发，默认发
+- 可以简短，不要求完整，不要求润色
+- `todo.progress` 说“到哪个阶段了”，`task.comment` 说“刚刚做了什么、为什么这么做、接下来做什么”
+
+**必发时机**
+
+- 收到 `todo.assigned` 并开始处理时
+- 阅读相关代码、文档、接口后，形成第一轮判断时
+- 每次执行关键命令、完成关键修改、完成一次验证后
+- 方案变化、做出关键决策、发现风险时
+- 遇到阻塞、需要假设前进、等待外部条件时
+- 发送 `todo.complete` 或 `todo.fail` 之前
+
+**建议频率**
+
+- 短任务：至少 2 条 comment（开工 1 条，结束前总结 1 条）
+- 中等任务：至少 4 条 comment（开工、分析、执行、结束前总结）
+- 长任务：每 5 到 10 分钟至少 1 条，或每个明显步骤 1 条
+
+**推荐内容结构**
+
+- 刚检查了什么
+- 观察到了什么
+- 决定怎么做
+- 刚执行了什么动作
+- 结果如何
+- 下一步是什么
+
+**可直接套用的简短模板**
+
+- `已开始处理，先检查 <模块/文件>，确认现状后再决定改法。`
+- `检查了 <文件/接口>，发现 <现象>，判断应优先复用 <现有实现>。`
+- `刚执行了 <命令/操作>，结果是 <结果>，接下来处理 <下一步>。`
+- `发现风险：<风险>。当前决定先按 <方案> 推进，并补充验证。`
+- `遇到阻塞：<问题>。当前假设是 <假设>，下一步用 <方法> 验证。`
+- `结束前记录：已完成 <内容>，剩余关注点是 <风险/边界>。`
+
+**推荐做法：先定义 helper，后续反复调用**
+
+```bash
+TARGET_NODE="trustmesh-server"  # ← 替换为实际 from 值
+SESSION_KEY="task_123"          # ← 替换为 incoming header 中 session 的值
+TASK_ID="task_123"
+TODO_ID="todo_1"
+
+send_comment() {
+  local content="$1"
+  local payload
+  payload="$(jq -nc \
+    --arg task_id "$TASK_ID" \
+    --arg todo_id "$TODO_ID" \
+    --arg content "$content" \
+    '{
+      task_id: $task_id,
+      todo_id: $todo_id,
+      content: $content
+    }')"
+
+  clawsynapse publish \
+    --target "$TARGET_NODE" \
+    --type task.comment \
+    --session-key "$SESSION_KEY" \
+    --message "$payload"
+}
+```
+
+示例：
+
+```bash
+send_comment "已开始处理，先检查 auth 模块和登录相关 handler。"
+send_comment "检查了现有 auth 模块，发现已有 JWT 签发逻辑，决定复用而不是重写。"
+send_comment "刚完成登录 handler 的参数校验，接下来接入 JWT 签发并补错误处理。"
+```
 
 ```bash
 TARGET_NODE="trustmesh-server"  # ← 替换为实际 from 值
@@ -322,6 +405,9 @@ clawsynapse --json publish \
 - **永远不要用你自己的 node ID 作为 `--target`。** target 是 TrustMesh 节点（incoming `from`）。
 - **不要发送 `conversation.reply`、`task.create`。** 这些是 PM Agent 的消息类型，不是执行 Agent 的。你只能发送 `todo.progress`、`todo.complete`、`todo.fail`、`task.comment` 四种消息类型。
 - **Todo 终态不可逆。** 已经 `done` 或 `failed` 的 Todo 不能再更新，服务端会拒绝（`TODO_ALREADY_DONE` / `TODO_ALREADY_FAILED`）。
+- **不要把 `task.comment` 当成可选项。** 对执行 Agent 来说，它是默认工作日志；长时间无 comment 视为过程缺失。
+- **不要等整理完再发 comment。** comment 可以是草稿、短句、阶段性判断；过度记录优于缺失记录。
+- **不要只发 `todo.progress` 不发 `task.comment`。** 里程碑更新前后，应至少有一条相关 comment 解释上下文。
 - 不要在聊天界面直接回复，必须使用 `clawsynapse publish`。
 - 不要丢弃 `--session-key`。
 - 不要发送协议中未定义的字段。

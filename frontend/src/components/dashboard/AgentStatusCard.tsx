@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom'
-import { Bot } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
+import { Bot, ChevronRight } from 'lucide-react'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { AgentStatusDot } from '@/components/shared/StatusBadge'
+import { EventTimeline } from '@/components/shared/EventTimeline'
+import { useAgentEvents } from '@/hooks/useDashboard'
 import { formatRelativeTime } from '@/lib/utils'
 import type { Agent } from '@/types'
 
@@ -10,30 +12,47 @@ interface AgentStatusCardProps {
 }
 
 export function AgentStatusCard({ agent }: AgentStatusCardProps) {
+  const { data: events, isLoading: eventsLoading } = useAgentEvents(agent.id, 10)
+
   return (
-    <Link to={`/agents/${agent.id}`}>
-      <Card className="min-w-[180px] hover:bg-accent/50 transition-colors cursor-pointer">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Bot className="size-4 text-muted-foreground" />
+    <Card className="flex flex-col min-h-0 overflow-hidden">
+      <CardHeader className="pb-2 pt-4 px-4 shrink-0">
+        <Link
+          to={`/agents/${agent.id}`}
+          className="flex items-center justify-between group"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Bot className="size-4 text-muted-foreground shrink-0" />
             <span className="text-sm font-medium truncate">{agent.name}</span>
             <AgentStatusDot status={agent.status} />
           </div>
-          <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
-            <div className="capitalize">{agent.role}</div>
-            {agent.status === 'offline' && agent.last_seen_at && (
-              <div>{formatRelativeTime(agent.last_seen_at)}</div>
-            )}
-            {agent.status !== 'offline' && (
-              <div>
-                {agent.usage.project_count > 0 && `${agent.usage.project_count} 项目`}
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+            <span className="capitalize">{agent.role}</span>
+            {agent.status === 'offline' && agent.last_seen_at ? (
+              <span>· {formatRelativeTime(agent.last_seen_at)}</span>
+            ) : agent.status !== 'offline' ? (
+              <span>
+                {agent.usage.project_count > 0 && `· ${agent.usage.project_count} 项目`}
                 {agent.usage.todo_count > 0 && ` · ${agent.usage.todo_count} Todo`}
-                {agent.usage.total_count === 0 && '空闲'}
-              </div>
+                {agent.usage.total_count === 0 && '· 空闲'}
+              </span>
+            ) : (
+              <span>· 离线</span>
             )}
+            <ChevronRight className="size-4 opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
-        </CardContent>
-      </Card>
-    </Link>
+        </Link>
+      </CardHeader>
+      <CardContent className="relative max-h-[200px] overflow-hidden px-4 pt-2 pb-0 border-t">
+        <EventTimeline
+          events={events ?? []}
+          loading={eventsLoading}
+          emptyText="暂无活动"
+        />
+        {(events?.length ?? 0) > 3 && (
+          <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-card to-transparent pointer-events-none" />
+        )}
+      </CardContent>
+    </Card>
   )
 }

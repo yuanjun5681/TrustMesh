@@ -98,7 +98,7 @@ func (s *Store) GetConversation(userID, conversationID string) (*model.Conversat
 	return &detail, nil
 }
 
-func (s *Store) AppendConversationMessage(userID, conversationID, content string) (*model.ConversationDetail, *transport.AppError) {
+func (s *Store) AppendConversationMessage(userID, conversationID, content string, uiResponse *model.UIResponse) (*model.ConversationDetail, *transport.AppError) {
 	content = strings.TrimSpace(content)
 	if content == "" {
 		return nil, transport.Validation("invalid content", map[string]any{"content": "required"})
@@ -122,7 +122,8 @@ func (s *Store) AppendConversationMessage(userID, conversationID, content string
 	}
 
 	now := time.Now().UTC()
-	conv.Messages = append(conv.Messages, model.ConversationMessage{ID: uuid.NewString(), Role: "user", Content: content, CreatedAt: now})
+	msg := model.ConversationMessage{ID: uuid.NewString(), Role: "user", Content: content, UIResponse: uiResponse, CreatedAt: now}
+	conv.Messages = append(conv.Messages, msg)
 	conv.UpdatedAt = now
 	if err := s.persistConversationUnsafe(conv); err != nil {
 		return nil, mongoWriteError(err)
@@ -132,7 +133,7 @@ func (s *Store) AppendConversationMessage(userID, conversationID, content string
 	return &detail, nil
 }
 
-func (s *Store) AppendPMReplyByNode(nodeID, conversationID, content string) (*model.ConversationDetail, *transport.AppError) {
+func (s *Store) AppendPMReplyByNode(nodeID, conversationID, content string, uiBlocks []model.UIBlock) (*model.ConversationDetail, *transport.AppError) {
 	conversationID = strings.TrimSpace(conversationID)
 	content = strings.TrimSpace(content)
 	if conversationID == "" || content == "" {
@@ -168,7 +169,8 @@ func (s *Store) AppendPMReplyByNode(nodeID, conversationID, content string) (*mo
 
 	now := time.Now().UTC()
 	s.markAgentSeenUnsafe(pmAgent.ID, now)
-	conv.Messages = append(conv.Messages, model.ConversationMessage{ID: uuid.NewString(), Role: "pm_agent", Content: content, CreatedAt: now})
+	msg := model.ConversationMessage{ID: uuid.NewString(), Role: "pm_agent", Content: content, UIBlocks: uiBlocks, CreatedAt: now}
+	conv.Messages = append(conv.Messages, msg)
 	conv.UpdatedAt = now
 
 	s.addEventUnsafe(conv.UserID, conv.ProjectID, "", "", "agent", pmAgent.ID, pmAgent.Name, "conversation_reply", &content, map[string]any{
