@@ -7,7 +7,7 @@ description: >
 compatibility: Requires clawsynapse CLI and a running clawsynapsed daemon
 metadata:
   author: TrustMesh
-  version: "2.1"
+  version: "2.2"
 allowed-tools:
   - "Bash(clawsynapse:*)"
 ---
@@ -138,6 +138,8 @@ allowed-tools:
 
 用于向用户提问澄清、确认理解、或告知任务已创建。
 
+#### 纯文本回复
+
 ```bash
 # TARGET_NODE = incoming header 中 from 的值（TrustMesh 节点）
 # ⚠️ 绝对不能是你自己的 node ID
@@ -154,6 +156,101 @@ clawsynapse publish \
   --session-key conv_123 \
   --message "$payload"
 ```
+
+#### 交互式澄清回复（ui_blocks）
+
+当澄清问题可以结构化为选项、文本输入或确认时，**应该**使用 `ui_blocks` 提供交互式 UI。前端会逐步呈现每个 block，用户逐个回答后确认提交。
+
+`ui_blocks` 是可选字段。`content` 必须始终有值，作为可读 fallback。
+
+支持的 block 类型：
+
+| type | 用途 | 关键字段 |
+|------|------|----------|
+| `single_select` | 单选/多选 | `label`, `options[{value, label, description?}]`, `multiple?`, `default?` |
+| `text_input` | 自由文本 | `label`, `placeholder?`, `required?`（默认 true） |
+| `confirm` | 二次确认 | `label`, `confirm_label?`, `cancel_label?` |
+| `info` | 只读信息 | `label`, `content`（支持 markdown） |
+
+```bash
+TARGET_NODE="trustmesh-server"  # ← 替换为实际 from 值
+
+ui_blocks='[
+  {
+    "id": "blk_1",
+    "type": "single_select",
+    "label": "登录方式需要支持哪些？",
+    "options": [
+      {"value": "email_password", "label": "邮箱 + 密码"},
+      {"value": "phone_sms", "label": "手机号 + 短信验证码"},
+      {"value": "oauth", "label": "第三方 OAuth（Google/GitHub）"}
+    ],
+    "multiple": true
+  },
+  {
+    "id": "blk_2",
+    "type": "single_select",
+    "label": "是否需要「记住登录」功能？",
+    "options": [
+      {"value": "yes", "label": "需要"},
+      {"value": "no", "label": "不需要"},
+      {"value": "later", "label": "先不考虑，后续再加"}
+    ]
+  },
+  {
+    "id": "blk_3",
+    "type": "text_input",
+    "label": "其他补充说明（可选）",
+    "placeholder": "如有特殊需求请在此说明...",
+    "required": false
+  }
+]'
+
+payload="$(jq -nc \
+  --arg conversation_id "conv_123" \
+  --arg content "我理解你需要用户登录功能。请确认以下几点：" \
+  --argjson ui_blocks "$ui_blocks" \
+  '{conversation_id: $conversation_id, content: $content, ui_blocks: $ui_blocks}')"
+
+clawsynapse publish \
+  --target "$TARGET_NODE" \
+  --type conversation.reply \
+  --session-key conv_123 \
+  --message "$payload"
+```
+
+#### ui_blocks 使用规则
+
+1. `content` 必须始终有值，概述你的问题，作为纯文本 fallback
+2. 每条消息不超过 **5 个** blocks
+3. 每个 `single_select` 不超过 **8 个** options
+4. `id` 在同一消息内唯一，建议使用 `blk_1`、`blk_2` 格式
+5. 当问题有明确的可选答案时用 `single_select`，开放性问题用 `text_input`
+6. 任务创建前的最终确认可用 `confirm` 类型展示任务摘要并让用户确认
+7. `info` 类型用于展示补充说明，不需要用户回答
+
+#### 用户回复中的 ui_response
+
+用户通过交互式 UI 提交后，后续的 `conversation.message` 会携带 `user_ui_response` 字段：
+
+```json
+{
+  "conversation_id": "conv_123",
+  "user_content": "登录方式：邮箱+密码、手机号+短信验证码；需要记住登录；无额外补充",
+  "user_ui_response": {
+    "blocks": {
+      "blk_1": { "selected": ["email_password", "phone_sms"] },
+      "blk_2": { "selected": ["yes"] },
+      "blk_3": { "text": "" }
+    }
+  },
+  "is_initial_message": false
+}
+```
+
+- `user_content` 包含自动生成的可读摘要
+- `user_ui_response.blocks` 按 block id 索引，包含结构化选择结果
+- 优先使用 `user_ui_response` 解析用户选择，`user_content` 作为补充
 
 ### task.create — 创建任务
 
