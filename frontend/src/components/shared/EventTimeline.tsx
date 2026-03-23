@@ -132,7 +132,7 @@ function EventDetail({ event }: { event: Event }) {
     return (
       <div
         className={cn(
-          'mt-1 rounded-md px-3 py-2 text-sm whitespace-pre-wrap',
+          'mt-1 rounded-md px-3 py-2 text-sm whitespace-pre-wrap line-clamp-3',
           event.actor_type === 'agent' ? 'bg-muted' : 'bg-primary/5'
         )}
       >
@@ -142,8 +142,7 @@ function EventDetail({ event }: { event: Event }) {
   }
 
   if (event.content && event.event_type === 'conversation_reply') {
-    const brief = event.content.length > 60 ? event.content.slice(0, 60) + '...' : event.content
-    return <p className="text-xs text-muted-foreground mt-0.5 truncate">{brief}</p>
+    return <p className="text-xs text-muted-foreground mt-0.5 truncate">{event.content}</p>
   }
 
   return null
