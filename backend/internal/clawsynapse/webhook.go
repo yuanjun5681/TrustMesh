@@ -67,7 +67,7 @@ func (h *WebhookHandler) handleConversationReply(c *gin.Context, webhook protoco
 		return
 	}
 
-	detail, appErr := h.store.AppendPMReplyByNode(webhook.From, payload.ConversationID, payload.Content)
+	detail, appErr := h.store.AppendPMReplyByNode(webhook.From, payload.ConversationID, payload.Content, payload.UIBlocks)
 	if appErr != nil {
 		transport.WriteError(c, appErr)
 		return

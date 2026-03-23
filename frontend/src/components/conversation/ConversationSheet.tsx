@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { AlertCircle, MessageSquare, ListChecks, Sparkles, ListTodo, Bug, Lightbulb } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { MessageBubble } from '@/components/conversation/MessageBubble'
 import { MessageInput } from '@/components/conversation/MessageInput'
 import { ThinkingIndicator } from '@/components/conversation/ThinkingIndicator'
+import { UIResponsePanel } from '@/components/conversation/UIResponsePanel'
 import {
   useConversation,
   useCreateConversation,
@@ -13,6 +14,7 @@ import {
 import { useProject } from '@/hooks/useProjects'
 import { ApiRequestError } from '@/api/client'
 import { toast } from 'sonner'
+import type { UIResponse, ConversationMessage } from '@/types'
 
 interface ConversationSheetProps {
   projectId: string
@@ -56,11 +58,35 @@ export function ConversationSheet({ projectId, open, onOpenChange, initialConver
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [conversation?.messages])
 
-  const handleSend = async (content: string) => {
+  // 检测最新一条 PM 消息是否含有未回复的 ui_blocks
+  const pendingUIBlocks = useMemo(() => {
+    if (!conversation || conversation.status !== 'active' || isHistoryMode) return null
+    const msgs = conversation.messages
+    if (msgs.length === 0) return null
+    const lastMsg = msgs[msgs.length - 1]
+    // 最新消息是 PM 且带 ui_blocks → 未回复
+    if (lastMsg.role === 'pm_agent' && lastMsg.ui_blocks && lastMsg.ui_blocks.length > 0) {
+      return lastMsg.ui_blocks
+    }
+    return null
+  }, [conversation, isHistoryMode])
+
+  // 为含 ui_blocks 的 PM 消息查找下一条用户消息（用于回显选择结果）
+  const findNextUserResponse = (msgs: ConversationMessage[], index: number): ConversationMessage | undefined => {
+    if (index + 1 < msgs.length && msgs[index + 1].role === 'user') {
+      return msgs[index + 1]
+    }
+    return undefined
+  }
+
+  const handleSend = async (content: string, uiResponse?: UIResponse) => {
     setError(null)
     try {
       if (conversationId && conversation?.status === 'active') {
-        await appendMessage.mutateAsync({ id: conversationId, input: { content } })
+        await appendMessage.mutateAsync({
+          id: conversationId,
+          input: { content, ui_response: uiResponse },
+        })
       } else {
         const res = await createConversation.mutateAsync({
           projectId,
@@ -68,6 +94,7 @@ export function ConversationSheet({ projectId, open, onOpenChange, initialConver
         })
         setConversationId(res.data.id)
       }
+      setInputValue(undefined)
     } catch (err) {
       if (err instanceof ApiRequestError) {
         const message = err.code === 'PM_AGENT_OFFLINE' ? 'PM Agent 当前离线，无法发送消息' : err.message
@@ -97,9 +124,22 @@ export function ConversationSheet({ projectId, open, onOpenChange, initialConver
         {conversation ? (
           <ScrollArea className="flex-1 min-h-0 p-4">
             <div className="flex flex-col gap-4">
-              {conversation.messages.map((msg) => (
-                <MessageBubble key={msg.id} message={msg} />
-              ))}
+              {conversation.messages.map((msg, i) => {
+                const isLastMsg = i === conversation.messages.length - 1
+                const hasPendingBlocks = isLastMsg && !!pendingUIBlocks
+                return (
+                  <MessageBubble
+                    key={msg.id}
+                    message={msg}
+                    nextUserResponse={
+                      msg.role === 'pm_agent' && msg.ui_blocks?.length
+                        ? findNextUserResponse(conversation.messages, i)
+                        : undefined
+                    }
+                    hideUIBlocks={hasPendingBlocks}
+                  />
+                )
+              })}
 
               {/* Thinking Indicator */}
               {!isHistoryMode &&
@@ -189,6 +229,12 @@ export function ConversationSheet({ projectId, open, onOpenChange, initialConver
             <div className="text-center text-sm text-muted-foreground py-2">
               对话已结束
             </div>
+          ) : pendingUIBlocks ? (
+            <UIResponsePanel
+              blocks={pendingUIBlocks}
+              onSubmit={(content, uiResponse) => handleSend(content, uiResponse)}
+              disabled={appendMessage.isPending || pmOffline}
+            />
           ) : (
             <MessageInput
               onSend={handleSend}

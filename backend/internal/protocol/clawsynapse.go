@@ -12,8 +12,9 @@ type WebhookPayload struct {
 }
 
 type ConversationReplyPayload struct {
-	ConversationID string `json:"conversation_id"`
-	Content        string `json:"content"`
+	ConversationID string          `json:"conversation_id"`
+	Content        string          `json:"content"`
+	UIBlocks       []model.UIBlock `json:"ui_blocks,omitempty"`
 }
 
 type TaskCreatePayload struct {
@@ -121,6 +122,7 @@ type PMConversationMessage struct {
 	Content         string                 `json:"content"`
 	UserContent     string                 `json:"user_content"`
 	IsInitial       bool                   `json:"is_initial_message"`
+	UserUIResponse  *model.UIResponse      `json:"user_ui_response,omitempty"`
 	Project         *PMConversationProject `json:"project,omitempty"`
 	PMBrief         *PMConversationBrief   `json:"pm_brief,omitempty"`
 	CandidateAgents []PMConversationAgent  `json:"candidate_agents,omitempty"`

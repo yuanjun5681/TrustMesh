@@ -27,7 +27,10 @@
       "Bash(find /Volumes/UWorks/Projects/TrustMesh/frontend/src -type f -name *router* -o -name *Router*)",
       "Bash(find /Volumes/UWorks/Projects/TrustMesh/frontend/src/hooks -type f -name *.ts)",
       "Bash(grep -E \"\\\\.\\(go\\)$\")",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "WebFetch(domain:a2ui.org)",
+      "WebFetch(domain:docs.ag-ui.com)",
+      "Bash(gh auth:*)"
     ]
   }
 }

@@ -3,13 +3,19 @@ import type { ConversationMessage } from '@/types'
 import { formatRelativeTime } from '@/lib/utils'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { UIBlockRenderer } from './UIBlockRenderer'
 
 interface MessageBubbleProps {
   message: ConversationMessage
+  /** 下一条用户消息的 ui_response（用于回显选择结果） */
+  nextUserResponse?: ConversationMessage
+  /** ui_blocks 正在底部交互面板中展示，气泡内隐藏 */
+  hideUIBlocks?: boolean
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({ message, nextUserResponse, hideUIBlocks }: MessageBubbleProps) {
   const isUser = message.role === 'user'
+  const hasUIBlocks = !isUser && !hideUIBlocks && message.ui_blocks && message.ui_blocks.length > 0
 
   return (
     <div className={cn('flex', isUser && 'justify-end')}>
@@ -30,6 +36,12 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                 {message.content}
               </ReactMarkdown>
             </div>
+          )}
+          {hasUIBlocks && (
+            <UIBlockRenderer
+              blocks={message.ui_blocks!}
+              responses={nextUserResponse?.ui_response?.blocks}
+            />
           )}
         </div>
         <p className={cn('text-[10px] text-muted-foreground px-1', isUser && 'text-right')}>
