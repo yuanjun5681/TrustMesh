@@ -285,7 +285,7 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 	conv.UpdatedAt = now
 
 	taskTitle := task.Title
-	s.addEventUnsafe(project.UserID, project.ID, task.ID, "", "agent", pmAgent.ID, pmAgent.Name, "task_created", &taskTitle, map[string]any{"conversation_id": task.ConversationID}, now)
+	s.addEventUnsafe(project.UserID, project.ID, task.ID, "", "agent", pmAgent.ID, pmAgent.Name, "task_created", &taskTitle, map[string]any{"conversation_id": task.ConversationID, "task_title": task.Title}, now)
 
 	s.rememberProcessedMessageUnsafe(processedMessageKey("task.create", nodeID, messageID), "task.create", task.ID)
 	if err := s.persistConversationUnsafe(conv); err != nil {
@@ -307,6 +307,8 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 }
 
 func (s *Store) recordTodoDispatchUnsafe(task *model.TaskDetail, todo *model.Todo, actorType, actorID, actorName string, message *string, metadata map[string]any, now time.Time) {
+	metadata["task_title"] = task.Title
+	metadata["todo_title"] = todo.Title
 	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, actorType, actorID, actorName, "todo_assigned", message, metadata, now)
 	task.UpdatedAt = now
 	task.Version++
@@ -391,10 +393,10 @@ func (s *Store) UpdateTodoProgressByNode(nodeID string, in TodoProgressInput) (*
 		todo.Status = "in_progress"
 		todo.StartedAt = &now
 		started := fmt.Sprintf("todo started: %s", todo.Title)
-		s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_started", &started, map[string]any{"todo_id": todo.ID}, now)
+		s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_started", &started, map[string]any{"todo_id": todo.ID, "task_title": task.Title, "todo_title": todo.Title}, now)
 	}
 	progress := in.Message
-	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_progress", &progress, map[string]any{"todo_id": todo.ID}, now)
+	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_progress", &progress, map[string]any{"todo_id": todo.ID, "task_title": task.Title, "todo_title": todo.Title}, now)
 
 	s.updateTaskStatusUnsafe(task, now)
 	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
@@ -468,7 +470,7 @@ func (s *Store) CompleteTodoByNodeWithMessageID(nodeID, messageID string, in Tod
 		Metadata:     copyMap(in.Result.Metadata),
 	}
 	completed := fmt.Sprintf("todo completed: %s", todo.Title)
-	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_completed", &completed, map[string]any{"todo_id": todo.ID}, now)
+	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_completed", &completed, map[string]any{"todo_id": todo.ID, "task_title": task.Title, "todo_title": todo.Title}, now)
 
 	s.updateTaskStatusUnsafe(task, now)
 	s.rememberProcessedMessageUnsafe(processedMessageKey("todo.complete", nodeID, messageID), "todo.complete", task.ID)
@@ -542,7 +544,7 @@ func (s *Store) FailTodoByNodeWithMessageID(nodeID, messageID string, in TodoFai
 	errCopy := in.Error
 	todo.Error = &errCopy
 	failed := fmt.Sprintf("todo failed: %s", todo.Title)
-	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_failed", &failed, map[string]any{"todo_id": todo.ID, "error": in.Error}, now)
+	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_failed", &failed, map[string]any{"todo_id": todo.ID, "error": in.Error, "task_title": task.Title, "todo_title": todo.Title}, now)
 
 	s.updateTaskStatusUnsafe(task, now)
 	s.rememberProcessedMessageUnsafe(processedMessageKey("todo.fail", nodeID, messageID), "todo.fail", task.ID)
@@ -673,9 +675,15 @@ func (s *Store) addCommentUnsafe(task *model.TaskDetail, todoID, actorType, acto
 		if len(brief) > 80 {
 			brief = brief[:80] + "..."
 		}
-		metadata := map[string]any{"comment_id": comment.ID}
+		metadata := map[string]any{"comment_id": comment.ID, "task_title": task.Title}
 		if todoID != "" {
 			metadata["todo_id"] = todoID
+			for i := range task.Todos {
+				if task.Todos[i].ID == todoID {
+					metadata["todo_title"] = task.Todos[i].Title
+					break
+				}
+			}
 		}
 		s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todoID, actorType, actorID, actorName, "task_comment", &brief, metadata, at)
 	}
@@ -697,7 +705,7 @@ func (s *Store) updateTaskStatusUnsafe(task *model.TaskDetail, now time.Time) {
 	task.Version++
 	if prev != next {
 		msg := fmt.Sprintf("task status changed: %s -> %s", prev, next)
-		s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, "", "system", "system", "System", "task_status_changed", &msg, map[string]any{"from": prev, "to": next}, now)
+		s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, "", "system", "system", "System", "task_status_changed", &msg, map[string]any{"from": prev, "to": next, "task_title": task.Title}, now)
 	}
 }
 
