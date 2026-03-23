@@ -621,7 +621,7 @@ func TestUserRealtimeStreamPushesDomainEvents(t *testing.T) {
 	defer streamResp.Body.Close()
 	reader := bufio.NewReader(streamResp.Body)
 
-	if _, appErr := application.Store.AppendPMReplyByNode(pm.NodeID, conversation.ID, "先确认一下登录方式"); appErr != nil {
+	if _, appErr := application.Store.AppendPMReplyByNode(pm.NodeID, conversation.ID, "先确认一下登录方式", nil); appErr != nil {
 		t.Fatalf("append pm reply: %v", appErr)
 	}
 
@@ -762,7 +762,7 @@ func TestUserRealtimeStreamPushesNotificationReadLifecycle(t *testing.T) {
 	defer streamResp.Body.Close()
 	reader := bufio.NewReader(streamResp.Body)
 
-	if _, appErr := application.Store.AppendPMReplyByNode(pm.NodeID, conversation.ID, "收到，我来分析"); appErr != nil {
+	if _, appErr := application.Store.AppendPMReplyByNode(pm.NodeID, conversation.ID, "收到，我来分析", nil); appErr != nil {
 		t.Fatalf("append pm reply: %v", appErr)
 	}
 	created := readUserStreamEventOfType(t, reader, "notification.created")
@@ -780,7 +780,7 @@ func TestUserRealtimeStreamPushesNotificationReadLifecycle(t *testing.T) {
 		t.Fatalf("unexpected notification.read payload: %#v", readEvent)
 	}
 
-	if _, appErr := application.Store.AppendPMReplyByNode(pm.NodeID, conversation.ID, "补充一个细节"); appErr != nil {
+	if _, appErr := application.Store.AppendPMReplyByNode(pm.NodeID, conversation.ID, "补充一个细节", nil); appErr != nil {
 		t.Fatalf("append second pm reply: %v", appErr)
 	}
 	secondCreated := readUserStreamEventOfType(t, reader, "notification.created")
