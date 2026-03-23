@@ -1,10 +1,8 @@
 import { useState, useMemo } from 'react'
-import { Check, ChevronLeft, ChevronRight, Info, Send } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { UIBlock, UIBlockResponse, UIResponse } from '@/types'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 
 interface UIResponsePanelProps {
   blocks: UIBlock[]
