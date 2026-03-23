@@ -507,6 +507,21 @@ func TestDispatchTodoPublishesAssignmentToAssignee(t *testing.T) {
 	if dispatchResp.StatusCode != http.StatusOK {
 		t.Fatalf("dispatch todo status=%d", dispatchResp.StatusCode)
 	}
+	dispatchData := decodeBody(t, dispatchResp)
+	if nestedString(dispatchData, "data", "status") != "in_progress" {
+		t.Fatalf("unexpected dispatched task status: %#v", dispatchData)
+	}
+	todos, ok := dispatchData["data"].(map[string]any)["todos"].([]any)
+	if !ok || len(todos) != 1 {
+		t.Fatalf("unexpected dispatched todos payload: %#v", dispatchData)
+	}
+	dispatchedTodo, ok := todos[0].(map[string]any)
+	if !ok || dispatchedTodo["status"] != "in_progress" {
+		t.Fatalf("unexpected dispatched todo payload: %#v", dispatchData)
+	}
+	if nestedString(dispatchData, "data", "result", "summary") == "" {
+		t.Fatalf("expected in-progress task result summary, got %#v", dispatchData)
+	}
 
 	mu.Lock()
 	if len(publishRequests) != 1 {

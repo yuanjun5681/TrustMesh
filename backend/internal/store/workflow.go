@@ -90,7 +90,16 @@ func (s *Store) RecordTodoDispatch(userID, taskID, todoID string) (*model.TaskDe
 		"assignee_agent_id": todo.Assignee.AgentID,
 		"manual":            true,
 	}, now)
+	if todo.Status == "pending" {
+		todo.Status = "in_progress"
+		todo.StartedAt = &now
+	}
+	s.updateTaskStatusUnsafe(task, now)
 	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.refreshAgentExecutionStatusUnsafe(todo.Assignee.AgentID, now)
+	if err := s.persistAgentGraphUnsafe(todo.Assignee.AgentID); err != nil {
 		return nil, mongoWriteError(err)
 	}
 	s.publishTaskUnsafe(task.ID)
@@ -133,7 +142,16 @@ func (s *Store) RecordSequentialTodoDispatch(taskID, todoID string) (*model.Task
 		"dispatch_mode":     "sequential",
 		"manual":            false,
 	}, now)
+	if todo.Status == "pending" {
+		todo.Status = "in_progress"
+		todo.StartedAt = &now
+	}
+	s.updateTaskStatusUnsafe(task, now)
 	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.refreshAgentExecutionStatusUnsafe(todo.Assignee.AgentID, now)
+	if err := s.persistAgentGraphUnsafe(todo.Assignee.AgentID); err != nil {
 		return nil, mongoWriteError(err)
 	}
 	s.publishTaskUnsafe(task.ID)

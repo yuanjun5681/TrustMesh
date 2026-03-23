@@ -430,6 +430,49 @@ func TestTaskArtifactAggregationIncludesTransferMetadata(t *testing.T) {
 	}
 }
 
+func TestRecordTodoDispatchMarksTaskInProgress(t *testing.T) {
+	s, userID, pm, developer, project, conversation := seedWorkflowState(t)
+
+	task, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: conversation.ID,
+		Title:          "Implement login",
+		Description:    "Support email password login",
+		Todos: []TaskCreateTodoInput{
+			{
+				ID:             "todo-1",
+				Title:          "Build backend API",
+				Description:    "Implement auth endpoints",
+				AssigneeNodeID: developer.NodeID,
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("create task: %v", appErr)
+	}
+
+	task, appErr = s.RecordTodoDispatch(userID, task.ID, "todo-1")
+	if appErr != nil {
+		t.Fatalf("dispatch todo: %v", appErr)
+	}
+
+	if task.Status != "in_progress" {
+		t.Fatalf("expected task in_progress after dispatch, got %s", task.Status)
+	}
+	if task.Todos[0].Status != "in_progress" {
+		t.Fatalf("expected todo in_progress after dispatch, got %s", task.Todos[0].Status)
+	}
+	if task.Todos[0].StartedAt == nil {
+		t.Fatal("expected todo started_at to be set after dispatch")
+	}
+	if s.agents[developer.ID].Status != "busy" {
+		t.Fatalf("expected developer to be busy after dispatch, got %s", s.agents[developer.ID].Status)
+	}
+	if task.Result.Summary == "" {
+		t.Fatalf("expected in-progress task result summary after dispatch, got %+v", task.Result)
+	}
+}
+
 func TestTaskResultAggregationOnTodoFailure(t *testing.T) {
 	s, _, pm, developer, project, conversation := seedWorkflowState(t)
 
