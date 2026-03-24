@@ -354,6 +354,63 @@ export interface AgentStats {
   current_workload: WorkloadItem[]
 }
 
+export interface AgentInsightAgingRow {
+  label: string
+  count: number
+}
+
+export interface AgentInsightPriorityRow {
+  priority: TaskPriority
+  label: string
+  total: number
+  done: number
+  failed: number
+  pending: number
+  in_progress: number
+  completion_rate: number
+}
+
+export interface AgentInsightProjectRow {
+  project_id: string
+  project_name: string
+  total: number
+  done: number
+  failed: number
+  pending: number
+  in_progress: number
+  completion_rate: number
+}
+
+export interface AgentInsightRiskItem {
+  id: string
+  kind: 'task' | 'todo'
+  title: string
+  subtitle: string
+  project_id: string
+  project_name: string
+  status: 'pending' | 'in_progress'
+  age_ms: number
+}
+
+export interface AgentInsights {
+  role: string
+  total_items: number
+  active_items: number
+  pending_over_24h: number
+  failures_last_7d: number
+  completions_last_7d: number
+  oldest_pending_ms: number | null
+  longest_in_progress_ms: number | null
+  response_p50_ms: number | null
+  response_p90_ms: number | null
+  completion_p50_ms: number | null
+  completion_p90_ms: number | null
+  aging: AgentInsightAgingRow[]
+  priority_breakdown: AgentInsightPriorityRow[]
+  project_contribution: AgentInsightProjectRow[]
+  risk_items: AgentInsightRiskItem[]
+}
+
 export interface DashboardStats {
   agents_online: number
   agents_total: number

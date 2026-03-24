@@ -231,6 +231,78 @@ export interface ApiListResponse<T> {
 | `created_at` | `string` | 创建时间 |
 | `updated_at` | `string` | 更新时间 |
 
+#### AgentInsights
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `role` | `"pm" \| "developer" \| "reviewer" \| "custom"` | Agent 角色 |
+| `total_items` | `number` | 纳入分析的总工作项数；PM 为任务数，执行型 Agent 为 Todo 数 |
+| `active_items` | `number` | 当前 `in_progress` 的工作项数 |
+| `pending_over_24h` | `number` | 年龄超过 24 小时且尚未闭环的工作项数；当前口径包含 `pending` 与 `in_progress` |
+| `failures_last_7d` | `number` | 最近 7 天失败工作项数 |
+| `completions_last_7d` | `number` | 最近 7 天完成工作项数 |
+| `oldest_pending_ms` | `number \| null` | 最老 `pending` 工作项年龄，单位毫秒 |
+| `longest_in_progress_ms` | `number \| null` | 最长 `in_progress` 工作项执行时长，单位毫秒 |
+| `response_p50_ms` | `number \| null` | 响应时长 P50；仅执行型 Agent 有值，口径为 `started_at - created_at` |
+| `response_p90_ms` | `number \| null` | 响应时长 P90；仅执行型 Agent 有值 |
+| `completion_p50_ms` | `number \| null` | 完成时长 P50；仅执行型 Agent 有值，口径为 `completed_at - started_at` |
+| `completion_p90_ms` | `number \| null` | 完成时长 P90；仅执行型 Agent 有值 |
+| `aging` | [`AgentAgingBucket[]`](#agentagingbucket) | 老化分布 |
+| `priority_breakdown` | [`AgentPriorityBreakdown[]`](#agentprioritybreakdown) | 按优先级聚合的完成情况 |
+| `project_contribution` | [`AgentProjectContribution[]`](#agentprojectcontribution) | 项目贡献排行，最多返回前 5 个 |
+| `risk_items` | [`AgentRiskItem[]`](#agentriskitem) | 风险项列表，按年龄倒序，最多返回前 4 个 |
+
+#### AgentAgingBucket
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `label` | `string` | 分桶标签，当前固定为 `1 小时内`、`1-24 小时`、`1-3 天`、`3 天以上` |
+| `count` | `number` | 该分桶中的工作项数 |
+
+#### AgentPriorityBreakdown
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `priority` | `"low" \| "medium" \| "high" \| "urgent"` | 优先级 |
+| `label` | `string` | 优先级展示文案 |
+| `total` | `number` | 总工作项数 |
+| `done` | `number` | 已完成数量 |
+| `failed` | `number` | 已失败数量 |
+| `pending` | `number` | 待处理数量 |
+| `in_progress` | `number` | 进行中数量 |
+| `completion_rate` | `number` | 完成率，口径为 `done / (done + failed) * 100`；若无已结束工作项则为 `0` |
+
+#### AgentProjectContribution
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `project_id` | `string` | 项目 ID |
+| `project_name` | `string` | 项目名称 |
+| `total` | `number` | 该项目下的总工作项数 |
+| `done` | `number` | 已完成数量 |
+| `failed` | `number` | 已失败数量 |
+| `pending` | `number` | 待处理数量 |
+| `in_progress` | `number` | 进行中数量 |
+| `completion_rate` | `number` | 项目完成率，口径同上 |
+
+#### AgentRiskItem
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | `string` | 工作项 ID；PM 为 task ID，执行型 Agent 为 todo ID |
+| `kind` | `"task" \| "todo"` | 工作项类型 |
+| `title` | `string` | 工作项标题 |
+| `subtitle` | `string` | 辅助标题；PM 当前固定为 `PM 任务`，执行型 Agent 为所属任务标题 |
+| `project_id` | `string` | 项目 ID |
+| `project_name` | `string` | 项目名称 |
+| `status` | `"pending" \| "in_progress"` | 风险项状态 |
+| `age_ms` | `number` | 当前年龄/耗时，单位毫秒 |
+
+说明：
+
+- PM Agent 当前没有独立的任务开始时间，因此 `in_progress` 任务的年龄使用 `task.created_at` 作为起点。
+- 执行型 Agent 的响应/完成时长分位数仅统计存在完整时间戳的数据。
+
 ### 2.9 TodoAssignee
 
 | 字段 | 类型 | 说明 |
@@ -938,6 +1010,42 @@ export type TaskEvent = { /* 对应 2.16 */ }
 
 - 仅当该 Agent 未被 `projects.pm_agent_id`、`tasks.pm_agent_id`、`tasks.todos[].assignee_agent_id` 引用时才允许删除
 - 若已被引用，返回 `409 Conflict` + `AGENT_IN_USE`
+
+### 7.6 Agent Insights
+
+`GET /api/v1/agents/:id/insights`
+
+路径参数：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `id` | `string` | Agent ID |
+
+响应：
+
+- `200 OK`
+- `data` 为 [`AgentInsights`](#agentinsights)
+
+字段口径说明：
+
+- `total_items`
+  - PM Agent：统计其创建/负责的任务数
+  - 执行型 Agent：统计分配给该 Agent 的 Todo 数
+- `pending_over_24h`
+  - 当前口径为“年龄超过 24 小时且未闭环”的工作项，包含 `pending` 和 `in_progress`
+- `oldest_pending_ms`
+  - 仅从 `pending` 工作项中取最大年龄
+- `longest_in_progress_ms`
+  - 仅从 `in_progress` 工作项中取最大执行时长
+- `response_p50_ms` / `response_p90_ms`
+  - 仅执行型 Agent 有值
+  - 口径：`todo.started_at - todo.created_at`
+- `completion_p50_ms` / `completion_p90_ms`
+  - 仅执行型 Agent 有值
+  - 口径：`todo.completed_at - todo.started_at`
+- `risk_items`
+  - 仅包含 `pending` 与 `in_progress` 工作项
+  - 按年龄倒序返回前 4 项
 
 ## 八、前端调用建议
 
