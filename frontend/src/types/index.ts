@@ -311,6 +311,49 @@ export interface Notification {
   created_at: string
 }
 
+export interface DailyActivityItem {
+  date: string
+  completed: number
+  failed: number
+  created: number
+}
+
+export interface WorkloadItem {
+  todo_id: string
+  todo_title: string
+  task_id: string
+  task_title: string
+  project_id: string
+  started_at: string
+}
+
+export interface AgentStats {
+  role: string
+
+  // executor
+  todos_total: number
+  todos_done: number
+  todos_failed: number
+  todos_in_progress: number
+  todos_pending: number
+  success_rate: number
+  avg_response_time_ms: number | null
+  avg_completion_time_ms: number | null
+
+  // pm
+  projects_managed: number
+  tasks_created: number
+  tasks_done: number
+  tasks_failed: number
+  tasks_in_progress: number
+  tasks_pending: number
+  task_success_rate: number
+  conversation_replies: number
+
+  daily_activity: DailyActivityItem[]
+  current_workload: WorkloadItem[]
+}
+
 export interface DashboardStats {
   agents_online: number
   agents_total: number

@@ -125,6 +125,19 @@ func (h *AgentHandler) Delete(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+func (h *AgentHandler) Stats(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+	stats, appErr := h.store.GetAgentStats(userID, c.Param("id"))
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+	transport.WriteData(c, http.StatusOK, stats)
+}
+
 func (h *AgentHandler) ensureNodeOnline(ctx context.Context, nodeID string) *transport.AppError {
 	if h.clawClient == nil {
 		err := transport.NewError(http.StatusServiceUnavailable, "CLAWSYNAPSE_UNAVAILABLE", "暂时无法校验节点在线状态")

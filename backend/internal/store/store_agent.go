@@ -239,6 +239,198 @@ func (s *Store) rebuildTodoAssigneeUnsafe(agentID string) {
 	}
 }
 
+func (s *Store) GetAgentStats(userID, agentID string) (*model.AgentStats, *transport.AppError) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	a, ok := s.agents[agentID]
+	if !ok || a.UserID != userID {
+		return nil, transport.NotFound("agent not found")
+	}
+
+	if a.Role == "pm" {
+		return s.pmStatsUnsafe(agentID), nil
+	}
+	return s.executorStatsUnsafe(agentID), nil
+}
+
+func (s *Store) initDailyBuckets() ([]model.DailyActivityItem, map[string]int, time.Time) {
+	now := time.Now().UTC()
+	cutoff := now.AddDate(0, 0, -30)
+	dailyMap := make(map[string]int, 30)
+	dailyItems := make([]model.DailyActivityItem, 30)
+	for i := 0; i < 30; i++ {
+		d := now.AddDate(0, 0, -29+i)
+		key := d.Format("2006-01-02")
+		dailyItems[i] = model.DailyActivityItem{Date: key}
+		dailyMap[key] = i
+	}
+	return dailyItems, dailyMap, cutoff
+}
+
+func (s *Store) pmStatsUnsafe(agentID string) *model.AgentStats {
+	agent := s.agents[agentID]
+	dailyItems, dailyMap, cutoff := s.initDailyBuckets()
+
+	stats := &model.AgentStats{
+		Role:            "pm",
+		DailyActivity:   dailyItems,
+		CurrentWorkload: []model.WorkloadItem{},
+	}
+
+	// projects managed
+	for _, p := range s.projects {
+		if p.PMAgentID == agentID {
+			stats.ProjectsManaged++
+		}
+	}
+
+	// tasks
+	for _, t := range s.tasks {
+		if t.PMAgentID != agentID {
+			continue
+		}
+		stats.TasksCreated++
+
+		switch t.Status {
+		case "done":
+			stats.TasksDone++
+		case "failed":
+			stats.TasksFailed++
+		case "in_progress":
+			stats.TasksInProgress++
+			stats.CurrentWorkload = append(stats.CurrentWorkload, model.WorkloadItem{
+				TaskID:    t.ID,
+				TaskTitle: t.Title,
+				ProjectID: t.ProjectID,
+				StartedAt: t.CreatedAt.Format(time.RFC3339),
+			})
+		case "pending":
+			stats.TasksPending++
+		}
+
+		// daily: task created
+		if t.CreatedAt.After(cutoff) {
+			if idx, ok := dailyMap[t.CreatedAt.Format("2006-01-02")]; ok {
+				dailyItems[idx].Created++
+			}
+		}
+		// daily: task completed / failed (use UpdatedAt as proxy)
+		if t.Status == "done" && t.UpdatedAt.After(cutoff) {
+			if idx, ok := dailyMap[t.UpdatedAt.Format("2006-01-02")]; ok {
+				dailyItems[idx].Completed++
+			}
+		}
+		if t.Status == "failed" && t.UpdatedAt.After(cutoff) {
+			if idx, ok := dailyMap[t.UpdatedAt.Format("2006-01-02")]; ok {
+				dailyItems[idx].Failed++
+			}
+		}
+	}
+
+	finished := stats.TasksDone + stats.TasksFailed
+	if finished > 0 {
+		stats.TaskSuccessRate = float64(stats.TasksDone) / float64(finished) * 100
+	}
+
+	// conversation replies count from agent events
+	for _, ev := range s.agentEvents[agentID] {
+		if ev.EventType == "conversation_reply" && ev.UserID == agent.UserID {
+			stats.ConversationReplies++
+		}
+	}
+
+	return stats
+}
+
+func (s *Store) executorStatsUnsafe(agentID string) *model.AgentStats {
+	agent := s.agents[agentID]
+	dailyItems, dailyMap, cutoff := s.initDailyBuckets()
+
+	stats := &model.AgentStats{
+		Role:            agent.Role,
+		DailyActivity:   dailyItems,
+		CurrentWorkload: []model.WorkloadItem{},
+	}
+
+	var totalResponseMs, totalCompletionMs float64
+	var responseCount, completionCount int
+
+	for _, t := range s.tasks {
+		if t.UserID != agent.UserID {
+			continue
+		}
+		for _, todo := range t.Todos {
+			if todo.Assignee.AgentID != agentID {
+				continue
+			}
+			stats.TodosTotal++
+
+			switch todo.Status {
+			case "done":
+				stats.TodosDone++
+			case "failed":
+				stats.TodosFailed++
+			case "in_progress":
+				stats.TodosInProgress++
+				if todo.StartedAt != nil {
+					stats.CurrentWorkload = append(stats.CurrentWorkload, model.WorkloadItem{
+						TodoID:    todo.ID,
+						TodoTitle: todo.Title,
+						TaskID:    t.ID,
+						TaskTitle: t.Title,
+						ProjectID: t.ProjectID,
+						StartedAt: todo.StartedAt.Format(time.RFC3339),
+					})
+				}
+			case "pending":
+				stats.TodosPending++
+			}
+
+			if todo.StartedAt != nil {
+				d := todo.StartedAt.Sub(todo.CreatedAt).Seconds() * 1000
+				if d >= 0 {
+					totalResponseMs += d
+					responseCount++
+				}
+			}
+			if todo.CompletedAt != nil && todo.StartedAt != nil {
+				d := todo.CompletedAt.Sub(*todo.StartedAt).Seconds() * 1000
+				if d >= 0 {
+					totalCompletionMs += d
+					completionCount++
+				}
+			}
+
+			if todo.CompletedAt != nil && todo.CompletedAt.After(cutoff) {
+				if idx, ok := dailyMap[todo.CompletedAt.Format("2006-01-02")]; ok {
+					dailyItems[idx].Completed++
+				}
+			}
+			if todo.FailedAt != nil && todo.FailedAt.After(cutoff) {
+				if idx, ok := dailyMap[todo.FailedAt.Format("2006-01-02")]; ok {
+					dailyItems[idx].Failed++
+				}
+			}
+		}
+	}
+
+	finished := stats.TodosDone + stats.TodosFailed
+	if finished > 0 {
+		stats.SuccessRate = float64(stats.TodosDone) / float64(finished) * 100
+	}
+	if responseCount > 0 {
+		avg := totalResponseMs / float64(responseCount)
+		stats.AvgResponseTimeMs = &avg
+	}
+	if completionCount > 0 {
+		avg := totalCompletionMs / float64(completionCount)
+		stats.AvgCompletionTimeMs = &avg
+	}
+
+	return stats
+}
+
 func normalizeCapabilities(in []string) []string {
 	if len(in) == 0 {
 		return []string{}
