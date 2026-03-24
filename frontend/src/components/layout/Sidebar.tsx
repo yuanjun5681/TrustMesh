@@ -102,7 +102,7 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
             <div className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-bold">
               T
             </div>
-            TrustMesh
+            智能体协作平台
           </Link>
         )}
         <Button
@@ -129,7 +129,7 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
             )}
           >
             <LayoutDashboard className="size-4 shrink-0" />
-            {!collapsed && <span>Dashboard</span>}
+            {!collapsed && <span>仪表盘</span>}
           </Link>
 
           <Link
@@ -204,7 +204,7 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
           {!collapsed && (
             <div className="mb-1 px-2">
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Agents
+                智能体
               </span>
             </div>
           )}

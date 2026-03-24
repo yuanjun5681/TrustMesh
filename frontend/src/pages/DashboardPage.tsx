@@ -16,14 +16,14 @@ export function DashboardPage() {
   return (
     <PageContainer className="flex flex-col h-full gap-6">
       <div className="shrink-0">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <h1 className="text-2xl font-bold">仪表盘</h1>
       </div>
 
       {/* Agent 状态卡片 + 最近活动 */}
       {agents && agents.length > 0 && (
         <div className="shrink-0">
           <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-            Agents
+            智能体
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {agents.map((agent) => (
