@@ -30,7 +30,16 @@
       "Bash(grep:*)",
       "WebFetch(domain:a2ui.org)",
       "WebFetch(domain:docs.ag-ui.com)",
-      "Bash(gh auth:*)"
+      "Bash(gh auth:*)",
+      "Bash(xargs ls:*)",
+      "Bash(wc:*)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZTdhY2QxYjYxNTFlM2YyODEwYTk0NTQ2IiwiZXhwIjoxNzc0NDQwMzc4LCJpYXQiOjE3NzQzNTM5Nzh9.rzyC_GmEFnZL_MLXSYRAnd-wwppKL107gWNK31FVqxs\" DOC_ID=\"kb_69f16ff67b055700bfd7d605\" __NEW_LINE_93c20c38a79e36bb__ sleep 3 __NEW_LINE_93c20c38a79e36bb__ echo \"=== Test 2: Get document \\(check status\\) ===\" curl -s http://127.0.0.1:8080/api/v1/knowledge/documents/$DOC_ID -H \"Authorization: Bearer $TOKEN\")",
+      "Bash(curl -s -X POST https://api.siliconflow.cn/v1/embeddings -H \"Content-Type: application/json\" -H \"Authorization: Bearer sk-uwvfvpfzzlzphvncrcvsxaaynsmpvydxbrkdrwmmdrlcbhuq\" -d '{\"\"\"\"input\"\"\"\":[\"\"\"\"hello world\"\"\"\"],\"\"\"\"model\"\"\"\":\"\"\"\"Qwen/Qwen3-Embedding-0.6B\"\"\"\",\"\"\"\"dimensions\"\"\"\":1024}')",
+      "Bash(curl -s -X POST https://api.siliconflow.cn/v1/embeddings -H \"Content-Type: application/json\" -H \"Authorization: Bearer sk-uwvfvpfzzlzphvncrcvsxaaynsmpvydxbrkdrwmmdrlcbhuq\" -d '{\"\"\"\"input\"\"\"\":[\"\"\"\"TrustMesh 是一个以 AI Agent 为核心执行者的任务编排与项目管理平台\"\"\"\"],\"\"\"\"model\"\"\"\":\"\"\"\"Qwen/Qwen3-Embedding-0.6B\"\"\"\",\"\"\"\"dimensions\"\"\"\":1024}')",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZTdhY2QxYjYxNTFlM2YyODEwYTk0NTQ2IiwiZXhwIjoxNzc0NDQwMzc4LCJpYXQiOjE3NzQzNTM5Nzh9.rzyC_GmEFnZL_MLXSYRAnd-wwppKL107gWNK31FVqxs\" DOC_ID=\"kb_69f16ff67b055700bfd7d605\" __NEW_LINE_d9ad963c3e0c745b__ echo \"=== Reprocess ===\" curl -s -X POST http://127.0.0.1:8080/api/v1/knowledge/documents/$DOC_ID/reprocess -H \"Authorization: Bearer $TOKEN\")",
+      "Bash(python3 -m json.tool __NEW_LINE_d9ad963c3e0c745b__ sleep 5 __NEW_LINE_d9ad963c3e0c745b__ echo \"=== Check status ===\" curl -s http://127.0.0.1:8080/api/v1/knowledge/documents/$DOC_ID -H \"Authorization: Bearer $TOKEN\")",
+      "Bash(docker ps:*)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZTdhY2QxYjYxNTFlM2YyODEwYTk0NTQ2IiwiZXhwIjoxNzc0NDQwMzc4LCJpYXQiOjE3NzQzNTM5Nzh9.rzyC_GmEFnZL_MLXSYRAnd-wwppKL107gWNK31FVqxs\" DOC_ID=\"kb_619a16b1bfced31e0ff9b786\" __NEW_LINE_6ac5aec9ad032b0f__ echo \"=== Test: List documents ===\" curl -s \"http://127.0.0.1:8080/api/v1/knowledge/documents\" -H \"Authorization: Bearer $TOKEN\")"
     ]
   }
 }

@@ -22,6 +22,15 @@ type Config struct {
 	ClawSynapseNodeID   string
 	ClawSynapseTimeout  time.Duration
 	ClawSynapsePeerSync time.Duration
+
+	// Knowledge base
+	EmbeddingProvider  string
+	EmbeddingModel     string
+	EmbeddingAPIKey    string
+	EmbeddingAPIURL    string
+	EmbeddingDimension int
+	QdrantURL          string
+	KnowledgeStorePath string
 }
 
 func Load() Config {
@@ -41,6 +50,14 @@ func Load() Config {
 		ClawSynapseNodeID:   getEnv("CLAWSYNAPSE_NODE_ID", ""),
 		ClawSynapseTimeout:  getEnvDuration("CLAWSYNAPSE_TIMEOUT", 3*time.Second),
 		ClawSynapsePeerSync: getEnvDuration("CLAWSYNAPSE_PEER_SYNC_INTERVAL", 10*time.Second),
+
+		EmbeddingProvider:  getEnv("EMBEDDING_PROVIDER", "openai"),
+		EmbeddingModel:     getEnv("EMBEDDING_MODEL", "text-embedding-3-small"),
+		EmbeddingAPIKey:    getEnv("EMBEDDING_API_KEY", ""),
+		EmbeddingAPIURL:    getEnv("EMBEDDING_API_URL", "https://api.openai.com/v1"),
+		EmbeddingDimension: getEnvInt("EMBEDDING_DIMENSION", 1536),
+		QdrantURL:          getEnv("QDRANT_URL", "http://127.0.0.1:6333"),
+		KnowledgeStorePath: getEnv("KNOWLEDGE_STORAGE_PATH", "/var/lib/trustmesh-knowledge"),
 	}
 }
 
@@ -56,6 +73,16 @@ func getEnvDuration(key string, fallback time.Duration) time.Duration {
 		d, err := time.ParseDuration(v)
 		if err == nil {
 			return d
+		}
+	}
+	return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+	if v, ok := os.LookupEnv(key); ok && v != "" {
+		n, err := strconv.Atoi(v)
+		if err == nil {
+			return n
 		}
 	}
 	return fallback

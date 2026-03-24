@@ -9,6 +9,7 @@ import {
   LogOut,
   LayoutDashboard,
   Inbox,
+  BookOpen,
   Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -153,6 +154,17 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
             {collapsed && unreadCount != null && unreadCount > 0 && (
               <span className="absolute right-1 top-0.5 size-2 rounded-full bg-primary" />
             )}
+          </Link>
+
+          <Link
+            to="/knowledge"
+            className={cn(
+              'flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+              isActive('/knowledge') && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+            )}
+          >
+            <BookOpen className="size-4 shrink-0" />
+            {!collapsed && <span>知识库</span>}
           </Link>
         </div>
 

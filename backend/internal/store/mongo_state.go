@@ -44,6 +44,8 @@ func (s *Store) enableMongo(cfg config.Config, log *zap.Logger) error {
 	s.mongoComments = db.Collection("comments")
 	s.mongoProcessedMessages = db.Collection("processed_messages")
 	s.mongoNotifications = db.Collection("notifications")
+	s.mongoKnowledgeDocs = db.Collection("knowledge_documents")
+	s.mongoKnowledgeChunks = db.Collection("knowledge_chunks")
 	s.mongoTimeout = cfg.MongoTimeout
 	if log != nil {
 		s.log = log
@@ -88,6 +90,8 @@ func (s *Store) clearMongoCollections() {
 	s.mongoComments = nil
 	s.mongoProcessedMessages = nil
 	s.mongoNotifications = nil
+	s.mongoKnowledgeDocs = nil
+	s.mongoKnowledgeChunks = nil
 }
 
 func (s *Store) mongoContext() (context.Context, context.CancelFunc) {
@@ -130,6 +134,15 @@ func (s *Store) ensureMongoIndexes() error {
 		},
 		s.mongoConversations: {
 			{Keys: bson.D{{Key: "project_id", Value: 1}, {Key: "user_id", Value: 1}}},
+		},
+		s.mongoKnowledgeDocs: {
+			{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "status", Value: 1}}},
+			{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "project_id", Value: 1}}},
+			{Keys: bson.D{{Key: "tags", Value: 1}}},
+		},
+		s.mongoKnowledgeChunks: {
+			{Keys: bson.D{{Key: "document_id", Value: 1}, {Key: "chunk_index", Value: 1}}},
+			{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "project_id", Value: 1}}},
 		},
 	}
 
@@ -184,6 +197,10 @@ func (s *Store) loadMongoState() error {
 	if err != nil {
 		return err
 	}
+	knowledgeDocs, userKnowledgeDocs, err := s.loadKnowledgeDocs()
+	if err != nil {
+		return err
+	}
 
 	usersByMail := make(map[string]string, len(users))
 	for id, user := range users {
@@ -213,6 +230,8 @@ func (s *Store) loadMongoState() error {
 	s.processedMessages = processedMessages
 	s.notifications = notifications
 	s.userNotifications = userNotifications
+	s.knowledgeDocs = knowledgeDocs
+	s.userKnowledgeDocs = userKnowledgeDocs
 	return nil
 }
 
@@ -625,5 +644,75 @@ func (s *Store) persistCommentUnsafe(c *model.Comment) error {
 	ctx, cancel := s.mongoContext()
 	defer cancel()
 	_, err := s.mongoComments.ReplaceOne(ctx, bson.M{"_id": c.ID}, c, options.Replace().SetUpsert(true))
+	return err
+}
+
+func (s *Store) loadKnowledgeDocs() (map[string]*model.KnowledgeDocument, map[string][]string, error) {
+	items := make(map[string]*model.KnowledgeDocument)
+	userDocs := make(map[string][]string)
+	if s.mongoKnowledgeDocs == nil {
+		return items, userDocs, nil
+	}
+	ctx, cancel := s.mongoContext()
+	defer cancel()
+	cursor, err := s.mongoKnowledgeDocs.Find(ctx, bson.D{}, options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}}))
+	if err != nil {
+		return nil, nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var docs []model.KnowledgeDocument
+	if err := cursor.All(ctx, &docs); err != nil {
+		return nil, nil, err
+	}
+	for i := range docs {
+		doc := docs[i]
+		items[doc.ID] = &doc
+		userDocs[doc.UserID] = append(userDocs[doc.UserID], doc.ID)
+	}
+	return items, userDocs, nil
+}
+
+func (s *Store) persistKnowledgeDocUnsafe(doc *model.KnowledgeDocument) error {
+	if !s.mongoEnabled || s.mongoKnowledgeDocs == nil || doc == nil {
+		return nil
+	}
+	ctx, cancel := s.mongoContext()
+	defer cancel()
+	_, err := s.mongoKnowledgeDocs.ReplaceOne(ctx, bson.M{"_id": doc.ID}, doc, options.Replace().SetUpsert(true))
+	return err
+}
+
+func (s *Store) deleteKnowledgeDocUnsafe(docID string) error {
+	if !s.mongoEnabled || s.mongoKnowledgeDocs == nil || docID == "" {
+		return nil
+	}
+	ctx, cancel := s.mongoContext()
+	defer cancel()
+	_, err := s.mongoKnowledgeDocs.DeleteOne(ctx, bson.M{"_id": docID})
+	return err
+}
+
+func (s *Store) deleteKnowledgeChunksUnsafe(docID string) error {
+	if !s.mongoEnabled || s.mongoKnowledgeChunks == nil || docID == "" {
+		return nil
+	}
+	ctx, cancel := s.mongoContext()
+	defer cancel()
+	_, err := s.mongoKnowledgeChunks.DeleteMany(ctx, bson.M{"document_id": docID})
+	return err
+}
+
+func (s *Store) persistKnowledgeChunksUnsafe(chunks []model.KnowledgeChunk) error {
+	if !s.mongoEnabled || s.mongoKnowledgeChunks == nil || len(chunks) == 0 {
+		return nil
+	}
+	ctx, cancel := s.mongoContext()
+	defer cancel()
+	docs := make([]any, len(chunks))
+	for i := range chunks {
+		docs[i] = chunks[i]
+	}
+	_, err := s.mongoKnowledgeChunks.InsertMany(ctx, docs)
 	return err
 }

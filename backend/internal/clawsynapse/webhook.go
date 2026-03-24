@@ -8,6 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+	"trustmesh/backend/internal/embedding"
+	"trustmesh/backend/internal/knowledge"
 	"trustmesh/backend/internal/model"
 	"trustmesh/backend/internal/protocol"
 	"trustmesh/backend/internal/store"
@@ -19,6 +21,8 @@ type WebhookHandler struct {
 	client      *Client
 	localNodeID string
 	log         *zap.Logger
+	embedder    embedding.Client
+	qdrant      *knowledge.QdrantClient
 }
 
 func NewWebhookHandler(st *store.Store, client *Client, localNodeID string, log *zap.Logger) *WebhookHandler {
@@ -28,6 +32,12 @@ func NewWebhookHandler(st *store.Store, client *Client, localNodeID string, log 
 		localNodeID: strings.TrimSpace(localNodeID),
 		log:         log,
 	}
+}
+
+// SetKnowledgeComponents injects optional knowledge base dependencies.
+func (h *WebhookHandler) SetKnowledgeComponents(embedder embedding.Client, qdrant *knowledge.QdrantClient) {
+	h.embedder = embedder
+	h.qdrant = qdrant
 }
 
 func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
@@ -55,6 +65,8 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 		h.handleTodoFail(c, payload)
 	case "task.comment":
 		h.handleTaskComment(c, payload)
+	case "knowledge.query":
+		h.handleKnowledgeQuery(c, payload)
 	default:
 		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "unsupported webhook type"))
 	}
@@ -416,4 +428,148 @@ func findTodo(task *model.TaskDetail, todoID string) *model.Todo {
 		}
 	}
 	return nil
+}
+
+func (h *WebhookHandler) handleKnowledgeQuery(c *gin.Context, webhook protocol.WebhookPayload) {
+	var payload protocol.KnowledgeQueryPayload
+	if err := decodeWebhookMessage(webhook.Message, &payload); err != nil {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid knowledge.query message"))
+		return
+	}
+
+	if strings.TrimSpace(payload.Query) == "" {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "query is required"))
+		return
+	}
+	if payload.TopK <= 0 {
+		payload.TopK = 5
+	}
+	if payload.MinScore <= 0 {
+		payload.MinScore = 0.7
+	}
+
+	// Resolve agent → user ownership
+	userID, appErr := h.store.ResolveKnowledgeDocOwnerByAgentNode(webhook.From)
+	if appErr != nil {
+		h.sendKnowledgeError(webhook.From, payload, "agent not recognized: "+appErr.Message)
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	// Validate project ownership
+	if payload.ProjectID != "" {
+		if appErr := h.store.ValidateProjectOwnership(userID, payload.ProjectID); appErr != nil {
+			h.sendKnowledgeError(webhook.From, payload, "access denied to project")
+			transport.WriteError(c, appErr)
+			return
+		}
+	}
+
+	// Perform search
+	results, err := h.knowledgeSearch(c.Request.Context(), userID, payload)
+	if err != nil {
+		if h.log != nil {
+			h.log.Error("knowledge query search failed", zap.Error(err))
+		}
+		h.sendKnowledgeError(webhook.From, payload, "search failed: "+err.Error())
+		transport.WriteData(c, http.StatusOK, gin.H{"status": "error", "error": err.Error()})
+		return
+	}
+
+	// Send results back to agent
+	resultPayload := protocol.KnowledgeResultPayload{
+		QueryID:   payload.QueryID,
+		ProjectID: payload.ProjectID,
+		Results:   results,
+	}
+	h.publish(context.Background(), webhook.From, "knowledge.result", resultPayload, payload.QueryID)
+	transport.WriteData(c, http.StatusOK, gin.H{"status": "ok", "results_count": len(results)})
+}
+
+func (h *WebhookHandler) knowledgeSearch(ctx context.Context, userID string, payload protocol.KnowledgeQueryPayload) ([]protocol.KnowledgeResultItem, error) {
+	// Try vector search first
+	if h.embedder != nil && h.qdrant != nil {
+		embeddings, err := h.embedder.Embed(ctx, []string{payload.Query})
+		if err != nil {
+			return nil, err
+		}
+		if len(embeddings) > 0 && len(embeddings[0]) > 0 {
+			mustConditions := []knowledge.QdrantCondition{
+				{Key: "user_id", Match: map[string]any{"value": userID}},
+			}
+			var filter *knowledge.QdrantFilter
+			if payload.ProjectID != "" {
+				filter = &knowledge.QdrantFilter{
+					Must: mustConditions,
+					Should: []knowledge.QdrantCondition{
+						{Key: "project_id", Match: map[string]any{"value": payload.ProjectID}},
+					},
+				}
+			} else {
+				filter = &knowledge.QdrantFilter{Must: mustConditions}
+			}
+
+			hits, err := h.qdrant.Search(ctx, embeddings[0], filter, payload.TopK)
+			if err != nil {
+				return nil, err
+			}
+
+			var results []protocol.KnowledgeResultItem
+			for _, hit := range hits {
+				if hit.Score < payload.MinScore {
+					continue
+				}
+				chunkID, _ := hit.Payload["chunk_id"].(string)
+				docID, _ := hit.Payload["document_id"].(string)
+
+				chunks, err := h.store.GetKnowledgeChunksByIDs([]string{chunkID})
+				if err != nil || len(chunks) == 0 {
+					continue
+				}
+				chunk := chunks[0]
+
+				results = append(results, protocol.KnowledgeResultItem{
+					ChunkID:       chunkID,
+					DocumentID:    docID,
+					DocumentTitle: h.store.GetKnowledgeDocTitle(docID),
+					Content:       chunk.Content,
+					Score:         hit.Score,
+					ChunkIndex:    chunk.ChunkIndex,
+					Metadata:      chunk.Metadata,
+				})
+			}
+			return results, nil
+		}
+	}
+
+	// Fallback to text search
+	var projectID *string
+	if payload.ProjectID != "" {
+		projectID = &payload.ProjectID
+	}
+	chunks, err := h.store.SearchKnowledgeChunks(ctx, userID, projectID, payload.Query, payload.TopK)
+	if err != nil {
+		return nil, err
+	}
+	var results []protocol.KnowledgeResultItem
+	for _, chunk := range chunks {
+		results = append(results, protocol.KnowledgeResultItem{
+			ChunkID:       chunk.ID,
+			DocumentID:    chunk.DocumentID,
+			DocumentTitle: h.store.GetKnowledgeDocTitle(chunk.DocumentID),
+			Content:       chunk.Content,
+			Score:         1.0,
+			ChunkIndex:    chunk.ChunkIndex,
+			Metadata:      chunk.Metadata,
+		})
+	}
+	return results, nil
+}
+
+func (h *WebhookHandler) sendKnowledgeError(targetNode string, payload protocol.KnowledgeQueryPayload, errMsg string) {
+	h.publish(context.Background(), targetNode, "knowledge.result", protocol.KnowledgeResultPayload{
+		QueryID:   payload.QueryID,
+		ProjectID: payload.ProjectID,
+		Error:     errMsg,
+	}, payload.QueryID)
 }

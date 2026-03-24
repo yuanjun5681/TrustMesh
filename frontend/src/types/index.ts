@@ -478,3 +478,57 @@ export interface UpdateAgentRequest {
   description?: string
   capabilities?: string[]
 }
+
+// ─── 知识库 ───
+
+export type KnowledgeDocStatus = 'processing' | 'ready' | 'failed'
+export type KnowledgeDocType = 'document' | 'note' | 'snippet' | 'reference'
+
+export interface KnowledgeDocument {
+  id: string
+  project_id: string | null
+  title: string
+  description: string
+  doc_type: KnowledgeDocType
+  mime_type: string
+  file_size: number
+  status: KnowledgeDocStatus
+  chunk_count: number
+  tags: string[]
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface KnowledgeChunk {
+  id: string
+  document_id: string
+  chunk_index: number
+  content: string
+  token_count: number
+  metadata: Record<string, unknown>
+  created_at: string
+}
+
+export interface KnowledgeSearchResult {
+  chunk_id: string
+  document_id: string
+  document_title: string
+  content: string
+  score: number
+  chunk_index: number
+  metadata?: Record<string, unknown>
+}
+
+export interface KnowledgeSearchRequest {
+  query: string
+  project_id?: string
+  top_k?: number
+  min_score?: number
+}
+
+export interface UpdateKnowledgeDocRequest {
+  title?: string
+  description?: string
+  tags?: string[]
+}

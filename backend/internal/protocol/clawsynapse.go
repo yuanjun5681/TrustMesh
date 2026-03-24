@@ -96,6 +96,33 @@ type TodoStatusChangedPayload struct {
 	Message     string `json:"message,omitempty"`
 }
 
+// Knowledge base protocol payloads
+
+type KnowledgeQueryPayload struct {
+	QueryID   string  `json:"query_id"`
+	Query     string  `json:"query"`
+	ProjectID string  `json:"project_id"`
+	TopK      int     `json:"top_k,omitempty"`
+	MinScore  float64 `json:"min_score,omitempty"`
+}
+
+type KnowledgeResultPayload struct {
+	QueryID   string                `json:"query_id"`
+	ProjectID string                `json:"project_id"`
+	Results   []KnowledgeResultItem `json:"results"`
+	Error     string                `json:"error,omitempty"`
+}
+
+type KnowledgeResultItem struct {
+	ChunkID       string         `json:"chunk_id"`
+	DocumentID    string         `json:"document_id"`
+	DocumentTitle string         `json:"document_title"`
+	Content       string         `json:"content"`
+	Score         float64        `json:"score"`
+	ChunkIndex    int            `json:"chunk_index"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
+}
+
 type PMConversationProject struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 
 	"github.com/gin-gonic/gin"
@@ -8,7 +9,9 @@ import (
 	"trustmesh/backend/internal/auth"
 	"trustmesh/backend/internal/clawsynapse"
 	"trustmesh/backend/internal/config"
+	"trustmesh/backend/internal/embedding"
 	"trustmesh/backend/internal/handler"
+	"trustmesh/backend/internal/knowledge"
 	"trustmesh/backend/internal/middleware"
 	"trustmesh/backend/internal/store"
 )
@@ -47,6 +50,36 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	dashboardHandler := handler.NewDashboardHandler(s)
 	notificationHandler := handler.NewNotificationHandler(s)
 	realtimeHandler := handler.NewRealtimeHandler(s)
+
+	// Knowledge base components (optional - requires EMBEDDING_API_KEY)
+	var knowledgeHandler *handler.KnowledgeHandler
+	var qdrantClient *knowledge.QdrantClient
+	var embeddingClient embedding.Client
+	fileStorage := knowledge.NewLocalFileStorage(cfg.KnowledgeStorePath)
+
+	if cfg.EmbeddingAPIKey != "" {
+		var err error
+		embeddingClient, err = embedding.NewClient(cfg)
+		if err != nil {
+			log.Warn("embedding client init failed, knowledge search disabled", zap.Error(err))
+		}
+		qdrantClient = knowledge.NewQdrantClient(cfg.QdrantURL, cfg.EmbeddingDimension)
+		if err := qdrantClient.EnsureCollection(context.Background()); err != nil {
+			log.Warn("qdrant collection init failed, knowledge search disabled", zap.Error(err))
+			qdrantClient = nil
+		}
+	}
+
+	var processor *knowledge.Processor
+	if embeddingClient != nil && qdrantClient != nil {
+		processor = knowledge.NewProcessor(fileStorage, embeddingClient, qdrantClient, s, log)
+	}
+	knowledgeHandler = handler.NewKnowledgeHandler(s, fileStorage, processor, embeddingClient, qdrantClient, log)
+
+	// Inject knowledge components into webhook handler for knowledge.query support
+	if embeddingClient != nil && qdrantClient != nil {
+		webhookHandler.SetKnowledgeComponents(embeddingClient, qdrantClient)
+	}
 
 	engine.GET("/healthz", handler.Health)
 	engine.POST("/webhook/clawsynapse", webhookHandler.HandleWebhook)
@@ -96,6 +129,16 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	authed.PATCH("/notifications/:id/read", notificationHandler.MarkRead)
 	authed.POST("/notifications/mark-all-read", notificationHandler.MarkAllRead)
 	authed.GET("/events/stream", realtimeHandler.Stream)
+
+	kb := authed.Group("/knowledge")
+	kb.POST("/documents", knowledgeHandler.Upload)
+	kb.GET("/documents", knowledgeHandler.List)
+	kb.GET("/documents/:id", knowledgeHandler.Get)
+	kb.PATCH("/documents/:id", knowledgeHandler.Update)
+	kb.DELETE("/documents/:id", knowledgeHandler.Delete)
+	kb.GET("/documents/:id/chunks", knowledgeHandler.ListChunks)
+	kb.POST("/documents/:id/reprocess", knowledgeHandler.Reprocess)
+	kb.POST("/search", knowledgeHandler.Search)
 
 	return &App{Engine: engine, Store: s, PeerSyncer: peerSyncer}, nil
 }
