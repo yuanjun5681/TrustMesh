@@ -9,7 +9,7 @@ export function MainLayout() {
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar onCreateProject={() => setShowCreateProject(true)} />
-      <main className="flex-1 overflow-hidden bg-background">
+      <main className="flex-1 overflow-y-auto bg-background">
         <Outlet />
       </main>
       <CreateProjectDialog

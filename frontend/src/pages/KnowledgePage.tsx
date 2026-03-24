@@ -5,7 +5,6 @@ import {
   Trash2,
   RefreshCw,
   Search,
-  Tag,
   ChevronDown,
   ChevronUp,
   Loader2,
@@ -17,10 +16,19 @@ import { toast } from 'sonner'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/shared/EmptyState'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   useKnowledgeDocs,
   useUploadDocument,
@@ -58,7 +66,128 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function DocCard({
+function UploadDialog({
+  open,
+  onOpenChange,
+  onUpload,
+  pending,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onUpload: (formData: FormData) => Promise<void>
+  pending: boolean
+}) {
+  const [file, setFile] = useState<File | null>(null)
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [tags, setTags] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const reset = () => {
+    setFile(null)
+    setTitle('')
+    setDescription('')
+    setTags('')
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    if (f) {
+      setFile(f)
+      if (!title) setTitle(f.name.replace(/\.[^.]+$/, ''))
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!file) return
+
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('title', title.trim() || file.name)
+    if (description.trim()) formData.append('description', description.trim())
+    if (tags.trim()) formData.append('tags', tags.trim())
+
+    await onUpload(formData)
+    reset()
+  }
+
+  const handleOpenChange = (v: boolean) => {
+    if (!v) reset()
+    onOpenChange(v)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>上传文档</DialogTitle>
+          <DialogDescription>上传文档到知识库，供 Agent 检索使用</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium">文件 *</label>
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                accept=".md,.txt,.text"
+                onChange={handleFileChange}
+              />
+              <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                选择文件
+              </Button>
+              {file ? (
+                <span className="text-sm text-muted-foreground truncate flex-1">{file.name}</span>
+              ) : (
+                <span className="text-sm text-muted-foreground">支持 .md, .txt 格式</span>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium">标题 *</label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="文档标题"
+              required
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium">描述</label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="简要描述文档内容"
+              rows={2}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium">标签</label>
+            <Input
+              value={tags}
+              onChange={(e) => setTags(e.target.value)}
+              placeholder="用逗号分隔，如：架构,设计,核心"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
+              取消
+            </Button>
+            <Button type="submit" disabled={pending || !file || !title.trim()}>
+              {pending ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Upload className="size-4 mr-1.5" />}
+              {pending ? '上传中...' : '上传'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function DocRow({
   doc,
   onDelete,
   onReprocess,
@@ -71,78 +200,69 @@ function DocCard({
   const { data: chunks } = useKnowledgeChunks(expanded ? doc.id : undefined)
 
   return (
-    <Card className="p-4">
-      <div className="flex items-start gap-3">
-        <div className="rounded-lg bg-muted p-2">
-          <FileText className="size-5 text-muted-foreground" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className="font-medium truncate">{doc.title}</h3>
-            <StatusIcon status={doc.status} />
-          </div>
+    <div className="border-b last:border-b-0">
+      <div className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 transition-colors">
+        <FileText className="size-4 text-muted-foreground shrink-0" />
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <span className="font-medium text-sm truncate shrink-0 max-w-[40%]">{doc.title}</span>
+          <StatusIcon status={doc.status} />
           {doc.description && (
-            <p className="text-sm text-muted-foreground mt-0.5 line-clamp-1">{doc.description}</p>
+            <span className="text-xs text-muted-foreground truncate">{doc.description}</span>
           )}
-          <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-            <span>{formatFileSize(doc.file_size)}</span>
-            <span>{doc.chunk_count} 分块</span>
-            <span>{formatRelativeTime(doc.created_at)}</span>
-          </div>
+        </div>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
           {doc.tags.length > 0 && (
-            <div className="flex gap-1 mt-2 flex-wrap">
+            <div className="hidden md:flex gap-1">
               {doc.tags.map((tag) => (
-                <Badge key={tag} variant="secondary" className="text-xs">
-                  <Tag className="size-3 mr-1" />
+                <Badge key={tag} variant="secondary" className="text-[11px] px-1.5 py-0">
                   {tag}
                 </Badge>
               ))}
             </div>
           )}
+          <span className="tabular-nums">{formatFileSize(doc.file_size)}</span>
+          <span className="tabular-nums">{doc.chunk_count} 块</span>
+          <span className="hidden sm:inline">{formatRelativeTime(doc.created_at)}</span>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center shrink-0">
           {doc.status === 'failed' && (
-            <Button variant="ghost" size="icon" className="size-8" onClick={() => onReprocess(doc.id)} title="重新处理">
-              <RefreshCw className="size-4" />
+            <Button variant="ghost" size="icon" className="size-7" onClick={() => onReprocess(doc.id)} title="重新处理">
+              <RefreshCw className="size-3.5" />
             </Button>
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8"
-            onClick={() => setExpanded(!expanded)}
-            title={expanded ? '收起分块' : '查看分块'}
-          >
-            {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+          <Button variant="ghost" size="icon" className="size-7" onClick={() => setExpanded(!expanded)} title={expanded ? '收起' : '分块'}>
+            {expanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
           </Button>
-          <Button variant="ghost" size="icon" className="size-8 text-destructive hover:text-destructive" onClick={() => onDelete(doc.id)} title="删除">
-            <Trash2 className="size-4" />
+          <Button variant="ghost" size="icon" className="size-7 text-destructive hover:text-destructive" onClick={() => onDelete(doc.id)} title="删除">
+            <Trash2 className="size-3.5" />
           </Button>
         </div>
       </div>
 
       {expanded && (
-        <div className="mt-3 pt-3 border-t space-y-2">
+        <div className="px-3 pb-2 pt-1 bg-muted/30">
           {!chunks ? (
-            <div className="space-y-2">
-              {[1, 2].map((i) => <Skeleton key={i} className="h-12 rounded-lg" />)}
+            <div className="space-y-1.5">
+              {[1, 2].map((i) => <Skeleton key={i} className="h-10 rounded" />)}
             </div>
           ) : chunks.length === 0 ? (
-            <p className="text-sm text-muted-foreground">暂无分块数据</p>
+            <p className="text-xs text-muted-foreground py-1">暂无分块数据</p>
           ) : (
-            chunks.map((chunk) => (
-              <div key={chunk.id} className="rounded-lg bg-muted/50 p-3 text-sm">
-                <div className="flex items-center gap-2 mb-1">
-                  <Badge variant="outline" className="text-xs">#{chunk.chunk_index}</Badge>
-                  <span className="text-xs text-muted-foreground">{chunk.token_count} tokens</span>
+            <div className="space-y-1.5">
+              {chunks.map((chunk) => (
+                <div key={chunk.id} className="rounded bg-background p-2 text-xs border">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <Badge variant="outline" className="text-[11px] px-1 py-0">#{chunk.chunk_index}</Badge>
+                    <span className="text-muted-foreground">{chunk.token_count} tokens</span>
+                  </div>
+                  <p className="text-muted-foreground line-clamp-2 whitespace-pre-wrap">{chunk.content}</p>
                 </div>
-                <p className="text-muted-foreground line-clamp-3 whitespace-pre-wrap">{chunk.content}</p>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
       )}
-    </Card>
+    </div>
   )
 }
 
@@ -199,7 +319,7 @@ function SearchPanel() {
 export function KnowledgePage() {
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [activeTab, setActiveTab] = useState<'documents' | 'search'>('documents')
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [showUpload, setShowUpload] = useState(false)
 
   const queryParams = statusFilter === 'all' ? undefined : { status: statusFilter }
   const { data: docs, isLoading } = useKnowledgeDocs(queryParams)
@@ -207,21 +327,14 @@ export function KnowledgePage() {
   const deleteMutation = useDeleteDocument()
   const reprocessMutation = useReprocessDocument()
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('title', file.name)
-
+  const handleUpload = async (formData: FormData) => {
     try {
       await uploadMutation.mutateAsync(formData)
       toast.success('文档上传成功，正在处理中...')
+      setShowUpload(false)
     } catch {
       toast.error('上传失败')
     }
-    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const handleDelete = async (id: string) => {
@@ -244,63 +357,54 @@ export function KnowledgePage() {
 
   return (
     <PageContainer>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">知识库</h1>
-          <p className="text-muted-foreground mt-1">管理文档和知识，供 Agent 检索使用</p>
+      {/* Header: title + tabs + actions in one row */}
+      <div className="flex items-center gap-4 mb-4">
+        <h1 className="text-lg font-bold shrink-0">知识库</h1>
+        <div className="flex gap-0.5 rounded-lg bg-muted p-0.5">
+          {[
+            { key: 'documents' as const, label: '文档管理' },
+            { key: 'search' as const, label: '语义搜索' },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={cn(
+                'px-2.5 py-1 text-xs rounded-md transition-colors',
+                activeTab === tab.key
+                  ? 'bg-background text-foreground shadow-sm font-medium'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
-        <div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            accept=".md,.txt,.text"
-            onChange={handleUpload}
-          />
-          <Button onClick={() => fileInputRef.current?.click()} disabled={uploadMutation.isPending}>
-            {uploadMutation.isPending ? (
-              <Loader2 className="size-4 mr-2 animate-spin" />
-            ) : (
-              <Upload className="size-4 mr-2" />
-            )}
-            上传文档
-          </Button>
-        </div>
+        <div className="flex-1" />
+        <Button size="sm" onClick={() => setShowUpload(true)}>
+          <Upload className="size-3.5 mr-1.5" />
+          上传文档
+        </Button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 rounded-lg bg-muted p-1 w-fit">
-        {[
-          { key: 'documents' as const, label: '文档管理' },
-          { key: 'search' as const, label: '语义搜索' },
-        ].map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={cn(
-              'px-3 py-1.5 text-sm rounded-md transition-colors',
-              activeTab === tab.key
-                ? 'bg-background text-foreground shadow-sm font-medium'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <UploadDialog
+        open={showUpload}
+        onOpenChange={setShowUpload}
+        onUpload={handleUpload}
+        pending={uploadMutation.isPending}
+      />
 
       {activeTab === 'search' ? (
         <SearchPanel />
       ) : (
         <>
           {/* Status filter */}
-          <div className="flex gap-1 mb-4 rounded-lg bg-muted p-1 w-fit">
+          <div className="flex gap-0.5 mb-3 rounded-lg bg-muted p-0.5 w-fit">
             {STATUS_FILTERS.map((filter) => (
               <button
                 key={filter.value}
                 onClick={() => setStatusFilter(filter.value)}
                 className={cn(
-                  'px-3 py-1.5 text-sm rounded-md transition-colors',
+                  'px-2.5 py-1 text-xs rounded-md transition-colors',
                   statusFilter === filter.value
                     ? 'bg-background text-foreground shadow-sm font-medium'
                     : 'text-muted-foreground hover:text-foreground'
@@ -313,8 +417,8 @@ export function KnowledgePage() {
 
           {/* Document list */}
           {isLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+            <div className="space-y-1">
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 rounded" />)}
             </div>
           ) : !docs || docs.length === 0 ? (
             <EmptyState
@@ -322,23 +426,23 @@ export function KnowledgePage() {
               title="暂无知识文档"
               description="上传文档后，Agent 在执行任务时可以检索相关知识"
               action={
-                <Button onClick={() => fileInputRef.current?.click()}>
-                  <Upload className="size-4 mr-2" />
+                <Button size="sm" onClick={() => setShowUpload(true)}>
+                  <Upload className="size-3.5 mr-1.5" />
                   上传文档
                 </Button>
               }
             />
           ) : (
-            <div className="space-y-3">
+            <Card className="overflow-hidden">
               {docs.map((doc) => (
-                <DocCard
+                <DocRow
                   key={doc.id}
                   doc={doc}
                   onDelete={handleDelete}
                   onReprocess={handleReprocess}
                 />
               ))}
-            </div>
+            </Card>
           )}
         </>
       )}
