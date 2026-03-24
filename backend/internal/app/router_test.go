@@ -573,6 +573,127 @@ func TestDispatchTodoPublishesAssignmentToAssignee(t *testing.T) {
 	}
 }
 
+func TestDispatchTodoDoesNotPublishForArchivedProject(t *testing.T) {
+	log, err := logger.New("error")
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	defer func() { _ = log.Sync() }()
+
+	var (
+		mu              sync.Mutex
+		publishRequests []map[string]any
+	)
+
+	clawServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/publish":
+			defer r.Body.Close()
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode publish payload: %v", err)
+			}
+			mu.Lock()
+			publishRequests = append(publishRequests, payload)
+			mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"code":"OK","message":"ok","data":{"targetNode":"node-dev-001","messageId":"msg-1"},"ts":1}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer clawServer.Close()
+
+	application, err := New(config.Config{
+		Port:               "0",
+		JWTSecret:          "test-secret",
+		TokenTTL:           time.Hour,
+		LogLevel:           "error",
+		AllowAllCORS:       true,
+		ReadTimeout:        3 * time.Second,
+		ShutdownGrace:      3 * time.Second,
+		ClawSynapseAPIURL:  clawServer.URL,
+		ClawSynapseTimeout: time.Second,
+	}, log)
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
+	defer func() {
+		if closeErr := application.Close(); closeErr != nil {
+			t.Fatalf("close app: %v", closeErr)
+		}
+	}()
+
+	testServer := httptest.NewServer(application.Engine)
+	defer testServer.Close()
+
+	registerResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/auth/register", "", map[string]any{
+		"email":    "archived-dispatch@example.com",
+		"name":     "Archived Dispatch User",
+		"password": "StrongPass123!",
+	})
+	registerData := decodeBody(t, registerResp)
+	token := nestedString(registerData, "data", "token")
+	userID := nestedString(registerData, "data", "user", "id")
+
+	pm, appErr := application.Store.CreateAgent(userID, "node-pm-001", "PM Agent", "pm", "PM", []string{"plan"})
+	if appErr != nil {
+		t.Fatalf("create pm: %v", appErr)
+	}
+	_, appErr = application.Store.CreateAgent(userID, "node-dev-001", "Developer", "developer", "Dev", []string{"backend"})
+	if appErr != nil {
+		t.Fatalf("create developer: %v", appErr)
+	}
+	application.Store.SyncAgentPresence([]store.AgentPresence{
+		{NodeID: "node-pm-001", LastSeenAt: time.Now().UTC()},
+		{NodeID: "node-dev-001", LastSeenAt: time.Now().UTC()},
+	}, time.Now().UTC())
+
+	project, appErr := application.Store.CreateProject(userID, "Archived Dispatch Project", "demo", pm.ID)
+	if appErr != nil {
+		t.Fatalf("create project: %v", appErr)
+	}
+	conversation, appErr := application.Store.CreateConversation(userID, project.ID, "Need login")
+	if appErr != nil {
+		t.Fatalf("create conversation: %v", appErr)
+	}
+	task, appErr := application.Store.CreateTaskByPMNode(pm.NodeID, store.TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: conversation.ID,
+		Title:          "Implement login",
+		Description:    "Support email/password login",
+		Todos: []store.TaskCreateTodoInput{
+			{
+				ID:             "todo-1",
+				Title:          "Build backend API",
+				Description:    "Implement auth endpoints",
+				AssigneeNodeID: "node-dev-001",
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("create task: %v", appErr)
+	}
+	if _, appErr := application.Store.ArchiveProject(userID, project.ID); appErr != nil {
+		t.Fatalf("archive project: %v", appErr)
+	}
+
+	dispatchResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/tasks/"+task.ID+"/todos/todo-1/dispatch", token, nil)
+	if dispatchResp.StatusCode != http.StatusConflict {
+		t.Fatalf("dispatch todo status=%d", dispatchResp.StatusCode)
+	}
+	dispatchData := decodeBody(t, dispatchResp)
+	if nestedString(dispatchData, "error", "code") != "PROJECT_ARCHIVED" {
+		t.Fatalf("unexpected dispatch error payload: %#v", dispatchData)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(publishRequests) != 0 {
+		t.Fatalf("expected no publish request for archived project, got %d", len(publishRequests))
+	}
+}
+
 func TestUserRealtimeStreamPushesDomainEvents(t *testing.T) {
 	log, err := logger.New("error")
 	if err != nil {

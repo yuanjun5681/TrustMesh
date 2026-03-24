@@ -1,6 +1,11 @@
 package store
 
-import "testing"
+import (
+	"testing"
+
+	"trustmesh/backend/internal/model"
+	"trustmesh/backend/internal/transport"
+)
 
 func TestProjectTaskSummaryReflectsTaskState(t *testing.T) {
 	s, userID, pm, developer, project, conversation := seedWorkflowState(t)
@@ -132,4 +137,232 @@ func TestProjectTaskSummaryPrioritizesAttentionAndArchive(t *testing.T) {
 	if projectState.TaskSummary.WorkStatus != "archived" {
 		t.Fatalf("expected archived work status, got %s", projectState.TaskSummary.WorkStatus)
 	}
+}
+
+func TestArchiveProjectBlocksAppendingConversationMessages(t *testing.T) {
+	s, userID, _, _, project, conversation := seedWorkflowState(t)
+
+	if _, appErr := s.ArchiveProject(userID, project.ID); appErr != nil {
+		t.Fatalf("archive project: %v", appErr)
+	}
+
+	_, appErr := s.AppendConversationMessage(userID, conversation.ID, "还想补充一个需求", nil)
+	if appErr == nil {
+		t.Fatal("expected append message to fail for archived project")
+	}
+	if appErr.Code != "PROJECT_ARCHIVED" {
+		t.Fatalf("expected PROJECT_ARCHIVED, got %s", appErr.Code)
+	}
+}
+
+func TestArchiveProjectResetsInProgressWorkToPending(t *testing.T) {
+	s, userID, pm, developer, project, conversation := seedWorkflowState(t)
+
+	inProgressTask, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: conversation.ID,
+		Title:          "Implement login",
+		Description:    "Support email password login",
+		Todos: []TaskCreateTodoInput{
+			{
+				ID:             "todo-1",
+				Title:          "Build backend API",
+				Description:    "Implement auth endpoints",
+				AssigneeNodeID: developer.NodeID,
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("create in-progress task: %v", appErr)
+	}
+	if _, appErr := s.RecordSequentialTodoDispatch(inProgressTask.ID, "todo-1"); appErr != nil {
+		t.Fatalf("dispatch todo: %v", appErr)
+	}
+
+	doneConversation, appErr := s.CreateConversation(userID, project.ID, "Need metrics dashboard")
+	if appErr != nil {
+		t.Fatalf("create done conversation: %v", appErr)
+	}
+	doneTask, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: doneConversation.ID,
+		Title:          "Implement dashboard",
+		Description:    "Add dashboard page",
+		Todos: []TaskCreateTodoInput{
+			{
+				ID:             "todo-2",
+				Title:          "Build dashboard page",
+				Description:    "Implement UI",
+				AssigneeNodeID: developer.NodeID,
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("create done task: %v", appErr)
+	}
+	if _, appErr := s.CompleteTodoByNode(developer.NodeID, TodoCompleteInput{
+		TaskID: doneTask.ID,
+		TodoID: "todo-2",
+		Result: model.TodoResult{
+			Summary: "done",
+			Output:  "dashboard implemented",
+		},
+	}); appErr != nil {
+		t.Fatalf("complete todo: %v", appErr)
+	}
+
+	failedConversation, appErr := s.CreateConversation(userID, project.ID, "Need flaky test investigation")
+	if appErr != nil {
+		t.Fatalf("create failed conversation: %v", appErr)
+	}
+	failedTask, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: failedConversation.ID,
+		Title:          "Investigate flaky test",
+		Description:    "Reproduce test issue",
+		Todos: []TaskCreateTodoInput{
+			{
+				ID:             "todo-3",
+				Title:          "Collect logs",
+				Description:    "Inspect latest logs",
+				AssigneeNodeID: developer.NodeID,
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("create failed task: %v", appErr)
+	}
+	if _, appErr := s.FailTodoByNode(developer.NodeID, TodoFailInput{
+		TaskID: failedTask.ID,
+		TodoID: "todo-3",
+		Error:  "tests are still flaky",
+	}); appErr != nil {
+		t.Fatalf("fail todo: %v", appErr)
+	}
+
+	projectState, appErr := s.ArchiveProject(userID, project.ID)
+	if appErr != nil {
+		t.Fatalf("archive project: %v", appErr)
+	}
+	if projectState.Status != "archived" {
+		t.Fatalf("expected archived project status, got %s", projectState.Status)
+	}
+
+	inProgressState, appErr := s.GetTask(userID, inProgressTask.ID)
+	if appErr != nil {
+		t.Fatalf("get in-progress task: %v", appErr)
+	}
+	if inProgressState.Status != "pending" {
+		t.Fatalf("expected task pending after archive, got %s", inProgressState.Status)
+	}
+	if inProgressState.Todos[0].Status != "pending" {
+		t.Fatalf("expected todo pending after archive, got %s", inProgressState.Todos[0].Status)
+	}
+	if inProgressState.Todos[0].StartedAt != nil {
+		t.Fatal("expected todo started_at to be cleared after archive")
+	}
+
+	doneState, appErr := s.GetTask(userID, doneTask.ID)
+	if appErr != nil {
+		t.Fatalf("get done task: %v", appErr)
+	}
+	if doneState.Status != "done" {
+		t.Fatalf("expected done task to stay done, got %s", doneState.Status)
+	}
+
+	failedState, appErr := s.GetTask(userID, failedTask.ID)
+	if appErr != nil {
+		t.Fatalf("get failed task: %v", appErr)
+	}
+	if failedState.Status != "failed" {
+		t.Fatalf("expected failed task to stay failed, got %s", failedState.Status)
+	}
+
+	agent, appErr := s.GetAgent(userID, developer.ID)
+	if appErr != nil {
+		t.Fatalf("get developer agent: %v", appErr)
+	}
+	if agent.Status != "online" {
+		t.Fatalf("expected developer to be online after archive reset, got %s", agent.Status)
+	}
+}
+
+func TestArchiveProjectBlocksTaskExecutionMutations(t *testing.T) {
+	s, userID, pm, developer, project, conversation := seedWorkflowState(t)
+
+	task, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: conversation.ID,
+		Title:          "Implement login",
+		Description:    "Support email password login",
+		Todos: []TaskCreateTodoInput{
+			{
+				ID:             "todo-1",
+				Title:          "Build backend API",
+				Description:    "Implement auth endpoints",
+				AssigneeNodeID: developer.NodeID,
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("create task: %v", appErr)
+	}
+
+	extraConversation, appErr := s.CreateConversation(userID, project.ID, "Need dashboard")
+	if appErr != nil {
+		t.Fatalf("create extra conversation: %v", appErr)
+	}
+
+	if _, appErr := s.ArchiveProject(userID, project.ID); appErr != nil {
+		t.Fatalf("archive project: %v", appErr)
+	}
+
+	assertArchivedError := func(name string, appErr *transport.AppError) {
+		t.Helper()
+		if appErr == nil {
+			t.Fatalf("expected %s to fail for archived project", name)
+		}
+		if appErr.Code != "PROJECT_ARCHIVED" {
+			t.Fatalf("expected PROJECT_ARCHIVED for %s, got %s", name, appErr.Code)
+		}
+	}
+
+	_, appErr = s.RecordTodoDispatch(userID, task.ID, "todo-1")
+	assertArchivedError("manual dispatch", appErr)
+
+	_, appErr = s.UpdateTodoProgressByNode(developer.NodeID, TodoProgressInput{
+		TaskID:  task.ID,
+		TodoID:  "todo-1",
+		Message: "started",
+	})
+	assertArchivedError("todo progress", appErr)
+
+	_, appErr = s.CompleteTodoByNode(developer.NodeID, TodoCompleteInput{
+		TaskID: task.ID,
+		TodoID: "todo-1",
+	})
+	assertArchivedError("todo complete", appErr)
+
+	_, appErr = s.FailTodoByNode(developer.NodeID, TodoFailInput{
+		TaskID: task.ID,
+		TodoID: "todo-1",
+		Error:  "failed",
+	})
+	assertArchivedError("todo fail", appErr)
+
+	_, appErr = s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: extraConversation.ID,
+		Title:          "Implement dashboard",
+		Description:    "Add dashboard page",
+		Todos: []TaskCreateTodoInput{
+			{
+				ID:             "todo-2",
+				Title:          "Build dashboard page",
+				Description:    "Implement UI",
+				AssigneeNodeID: developer.NodeID,
+			},
+		},
+	})
+	assertArchivedError("task create", appErr)
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { MessageSquarePlus, MoreHorizontal, Pencil, Archive, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
@@ -8,17 +8,21 @@ import { TaskListView } from '@/components/task/TaskListView'
 import { TaskDetailPanel } from '@/components/task/TaskDetailPanel'
 import { ConversationSheet } from '@/components/conversation/ConversationSheet'
 import { EditProjectDialog } from '@/components/project/EditProjectDialog'
+import { ArchiveProjectDialog } from '@/components/project/ArchiveProjectDialog'
 import { useProject } from '@/hooks/useProjects'
 import { useTasks } from '@/hooks/useTasks'
 import { formatDateTime, formatRelativeTime } from '@/lib/utils'
 
 export function ProjectBoardPage() {
+  const navigate = useNavigate()
   const { projectId } = useParams<{ projectId: string }>()
   const { data: project } = useProject(projectId)
   const { data: tasks, isLoading } = useTasks(projectId)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const [archiveOpen, setArchiveOpen] = useState(false)
+  const projectArchived = project?.status === 'archived'
 
   return (
     <div className="flex h-full flex-col">
@@ -66,9 +70,9 @@ export function ProjectBoardPage() {
           )}
           </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" onClick={() => setSheetOpen(true)}>
+          <Button size="sm" disabled={projectArchived} onClick={() => setSheetOpen(true)}>
             <MessageSquarePlus className="size-4 mr-1.5" />
-            提交新需求
+            {projectArchived ? '项目已归档' : '提交新需求'}
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger className="p-2 rounded-md hover:bg-muted">
@@ -80,7 +84,11 @@ export function ProjectBoardPage() {
                 编辑项目
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive">
+              <DropdownMenuItem
+                className="text-destructive"
+                disabled={!project || projectArchived}
+                onClick={() => setArchiveOpen(true)}
+              >
                 <Archive className="size-3.5 mr-2" />
                 归档项目
               </DropdownMenuItem>
@@ -132,6 +140,12 @@ export function ProjectBoardPage() {
       )}
 
       <EditProjectDialog open={editOpen} onOpenChange={setEditOpen} project={project} />
+      <ArchiveProjectDialog
+        open={archiveOpen}
+        onOpenChange={setArchiveOpen}
+        project={project}
+        onArchived={() => navigate('/projects', { replace: true })}
+      />
     </div>
   )
 }

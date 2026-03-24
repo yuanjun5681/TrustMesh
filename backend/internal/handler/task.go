@@ -74,6 +74,10 @@ func (h *TaskHandler) DispatchTodo(c *gin.Context) {
 		transport.WriteError(c, appErr)
 		return
 	}
+	if appErr := h.store.CheckTaskProjectActive(task.ID); appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
 
 	todo := findTaskTodo(task, c.Param("todoId"))
 	if todo == nil {
