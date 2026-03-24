@@ -315,6 +315,12 @@ func (h *WebhookHandler) dispatchNextTodo(ctx context.Context, task *model.TaskD
 	if todo == nil {
 		return task
 	}
+	if appErr := h.store.CheckTaskProjectActive(task.ID); appErr != nil {
+		if h.log != nil {
+			h.log.Warn("skip sequential todo dispatch for archived task project", zap.String("task_id", task.ID), zap.Error(appErr))
+		}
+		return task
+	}
 
 	if _, err := h.client.Publish(ctx, todo.Assignee.NodeID, "todo.assigned", protocol.TodoAssignedPayload{
 		TaskID:      task.ID,

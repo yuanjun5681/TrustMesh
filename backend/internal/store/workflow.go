@@ -65,6 +65,9 @@ func (s *Store) RecordTodoDispatch(userID, taskID, todoID string) (*model.TaskDe
 	if !ok || task.UserID != userID {
 		return nil, transport.NotFound("task not found")
 	}
+	if appErr := s.ensureTaskProjectActiveUnsafe(task); appErr != nil {
+		return nil, appErr
+	}
 
 	todoIdx := findTodoIndex(task, todoID)
 	if todoIdx < 0 {
@@ -119,6 +122,9 @@ func (s *Store) RecordSequentialTodoDispatch(taskID, todoID string) (*model.Task
 	task, ok := s.tasks[taskID]
 	if !ok {
 		return nil, transport.NotFound("task not found")
+	}
+	if appErr := s.ensureTaskProjectActiveUnsafe(task); appErr != nil {
+		return nil, appErr
 	}
 
 	todoIdx := findTodoIndex(task, todoID)
@@ -199,6 +205,9 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 	project, ok := s.projects[in.ProjectID]
 	if !ok {
 		return nil, transport.NotFound("project not found")
+	}
+	if project.Status == "archived" {
+		return nil, transport.Conflict("PROJECT_ARCHIVED", "archived project cannot create tasks")
 	}
 	if project.PMAgentID != pmAgent.ID {
 		return nil, transport.Forbidden("pm agent is not bound to this project")
@@ -389,6 +398,9 @@ func (s *Store) UpdateTodoProgressByNode(nodeID string, in TodoProgressInput) (*
 	if !ok || task.UserID != agent.UserID {
 		return nil, transport.NotFound("task not found")
 	}
+	if appErr := s.ensureTaskProjectActiveUnsafe(task); appErr != nil {
+		return nil, appErr
+	}
 
 	todoIdx := findTodoIndex(task, in.TodoID)
 	if todoIdx < 0 {
@@ -453,6 +465,9 @@ func (s *Store) CompleteTodoByNodeWithMessageID(nodeID, messageID string, in Tod
 	task, ok := s.tasks[in.TaskID]
 	if !ok || task.UserID != agent.UserID {
 		return nil, transport.NotFound("task not found")
+	}
+	if appErr := s.ensureTaskProjectActiveUnsafe(task); appErr != nil {
+		return nil, appErr
 	}
 	todoIdx := findTodoIndex(task, in.TodoID)
 	if todoIdx < 0 {
@@ -532,6 +547,9 @@ func (s *Store) FailTodoByNodeWithMessageID(nodeID, messageID string, in TodoFai
 	task, ok := s.tasks[in.TaskID]
 	if !ok || task.UserID != agent.UserID {
 		return nil, transport.NotFound("task not found")
+	}
+	if appErr := s.ensureTaskProjectActiveUnsafe(task); appErr != nil {
+		return nil, appErr
 	}
 	todoIdx := findTodoIndex(task, in.TodoID)
 	if todoIdx < 0 {

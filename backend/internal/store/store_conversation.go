@@ -117,6 +117,9 @@ func (s *Store) AppendConversationMessage(userID, conversationID, content string
 	if !ok {
 		return nil, transport.NotFound("project not found")
 	}
+	if project.Status == "archived" {
+		return nil, transport.Conflict("PROJECT_ARCHIVED", "archived project cannot append messages")
+	}
 	if err := s.validateProjectPMAgentOnlineUnsafe(project); err != nil {
 		return nil, err
 	}

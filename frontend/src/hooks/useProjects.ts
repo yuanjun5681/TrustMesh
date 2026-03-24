@@ -52,6 +52,13 @@ export function useArchiveProject() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => projectsApi.archiveProject(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
+    onSuccess: (res, id) => {
+      const archivedProject = normalizeProject(res.data)
+      qc.setQueryData<Project | undefined>(['projects', id], archivedProject)
+      qc.setQueryData<Project[] | undefined>(['projects'], (projects) =>
+        projects?.map((project) => (project.id === archivedProject.id ? archivedProject : project)),
+      )
+      qc.invalidateQueries({ queryKey: ['projects'] })
+    },
   })
 }

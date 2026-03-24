@@ -40,6 +40,18 @@ export function useUpdateAgent() {
   })
 }
 
+export function useAgentStats(id: string | undefined) {
+  return useQuery({
+    queryKey: ['agents', id, 'stats'],
+    queryFn: async () => {
+      const res = await agentsApi.getAgentStats(id!)
+      return res.data
+    },
+    enabled: !!id,
+    staleTime: 30_000,
+  })
+}
+
 export function useDeleteAgent() {
   const qc = useQueryClient()
   return useMutation({

@@ -34,6 +34,7 @@ export function ConversationSheet({ projectId, open, onOpenChange, initialConver
 
   const isHistoryMode = !!initialConversationId
   const pmOffline = project?.pm_agent.status !== 'online'
+  const projectArchived = project?.status === 'archived'
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
@@ -80,6 +81,13 @@ export function ConversationSheet({ projectId, open, onOpenChange, initialConver
   }
 
   const handleSend = async (content: string, uiResponse?: UIResponse) => {
+    if (projectArchived) {
+      const message = '项目已归档，无法继续发送消息'
+      toast.error(message)
+      setError(message)
+      return
+    }
+
     setError(null)
     try {
       if (conversationId && conversation?.status === 'active') {
@@ -181,12 +189,14 @@ export function ConversationSheet({ projectId, open, onOpenChange, initialConver
               </div>
               <h2 className="text-xl font-semibold mb-2">提交新需求</h2>
               <p className="text-sm text-muted-foreground mb-8 text-center max-w-sm">
-                {pmOffline
+                {projectArchived
+                  ? '项目已归档，历史内容仍可查看，但不能继续发起协作'
+                  : pmOffline
                   ? 'PM Agent 当前离线，请等待上线后发起对话'
                   : '向 PM Agent 描述你的需求，AI 将帮你分析并规划任务'}
               </p>
 
-              {!pmOffline && (
+              {!pmOffline && !projectArchived && (
                 <div className="grid grid-cols-1 gap-3 w-full">
                   {[
                     { icon: ListTodo, label: '规划功能', text: '帮我设计一个用户注册登录模块，需要支持邮箱和手机号两种注册方式，包含密码强度校验、邮箱验证码、登录态管理等功能' },
@@ -233,13 +243,19 @@ export function ConversationSheet({ projectId, open, onOpenChange, initialConver
             <UIResponsePanel
               blocks={pendingUIBlocks}
               onSubmit={(content, uiResponse) => handleSend(content, uiResponse)}
-              disabled={appendMessage.isPending || pmOffline}
+              disabled={appendMessage.isPending || pmOffline || projectArchived}
             />
           ) : (
             <MessageInput
               onSend={handleSend}
-              disabled={(conversation ? appendMessage.isPending : createConversation.isPending) || pmOffline}
-              placeholder={pmOffline ? 'PM Agent 离线，无法发送消息' : '输入你的需求...'}
+              disabled={(conversation ? appendMessage.isPending : createConversation.isPending) || pmOffline || projectArchived}
+              placeholder={
+                projectArchived
+                  ? '项目已归档，无法发送消息'
+                  : pmOffline
+                  ? 'PM Agent 离线，无法发送消息'
+                  : '输入你的需求...'
+              }
               defaultValue={inputValue}
             />
           )}

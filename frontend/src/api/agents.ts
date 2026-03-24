@@ -3,6 +3,8 @@ import type {
   ApiResponse,
   ApiListResponse,
   Agent,
+  AgentInsights,
+  AgentStats,
   CreateAgentRequest,
   UpdateAgentRequest,
 } from '@/types'
@@ -25,4 +27,12 @@ export async function updateAgent(id: string, input: UpdateAgentRequest) {
 
 export async function deleteAgent(id: string) {
   await api.delete(`agents/${id}`)
+}
+
+export async function getAgentStats(id: string) {
+  return api.get(`agents/${id}/stats`).json<ApiResponse<AgentStats>>()
+}
+
+export async function getAgentInsights(id: string) {
+  return api.get(`agents/${id}/insights`).json<ApiResponse<AgentInsights>>()
 }

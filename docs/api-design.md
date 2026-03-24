@@ -136,6 +136,7 @@ GET    /api/v1/tasks/:id/events              获取事件流
 POST   /api/v1/agents                 添加 Agent（按 node_id 绑定）
 GET    /api/v1/agents                 列出我的 Agent
 GET    /api/v1/agents/:id             Agent 详情
+GET    /api/v1/agents/:id/insights    Agent 老板视角分析数据
 PATCH  /api/v1/agents/:id             更新 Agent 信息
 DELETE /api/v1/agents/:id             删除 Agent（仅未被引用时允许）
 ```
@@ -170,6 +171,14 @@ DELETE /api/v1/agents/:id             删除 Agent（仅未被引用时允许）
 - `role` 用于控制 PM 与执行 Agent 的权限边界。
 - `capabilities` 用于 PM Agent 规划 Todo 时筛选候选执行 Agent。
 - `GET /api/v1/agents` 和 `GET /api/v1/agents/:id` 应返回 Agent 在线状态相关字段，至少包括 `status`、`last_seen_at`，以支持前端展示。
+- `GET /api/v1/agents/:id/insights` 用于 Agent 详情页左侧分析卡片，应该直接返回后端聚合结果，而不是让前端扫描项目/任务后自行重算。
+- `GET /api/v1/agents/:id/insights` 当前关键口径：
+  - `pending_over_24h` 统计年龄超过 24 小时且尚未闭环的工作项，包含 `pending` 与 `in_progress`
+  - `oldest_pending_ms` 只看 `pending`
+  - `longest_in_progress_ms` 只看 `in_progress`
+  - PM Agent 暂无真实任务开始时间，`in_progress` 任务年龄暂以 `created_at` 作为起点
+  - 执行型 Agent 的 `response_p50_ms / response_p90_ms` 口径为 `started_at - created_at`
+  - 执行型 Agent 的 `completion_p50_ms / completion_p90_ms` 口径为 `completed_at - started_at`
 - 当 Agent 已被 `projects.pm_agent_id`、`tasks.pm_agent_id` 或 `tasks.todos[].assignee_agent_id` 引用时，不允许物理删除，应返回业务错误。
 
 ## 二、ClawSynapse 消息协议（Agent 使用）

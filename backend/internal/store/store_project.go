@@ -165,12 +165,74 @@ func (s *Store) ArchiveProject(userID, projectID string) (*model.Project, *trans
 	if !ok || p.UserID != userID {
 		return nil, transport.NotFound("project not found")
 	}
+
+	now := time.Now().UTC()
+	affectedAgents, err := s.resetArchivedProjectTasksUnsafe(p, now)
+	if err != nil {
+		return nil, mongoWriteError(err)
+	}
+
 	p.Status = "archived"
-	p.UpdatedAt = time.Now().UTC()
+	p.UpdatedAt = now
 	if err := s.persistProjectUnsafe(p); err != nil {
 		return nil, mongoWriteError(err)
 	}
+
+	for agentID := range affectedAgents {
+		s.refreshAgentExecutionStatusUnsafe(agentID, now)
+		if err := s.persistAgentGraphUnsafe(agentID); err != nil {
+			return nil, mongoWriteError(err)
+		}
+	}
 	return s.buildProjectViewUnsafe(p), nil
+}
+
+func (s *Store) resetArchivedProjectTasksUnsafe(project *model.Project, now time.Time) (map[string]struct{}, error) {
+	affectedAgents := make(map[string]struct{})
+
+	for _, taskID := range s.projectTasks[project.ID] {
+		task, ok := s.tasks[taskID]
+		if !ok || task.UserID != project.UserID {
+			continue
+		}
+
+		taskChanged := false
+		for i := range task.Todos {
+			todo := &task.Todos[i]
+			if todo.Status != "in_progress" {
+				continue
+			}
+
+			todo.Status = "pending"
+			todo.StartedAt = nil
+			todo.CompletedAt = nil
+			todo.FailedAt = nil
+			todo.Error = nil
+			affectedAgents[todo.Assignee.AgentID] = struct{}{}
+			taskChanged = true
+		}
+
+		if task.Status == "in_progress" {
+			task.Status = "pending"
+			taskChanged = true
+		}
+
+		if !taskChanged {
+			continue
+		}
+
+		task.Artifacts = aggregateTaskArtifacts(task.Todos)
+		task.Result = aggregateTaskResult(task.Todos, task.Status, task.Artifacts)
+		task.UpdatedAt = now
+		task.Version++
+
+		if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+			return nil, err
+		}
+		s.publishTaskUnsafe(task.ID)
+	}
+
+	return affectedAgents, nil
 }
 
 func (s *Store) GetProjectPMNode(userID, projectID string) (string, *transport.AppError) {
@@ -188,12 +250,34 @@ func (s *Store) GetProjectPMNode(userID, projectID string) (string, *transport.A
 	return agent.NodeID, nil
 }
 
+func (s *Store) CheckTaskProjectActive(taskID string) *transport.AppError {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	task, ok := s.tasks[taskID]
+	if !ok {
+		return transport.NotFound("task not found")
+	}
+	return s.ensureTaskProjectActiveUnsafe(task)
+}
+
 func (s *Store) projectForUserUnsafe(userID, projectID string) (*model.Project, *transport.AppError) {
 	p, ok := s.projects[projectID]
 	if !ok || p.UserID != userID {
 		return nil, transport.NotFound("project not found")
 	}
 	return p, nil
+}
+
+func (s *Store) ensureTaskProjectActiveUnsafe(task *model.TaskDetail) *transport.AppError {
+	project, ok := s.projects[task.ProjectID]
+	if !ok {
+		return transport.NotFound("project not found")
+	}
+	if project.Status == "archived" {
+		return transport.Conflict("PROJECT_ARCHIVED", "archived project cannot mutate tasks")
+	}
+	return nil
 }
 
 func (s *Store) pmAgentForUserUnsafe(userID, agentID string) (*model.Agent, *transport.AppError) {

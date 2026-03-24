@@ -311,6 +311,106 @@ export interface Notification {
   created_at: string
 }
 
+export interface DailyActivityItem {
+  date: string
+  completed: number
+  failed: number
+  created: number
+}
+
+export interface WorkloadItem {
+  todo_id: string
+  todo_title: string
+  task_id: string
+  task_title: string
+  project_id: string
+  started_at: string
+}
+
+export interface AgentStats {
+  role: string
+
+  // executor
+  todos_total: number
+  todos_done: number
+  todos_failed: number
+  todos_in_progress: number
+  todos_pending: number
+  success_rate: number
+  avg_response_time_ms: number | null
+  avg_completion_time_ms: number | null
+
+  // pm
+  projects_managed: number
+  tasks_created: number
+  tasks_done: number
+  tasks_failed: number
+  tasks_in_progress: number
+  tasks_pending: number
+  task_success_rate: number
+  conversation_replies: number
+
+  daily_activity: DailyActivityItem[]
+  current_workload: WorkloadItem[]
+}
+
+export interface AgentInsightAgingRow {
+  label: string
+  count: number
+}
+
+export interface AgentInsightPriorityRow {
+  priority: TaskPriority
+  label: string
+  total: number
+  done: number
+  failed: number
+  pending: number
+  in_progress: number
+  completion_rate: number
+}
+
+export interface AgentInsightProjectRow {
+  project_id: string
+  project_name: string
+  total: number
+  done: number
+  failed: number
+  pending: number
+  in_progress: number
+  completion_rate: number
+}
+
+export interface AgentInsightRiskItem {
+  id: string
+  kind: 'task' | 'todo'
+  title: string
+  subtitle: string
+  project_id: string
+  project_name: string
+  status: 'pending' | 'in_progress'
+  age_ms: number
+}
+
+export interface AgentInsights {
+  role: string
+  total_items: number
+  active_items: number
+  pending_over_24h: number
+  failures_last_7d: number
+  completions_last_7d: number
+  oldest_pending_ms: number | null
+  longest_in_progress_ms: number | null
+  response_p50_ms: number | null
+  response_p90_ms: number | null
+  completion_p50_ms: number | null
+  completion_p90_ms: number | null
+  aging: AgentInsightAgingRow[]
+  priority_breakdown: AgentInsightPriorityRow[]
+  project_contribution: AgentInsightProjectRow[]
+  risk_items: AgentInsightRiskItem[]
+}
+
 export interface DashboardStats {
   agents_online: number
   agents_total: number
