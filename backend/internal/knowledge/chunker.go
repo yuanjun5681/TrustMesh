@@ -6,9 +6,9 @@ import (
 )
 
 const (
-	DefaultChunkSize    = 512  // target tokens per chunk
-	DefaultChunkOverlap = 64   // overlap tokens between chunks
-	ApproxCharsPerToken = 4    // rough estimate for English/Chinese mixed text
+	DefaultChunkSize    = 512 // target tokens per chunk
+	DefaultChunkOverlap = 64  // overlap tokens between chunks
+	ApproxCharsPerToken = 4   // rough estimate for English/Chinese mixed text
 )
 
 // ChunkResult holds one chunk and its metadata.
@@ -18,17 +18,17 @@ type ChunkResult struct {
 	Metadata   map[string]any
 }
 
+type markdownSection struct {
+	Heading string
+	Content string
+}
+
 // ChunkText splits text into overlapping chunks.
 // For markdown, it tries to split on headings first.
 func ChunkText(text string, mimeType string, chunkSize, overlap int) []ChunkResult {
-	if chunkSize <= 0 {
-		chunkSize = DefaultChunkSize
-	}
-	if overlap < 0 {
-		overlap = DefaultChunkOverlap
-	}
+	chunkSize, overlap = normalizeChunkParams(chunkSize, overlap)
 
-	if isMarkdown(mimeType) {
+	if isMarkdown(text, mimeType) {
 		chunks := chunkMarkdown(text, chunkSize, overlap)
 		if len(chunks) > 0 {
 			return chunks
@@ -38,25 +38,122 @@ func ChunkText(text string, mimeType string, chunkSize, overlap int) []ChunkResu
 	return chunkPlainText(text, chunkSize, overlap)
 }
 
-func isMarkdown(mimeType string) bool {
-	return strings.Contains(mimeType, "markdown") || strings.HasSuffix(mimeType, ".md")
+func normalizeChunkParams(chunkSize, overlap int) (int, int) {
+	if chunkSize <= 0 {
+		chunkSize = DefaultChunkSize
+	}
+	if overlap < 0 {
+		overlap = DefaultChunkOverlap
+	}
+	if overlap >= chunkSize {
+		if chunkSize <= 1 {
+			overlap = 0
+		} else {
+			overlap = chunkSize - 1
+		}
+	}
+	return chunkSize, overlap
+}
+
+func isMarkdown(text, mimeType string) bool {
+	mimeType = strings.ToLower(strings.TrimSpace(mimeType))
+	if strings.Contains(mimeType, "markdown") || strings.HasSuffix(mimeType, ".md") {
+		return true
+	}
+	return looksLikeMarkdown(text)
+}
+
+func looksLikeMarkdown(text string) bool {
+	lines := strings.Split(text, "\n")
+	if len(lines) > 32 {
+		lines = lines[:32]
+	}
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if isMarkdownHeading(trimmed) {
+			return true
+		}
+		if _, ok := markdownFenceMarker(trimmed); ok {
+			return true
+		}
+	}
+	return false
+}
+
+func isMarkdownHeading(line string) bool {
+	if line == "" || line[0] != '#' {
+		return false
+	}
+	level := 0
+	for level < len(line) && level < 6 && line[level] == '#' {
+		level++
+	}
+	if level == 0 || level > 6 {
+		return false
+	}
+	return level == len(line) || line[level] == ' ' || line[level] == '\t'
+}
+
+func extractMarkdownHeading(line string) string {
+	line = strings.TrimSpace(line)
+	level := 0
+	for level < len(line) && level < 6 && line[level] == '#' {
+		level++
+	}
+	return strings.TrimSpace(line[level:])
+}
+
+func markdownFenceMarker(line string) (string, bool) {
+	switch {
+	case strings.HasPrefix(line, "```"):
+		return "```", true
+	case strings.HasPrefix(line, "~~~"):
+		return "~~~", true
+	default:
+		return "", false
+	}
 }
 
 // chunkMarkdown splits on markdown headings, then sub-chunks large sections.
 func chunkMarkdown(text string, chunkSize, overlap int) []ChunkResult {
 	lines := strings.Split(text, "\n")
-	var sections []string
+	var sections []markdownSection
 	var current strings.Builder
+	currentHeading := ""
+	inFence := false
+	fenceMarker := ""
 	for _, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "#") && current.Len() > 0 {
-			sections = append(sections, current.String())
+		trimmed := strings.TrimSpace(line)
+		if marker, ok := markdownFenceMarker(trimmed); ok {
+			if !inFence {
+				inFence = true
+				fenceMarker = marker
+			} else if marker == fenceMarker {
+				inFence = false
+				fenceMarker = ""
+			}
+		}
+		if !inFence && isMarkdownHeading(trimmed) && current.Len() > 0 {
+			sections = append(sections, markdownSection{
+				Heading: currentHeading,
+				Content: current.String(),
+			})
 			current.Reset()
+			currentHeading = extractMarkdownHeading(trimmed)
+		} else if !inFence && isMarkdownHeading(trimmed) && current.Len() == 0 {
+			currentHeading = extractMarkdownHeading(trimmed)
 		}
 		current.WriteString(line)
 		current.WriteString("\n")
 	}
 	if current.Len() > 0 {
-		sections = append(sections, current.String())
+		sections = append(sections, markdownSection{
+			Heading: currentHeading,
+			Content: current.String(),
+		})
 	}
 
 	if len(sections) <= 1 {
@@ -65,19 +162,34 @@ func chunkMarkdown(text string, chunkSize, overlap int) []ChunkResult {
 
 	var results []ChunkResult
 	for _, section := range sections {
-		section = strings.TrimSpace(section)
-		if section == "" {
+		content := strings.TrimSpace(section.Content)
+		if content == "" {
 			continue
 		}
-		tokenCount := estimateTokens(section)
+		metadata := map[string]any{}
+		if section.Heading != "" {
+			metadata["heading"] = section.Heading
+		}
+		tokenCount := estimateTokens(content)
 		if tokenCount <= chunkSize {
 			results = append(results, ChunkResult{
-				Content:    section,
+				Content:    content,
 				TokenCount: tokenCount,
-				Metadata:   map[string]any{},
+				Metadata:   metadata,
 			})
 		} else {
-			sub := chunkPlainText(section, chunkSize, overlap)
+			sub := chunkPlainText(content, chunkSize, overlap)
+			for i := range sub {
+				if len(metadata) == 0 {
+					continue
+				}
+				if sub[i].Metadata == nil {
+					sub[i].Metadata = map[string]any{}
+				}
+				for key, value := range metadata {
+					sub[i].Metadata[key] = value
+				}
+			}
 			results = append(results, sub...)
 		}
 	}
@@ -127,13 +239,14 @@ func chunkPlainText(text string, chunkSize, overlap int) []ChunkResult {
 			})
 		}
 
-		start = end - charOverlap
-		if start < 0 {
-			start = 0
+		nextStart := end - charOverlap
+		if nextStart <= start {
+			nextStart = end
 		}
-		if start >= end {
-			break
+		if nextStart < 0 {
+			nextStart = 0
 		}
+		start = nextStart
 	}
 	return results
 }
