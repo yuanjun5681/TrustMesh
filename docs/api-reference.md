@@ -408,7 +408,49 @@ export interface ApiListResponse<T> {
 | `metadata` | `object` | 结构化附加字段 |
 | `created_at` | `string` | 创建时间 |
 
-### 2.17 TypeScript 领域类型名建议
+### 2.17 KnowledgeDocument
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | `string` | 知识文档 ID，当前前缀为 `kb_` |
+| `project_id` | `string \| null` | 关联项目 ID；为空表示用户级共享文档 |
+| `title` | `string` | 文档标题 |
+| `description` | `string` | 文档描述 |
+| `doc_type` | `string` | 文档类型，默认 `document` |
+| `mime_type` | `string` | MIME 类型 |
+| `file_size` | `number` | 文件大小，单位字节 |
+| `status` | `"processing" \| "ready" \| "failed"` | 处理状态 |
+| `chunk_count` | `number` | 已生成 chunk 数量 |
+| `tags` | `string[]` | 标签列表 |
+| `metadata` | `object` | 扩展元数据 |
+| `created_at` | `string` | 创建时间 |
+| `updated_at` | `string` | 更新时间 |
+
+### 2.18 KnowledgeChunk
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | `string` | Chunk ID |
+| `document_id` | `string` | 所属知识文档 ID |
+| `chunk_index` | `number` | 文档内顺序索引，从 `0` 开始 |
+| `content` | `string` | Chunk 正文 |
+| `token_count` | `number` | 近似 token 数 |
+| `metadata` | `object` | Chunk 元数据；Markdown 文档可能包含 `heading` |
+| `created_at` | `string` | 创建时间 |
+
+### 2.19 KnowledgeSearchResultItem
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `chunk_id` | `string` | 命中的 chunk ID |
+| `document_id` | `string` | 所属知识文档 ID |
+| `document_title` | `string` | 所属知识文档标题 |
+| `content` | `string` | 命中的 chunk 内容 |
+| `score` | `number` | 检索分数；文本回退检索当前固定为 `1` |
+| `chunk_index` | `number` | chunk 在文档内顺序索引 |
+| `metadata` | `object` | chunk 元数据 |
+
+### 2.20 TypeScript 领域类型名建议
 
 建议前端领域模型直接使用以下类型名：
 
@@ -429,6 +471,9 @@ export type TaskResult = { /* 对应 2.13 */ }
 export type TaskListItem = { /* 对应 2.14 */ }
 export type TaskDetail = { /* 对应 2.15 */ }
 export type TaskEvent = { /* 对应 2.16 */ }
+export type KnowledgeDocument = { /* 对应 2.17 */ }
+export type KnowledgeChunk = { /* 对应 2.18 */ }
+export type KnowledgeSearchResultItem = { /* 对应 2.19 */ }
 ```
 
 ## 三、认证接口
@@ -1047,9 +1092,182 @@ export type TaskEvent = { /* 对应 2.16 */ }
   - 仅包含 `pending` 与 `in_progress` 工作项
   - 按年龄倒序返回前 4 项
 
-## 八、前端调用建议
+## 八、知识库接口
 
-### 8.0 建议的 SDK 方法签名
+说明：
+
+- 知识库接口统一前缀为 `/api/v1/knowledge`
+- 除上传接口外，其余接口仍使用 `application/json`
+- 上传接口使用 `multipart/form-data`
+- 当向量检索能力不可用时，`POST /api/v1/knowledge/search` 会自动退化为文本包含匹配
+
+### 8.1 上传知识文档
+
+`POST /api/v1/knowledge/documents`
+
+请求头：
+
+```http
+Content-Type: multipart/form-data
+```
+
+表单字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `file` | `File` | 是 | 上传文件 |
+| `title` | `string` | 否 | 文档标题；为空时默认使用文件名 |
+| `description` | `string` | 否 | 文档描述 |
+| `doc_type` | `string` | 否 | 文档类型；为空时默认 `document` |
+| `project_id` | `string` | 否 | 关联项目 ID |
+| `tags` | `string` | 否 | 逗号分隔标签，如 `design,api,faq` |
+
+响应：
+
+- `201 Created`
+- `data` 为 [`KnowledgeDocument`](#217-knowledgedocument)
+
+说明：
+
+- 上传成功后文档先进入 `processing`
+- 若服务未启用 embedding/向量检索，文档会直接转为 `ready`，`chunk_count` 可能为 `0`
+
+### 8.2 知识文档列表
+
+`GET /api/v1/knowledge/documents`
+
+查询参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `project_id` | `string` | 否 | 仅返回指定项目下文档 |
+| `status` | `"processing" \| "ready" \| "failed"` | 否 | 按处理状态筛选 |
+| `tag` | `string` | 否 | 按单个标签筛选 |
+
+响应：
+
+- `200 OK`
+- `data.items` 为 [`KnowledgeDocument[]`](#217-knowledgedocument)
+
+### 8.3 知识文档详情
+
+`GET /api/v1/knowledge/documents/:id`
+
+路径参数：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `id` | `string` | 知识文档 ID |
+
+响应：
+
+- `200 OK`
+- `data` 为 [`KnowledgeDocument`](#217-knowledgedocument)
+
+### 8.4 更新知识文档
+
+`PATCH /api/v1/knowledge/documents/:id`
+
+路径参数：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `id` | `string` | 知识文档 ID |
+
+请求体：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `title` | `string` | 否 | 文档标题 |
+| `description` | `string` | 否 | 文档描述 |
+| `tags` | `string[]` | 否 | 标签列表；传入后整体覆盖 |
+
+响应：
+
+- `200 OK`
+- `data` 为更新后的 [`KnowledgeDocument`](#217-knowledgedocument)
+
+### 8.5 删除知识文档
+
+`DELETE /api/v1/knowledge/documents/:id`
+
+路径参数：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `id` | `string` | 知识文档 ID |
+
+响应：
+
+- `200 OK`
+- `data` 为已删除的 [`KnowledgeDocument`](#217-knowledgedocument)
+
+说明：
+
+- 服务端会同步删除本地存储文件
+- 若启用了 Qdrant，也会删除该文档关联的向量
+
+### 8.6 获取知识文档分块
+
+`GET /api/v1/knowledge/documents/:id/chunks`
+
+路径参数：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `id` | `string` | 知识文档 ID |
+
+响应：
+
+- `200 OK`
+- `data.items` 为 [`KnowledgeChunk[]`](#218-knowledgechunk)
+
+### 8.7 重新处理知识文档
+
+`POST /api/v1/knowledge/documents/:id/reprocess`
+
+路径参数：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `id` | `string` | 知识文档 ID |
+
+响应：
+
+- `200 OK`
+- `data.status` 固定为 `"processing"`
+
+说明：
+
+- 服务端会先把文档状态重置为 `processing`
+- 若启用了 Qdrant，会先清理旧向量，再重新切块与索引
+
+### 8.8 检索知识库
+
+`POST /api/v1/knowledge/search`
+
+请求体：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `query` | `string` | 是 | 检索词 |
+| `project_id` | `string` | 否 | 限定在指定项目上下文检索 |
+| `top_k` | `number` | 否 | 返回结果上限；默认 `5` |
+| `min_score` | `number` | 否 | 最低相似度阈值；默认 `0.7` |
+
+响应：
+
+- `200 OK`
+- `data.items` 为 [`KnowledgeSearchResultItem[]`](#219-knowledgesearchresultitem)
+
+说明：
+
+- `query` 为空时返回 `400 Bad Request`
+- 文本回退检索的 `score` 当前固定为 `1`
+
+## 九、前端调用建议
+
+### 9.0 建议的 SDK 方法签名
 
 ```ts
 register(input: AuthRegisterRequest): Promise<ApiResponse<AuthSuccessData>>
@@ -1075,9 +1293,18 @@ listAgents(): Promise<ApiListResponse<Agent>>
 getAgent(id: string): Promise<ApiResponse<Agent>>
 updateAgent(id: string, input: UpdateAgentRequest): Promise<ApiResponse<Agent>>
 deleteAgent(id: string): Promise<void>
+
+uploadKnowledgeDocument(input: UploadKnowledgeDocumentRequest): Promise<ApiResponse<KnowledgeDocument>>
+listKnowledgeDocuments(query?: ListKnowledgeDocumentsQuery): Promise<ApiListResponse<KnowledgeDocument>>
+getKnowledgeDocument(id: string): Promise<ApiResponse<KnowledgeDocument>>
+updateKnowledgeDocument(id: string, input: UpdateKnowledgeDocumentRequest): Promise<ApiResponse<KnowledgeDocument>>
+deleteKnowledgeDocument(id: string): Promise<ApiResponse<KnowledgeDocument>>
+listKnowledgeChunks(id: string): Promise<ApiListResponse<KnowledgeChunk>>
+reprocessKnowledgeDocument(id: string): Promise<ApiResponse<{ status: "processing" }>>
+searchKnowledge(input: KnowledgeSearchRequest): Promise<ApiListResponse<KnowledgeSearchResultItem>>
 ```
 
-### 8.1 建议的请求类型名
+### 9.1 建议的请求类型名
 
 ```ts
 export interface AuthRegisterRequest {
@@ -1133,22 +1360,50 @@ export interface UpdateAgentRequest {
   description?: string
   capabilities?: string[]
 }
+
+export interface UploadKnowledgeDocumentRequest {
+  file: File
+  title?: string
+  description?: string
+  doc_type?: string
+  project_id?: string
+  tags?: string[]
+}
+
+export interface ListKnowledgeDocumentsQuery {
+  project_id?: string
+  status?: "processing" | "ready" | "failed"
+  tag?: string
+}
+
+export interface UpdateKnowledgeDocumentRequest {
+  title?: string
+  description?: string
+  tags?: string[]
+}
+
+export interface KnowledgeSearchRequest {
+  query: string
+  project_id?: string
+  top_k?: number
+  min_score?: number
+}
 ```
 
-### 8.2 ConversationPage
+### 9.2 ConversationPage
 
 - 先调 `GET /api/v1/projects/:projectId/conversations`
 - 若没有 `active` 对话，首发消息走 `POST /api/v1/projects/:projectId/conversations`
 - 若有 `active` 对话，发消息走 `POST /api/v1/conversations/:id/messages`
 - 轮询 `GET /api/v1/conversations/:id` 读取 PM 回复和 `linked_task`
 
-### 8.3 ProjectBoardPage
+### 9.3 ProjectBoardPage
 
 - 调 `GET /api/v1/projects/:projectId/tasks?status=...` 拉取看板列数据
 - 点开任务后调 `GET /api/v1/tasks/:id`
 - 时间线单独调 `GET /api/v1/tasks/:id/events`
 
-### 8.4 AgentListPage
+### 9.4 AgentListPage
 
 - 调 `GET /api/v1/agents` 展示名称、角色、能力、状态、最近心跳时间
 - 新增、编辑成功后，刷新 `GET /api/v1/agents`
