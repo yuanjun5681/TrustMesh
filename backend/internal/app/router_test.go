@@ -66,7 +66,8 @@ func TestHappyPathAuthToConversation(t *testing.T) {
 	application, err := New(config.Config{
 		Port:               "0",
 		JWTSecret:          "test-secret",
-		TokenTTL:           time.Hour,
+		AccessTokenTTL:     time.Hour,
+		RefreshTokenTTL:    168 * time.Hour,
 		LogLevel:           "error",
 		AllowAllCORS:       true,
 		ReadTimeout:        3 * time.Second,
@@ -95,7 +96,7 @@ func TestHappyPathAuthToConversation(t *testing.T) {
 		t.Fatalf("register status=%d", registerResp.StatusCode)
 	}
 	registerData := decodeBody(t, registerResp)
-	token := nestedString(registerData, "data", "token")
+	token := nestedString(registerData, "data", "access_token")
 	if token == "" {
 		t.Fatal("empty register token")
 	}
@@ -181,7 +182,8 @@ func TestCreateAgentRejectsOfflineNode(t *testing.T) {
 	application, err := New(config.Config{
 		Port:               "0",
 		JWTSecret:          "test-secret",
-		TokenTTL:           time.Hour,
+		AccessTokenTTL:     time.Hour,
+		RefreshTokenTTL:    168 * time.Hour,
 		LogLevel:           "error",
 		AllowAllCORS:       true,
 		ReadTimeout:        3 * time.Second,
@@ -206,7 +208,7 @@ func TestCreateAgentRejectsOfflineNode(t *testing.T) {
 		"name":     "Offline Node User",
 		"password": "StrongPass123!",
 	})
-	token := nestedString(decodeBody(t, registerResp), "data", "token")
+	token := nestedString(decodeBody(t, registerResp), "data", "access_token")
 
 	agentResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/agents", token, map[string]any{
 		"node_id":      "node-offline-001",
@@ -265,7 +267,8 @@ func TestCreateConversationPublishesInitialPMBrief(t *testing.T) {
 	application, err := New(config.Config{
 		Port:               "0",
 		JWTSecret:          "test-secret",
-		TokenTTL:           time.Hour,
+		AccessTokenTTL:     time.Hour,
+		RefreshTokenTTL:    168 * time.Hour,
 		LogLevel:           "error",
 		AllowAllCORS:       true,
 		ReadTimeout:        3 * time.Second,
@@ -290,7 +293,7 @@ func TestCreateConversationPublishesInitialPMBrief(t *testing.T) {
 		"name":     "Brief User",
 		"password": "StrongPass123!",
 	})
-	token := nestedString(decodeBody(t, registerResp), "data", "token")
+	token := nestedString(decodeBody(t, registerResp), "data", "access_token")
 
 	pmResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/agents", token, map[string]any{
 		"node_id":      "node-pm-001",
@@ -435,7 +438,8 @@ func TestDispatchTodoPublishesAssignmentToAssignee(t *testing.T) {
 	application, err := New(config.Config{
 		Port:               "0",
 		JWTSecret:          "test-secret",
-		TokenTTL:           time.Hour,
+		AccessTokenTTL:     time.Hour,
+		RefreshTokenTTL:    168 * time.Hour,
 		LogLevel:           "error",
 		AllowAllCORS:       true,
 		ReadTimeout:        3 * time.Second,
@@ -461,7 +465,7 @@ func TestDispatchTodoPublishesAssignmentToAssignee(t *testing.T) {
 		"password": "StrongPass123!",
 	})
 	registerData := decodeBody(t, registerResp)
-	token := nestedString(registerData, "data", "token")
+	token := nestedString(registerData, "data", "access_token")
 	userID := nestedString(registerData, "data", "user", "id")
 
 	pm, appErr := application.Store.CreateAgent(userID, "node-pm-001", "PM Agent", "pm", "PM", []string{"plan"})
@@ -607,7 +611,8 @@ func TestDispatchTodoDoesNotPublishForArchivedProject(t *testing.T) {
 	application, err := New(config.Config{
 		Port:               "0",
 		JWTSecret:          "test-secret",
-		TokenTTL:           time.Hour,
+		AccessTokenTTL:     time.Hour,
+		RefreshTokenTTL:    168 * time.Hour,
 		LogLevel:           "error",
 		AllowAllCORS:       true,
 		ReadTimeout:        3 * time.Second,
@@ -633,7 +638,7 @@ func TestDispatchTodoDoesNotPublishForArchivedProject(t *testing.T) {
 		"password": "StrongPass123!",
 	})
 	registerData := decodeBody(t, registerResp)
-	token := nestedString(registerData, "data", "token")
+	token := nestedString(registerData, "data", "access_token")
 	userID := nestedString(registerData, "data", "user", "id")
 
 	pm, appErr := application.Store.CreateAgent(userID, "node-pm-001", "PM Agent", "pm", "PM", []string{"plan"})
@@ -704,7 +709,8 @@ func TestUserRealtimeStreamPushesDomainEvents(t *testing.T) {
 	application, err := New(config.Config{
 		Port:          "0",
 		JWTSecret:     "test-secret",
-		TokenTTL:      time.Hour,
+		AccessTokenTTL:  time.Hour,
+		RefreshTokenTTL: 168 * time.Hour,
 		LogLevel:      "error",
 		AllowAllCORS:  true,
 		ReadTimeout:   3 * time.Second,
@@ -728,7 +734,7 @@ func TestUserRealtimeStreamPushesDomainEvents(t *testing.T) {
 		"password": "StrongPass123!",
 	})
 	registerData := decodeBody(t, registerResp)
-	token := nestedString(registerData, "data", "token")
+	token := nestedString(registerData, "data", "access_token")
 	userID := nestedString(registerData, "data", "user", "id")
 
 	pm, appErr := application.Store.CreateAgent(userID, "node-pm-001", "PM Agent", "pm", "PM", []string{"plan"})
@@ -850,7 +856,8 @@ func TestUserRealtimeStreamPushesNotificationReadLifecycle(t *testing.T) {
 	application, err := New(config.Config{
 		Port:          "0",
 		JWTSecret:     "test-secret",
-		TokenTTL:      time.Hour,
+		AccessTokenTTL:  time.Hour,
+		RefreshTokenTTL: 168 * time.Hour,
 		LogLevel:      "error",
 		AllowAllCORS:  true,
 		ReadTimeout:   3 * time.Second,
@@ -874,7 +881,7 @@ func TestUserRealtimeStreamPushesNotificationReadLifecycle(t *testing.T) {
 		"password": "StrongPass123!",
 	})
 	registerData := decodeBody(t, registerResp)
-	token := nestedString(registerData, "data", "token")
+	token := nestedString(registerData, "data", "access_token")
 	userID := nestedString(registerData, "data", "user", "id")
 
 	pm, appErr := application.Store.CreateAgent(userID, "node-pm-001", "PM Agent", "pm", "PM", []string{"plan"})
@@ -967,7 +974,8 @@ func TestGetTaskArtifactTransfer(t *testing.T) {
 	application, err := New(config.Config{
 		Port:               "0",
 		JWTSecret:          "test-secret",
-		TokenTTL:           time.Hour,
+		AccessTokenTTL:     time.Hour,
+		RefreshTokenTTL:    168 * time.Hour,
 		LogLevel:           "error",
 		AllowAllCORS:       true,
 		ReadTimeout:        3 * time.Second,
@@ -993,7 +1001,7 @@ func TestGetTaskArtifactTransfer(t *testing.T) {
 		"password": "StrongPass123!",
 	})
 	registerData := decodeBody(t, registerResp)
-	token := nestedString(registerData, "data", "token")
+	token := nestedString(registerData, "data", "access_token")
 	userID := nestedString(registerData, "data", "user", "id")
 
 	pm, appErr := application.Store.CreateAgent(userID, "node-pm-001", "PM Agent", "pm", "pm", []string{"plan"})
@@ -1069,7 +1077,8 @@ func TestGetTaskArtifactContent(t *testing.T) {
 	application, err := New(config.Config{
 		Port:          "0",
 		JWTSecret:     "test-secret",
-		TokenTTL:      time.Hour,
+		AccessTokenTTL:  time.Hour,
+		RefreshTokenTTL: 168 * time.Hour,
 		LogLevel:      "error",
 		AllowAllCORS:  true,
 		ReadTimeout:   3 * time.Second,
@@ -1093,7 +1102,7 @@ func TestGetTaskArtifactContent(t *testing.T) {
 		"password": "StrongPass123!",
 	})
 	registerData := decodeBody(t, registerResp)
-	token := nestedString(registerData, "data", "token")
+	token := nestedString(registerData, "data", "access_token")
 	userID := nestedString(registerData, "data", "user", "id")
 
 	pm, appErr := application.Store.CreateAgent(userID, "node-pm-001", "PM Agent", "pm", "pm", []string{"plan"})
@@ -1139,7 +1148,7 @@ func TestGetTaskArtifactContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create temp file: %v", err)
 	}
-	content := "# Git guide\n\nhello"
+	content := "# Git 指南\n\n你好，世界"
 	if _, err := tmpFile.WriteString(content); err != nil {
 		t.Fatalf("write temp file: %v", err)
 	}
@@ -1187,6 +1196,9 @@ func TestGetTaskArtifactContent(t *testing.T) {
 	}
 	if string(body) != content {
 		t.Fatalf("unexpected content body: %s", string(body))
+	}
+	if got := resp.Header.Get("Content-Type"); got != "text/markdown; charset=utf-8" {
+		t.Fatalf("unexpected content type: %s", got)
 	}
 	if !strings.Contains(resp.Header.Get("Content-Disposition"), `filename="git-guide.md"`) {
 		t.Fatalf("unexpected content disposition: %s", resp.Header.Get("Content-Disposition"))

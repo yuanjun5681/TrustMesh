@@ -42,6 +42,9 @@ type Store struct {
 	notifications     map[string]*model.Notification
 	userNotifications map[string][]string
 
+	knowledgeDocs     map[string]*model.KnowledgeDocument
+	userKnowledgeDocs map[string][]string // userID → []docID
+
 	mongoEnabled           bool
 	mongoClient            *mongo.Client
 	mongoUsers             *mongo.Collection
@@ -53,6 +56,8 @@ type Store struct {
 	mongoComments          *mongo.Collection
 	mongoProcessedMessages *mongo.Collection
 	mongoNotifications     *mongo.Collection
+	mongoKnowledgeDocs     *mongo.Collection
+	mongoKnowledgeChunks   *mongo.Collection
 	mongoTimeout           time.Duration
 	log                    *zap.Logger
 
@@ -88,6 +93,8 @@ func New() *Store {
 		taskComments:         make(map[string][]model.Comment),
 		notifications:        make(map[string]*model.Notification),
 		userNotifications:    make(map[string][]string),
+		knowledgeDocs:        make(map[string]*model.KnowledgeDocument),
+		userKnowledgeDocs:    make(map[string][]string),
 		userSubscribers:      make(map[string]map[chan model.UserStreamEvent]struct{}),
 	}
 }

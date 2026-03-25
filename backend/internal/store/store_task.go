@@ -62,11 +62,14 @@ func (s *Store) ListUserEvents(userID string, limit int) []model.Event {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	events := s.userEvents[userID]
-	if limit <= 0 || limit > len(events) {
+	if limit <= 0 {
 		limit = len(events)
 	}
-	result := make([]model.Event, 0, limit)
+	result := make([]model.Event, 0, min(limit, len(events)))
 	for i := len(events) - 1; i >= 0 && len(result) < limit; i-- {
+		if events[i].EventType == "agent_status_changed" {
+			continue
+		}
 		result = append(result, *events[i])
 	}
 	return result

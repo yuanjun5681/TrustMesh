@@ -35,7 +35,7 @@ export const useThemeStore = create<ThemeState>()(
         return theme
       },
     }),
-    { name: 'theme-storage', partialize: (state) => ({ theme: state.theme }) }
+    { name: 'trustmesh:theme', partialize: (state) => ({ theme: state.theme }) }
   )
 )
 

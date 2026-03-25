@@ -34,6 +34,11 @@ func RequireAuth(jwtManager *auth.JWTManager) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		if claims.TokenType != auth.TokenTypeAccess {
+			transport.WriteError(c, transport.Unauthorized("invalid token type"))
+			c.Abort()
+			return
+		}
 		c.Set(userIDKey, claims.UserID)
 		c.Next()
 	}

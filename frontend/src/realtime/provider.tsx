@@ -17,7 +17,7 @@ import { applyConversationUpdated } from './reducers/conversations'
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
-  const isAuthenticated = useAuthStore((state) => !!state.token)
+  const isAuthenticated = useAuthStore((state) => !!state.refreshToken)
   const [status, setStatus] = useState<RealtimeStatus>('idle')
 
   useEffect(() => {

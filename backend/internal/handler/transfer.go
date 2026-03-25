@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -114,6 +115,7 @@ func (h *TransferHandler) GetTaskArtifactContent(c *gin.Context) {
 			return
 		}
 	}
+	mimeType = normalizeTextContentType(mimeType)
 	if mimeType != "" {
 		c.Header("Content-Type", mimeType)
 	}
@@ -239,6 +241,28 @@ func detectContentType(file *os.File) string {
 		return ""
 	}
 	return http.DetectContentType(buf[:n])
+}
+
+func normalizeTextContentType(contentType string) string {
+	contentType = strings.TrimSpace(contentType)
+	if contentType == "" {
+		return ""
+	}
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		if strings.HasPrefix(strings.ToLower(contentType), "text/") && !strings.Contains(strings.ToLower(contentType), "charset=") {
+			return contentType + "; charset=utf-8"
+		}
+		return contentType
+	}
+	if !strings.HasPrefix(strings.ToLower(mediaType), "text/") {
+		return contentType
+	}
+	if _, ok := params["charset"]; ok {
+		return contentType
+	}
+	params["charset"] = "utf-8"
+	return mime.FormatMediaType(mediaType, params)
 }
 
 func fileModTime(info os.FileInfo) time.Time {

@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuthStore } from '@/stores/authStore'
 import * as authApi from '@/api/auth'
 import { ApiRequestError } from '@/api/client'
+import agentNetworkSvg from '@/assets/agent-network.svg'
 
 const MIN_PASSWORD_LENGTH = 8
 
@@ -39,7 +39,7 @@ export function RegisterPage() {
     setLoading(true)
     try {
       const res = await authApi.register({ email, name, password })
-      setAuth(res.data.token, res.data.user)
+      setAuth(res.data.access_token, res.data.refresh_token, res.data.user)
       navigate('/projects')
     } catch (err) {
       if (err instanceof ApiRequestError) setError(getRegisterErrorMessage(err))
@@ -50,67 +50,102 @@ export function RegisterPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 px-4">
-      <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground text-lg font-bold">
+    <div className="flex min-h-screen">
+      {/* Left: Brand hero */}
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-[#0c0a1a] items-center justify-center">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(109,95,245,0.15),transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,rgba(139,127,248,0.1),transparent_60%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(139,127,248,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(139,127,248,0.03)_1px,transparent_1px)] bg-[size:48px_48px]" />
+
+        <div className="relative z-10 flex flex-col items-center px-12 max-w-lg">
+          <div className="mb-6 flex size-14 items-center justify-center rounded-2xl bg-primary/20 border border-primary/30 text-primary text-xl font-bold backdrop-blur-sm">
             T
           </div>
-          <h1 className="text-2xl font-bold">创建账号</h1>
-          <p className="mt-1 text-sm text-muted-foreground">注册 TrustMesh 开始 AI 驱动的协作</p>
+          <h2 className="text-3xl font-bold text-white mb-3 text-center">TrustMesh</h2>
+          <p className="text-base text-[#a1a1aa] text-center mb-10 leading-relaxed">
+            多个 AI Agent 汇聚在同一工作空间，协同编排任务、驱动项目交付
+          </p>
+
+          <img
+            src={agentNetworkSvg}
+            alt="Agent Network"
+            className="w-full max-w-md"
+          />
+
+          <div className="mt-10 flex items-center gap-3 text-sm text-[#71717a]">
+            <span className="inline-block size-2 rounded-full bg-[#22c55e] animate-pulse" />
+            多 Agent 协作网络
+          </div>
         </div>
-        <Card>
-          <CardHeader className="pb-4">
-            <CardTitle className="text-lg">注册</CardTitle>
-            <CardDescription>填写信息创建新账号</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium">邮箱</label>
-                <Input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  required
-                  autoFocus
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium">用户名</label>
-                <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="输入用户名"
-                  required
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium">密码</label>
-                <Input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={`设置密码（至少 ${MIN_PASSWORD_LENGTH} 位）`}
-                  required
-                  minLength={MIN_PASSWORD_LENGTH}
-                />
-                <p className="text-xs text-muted-foreground">密码至少需要 {MIN_PASSWORD_LENGTH} 位</p>
-              </div>
-              {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? '注册中...' : '注册'}
-              </Button>
-            </form>
-            <p className="mt-4 text-center text-sm text-muted-foreground">
-              已有账号？{' '}
-              <Link to="/login" className="text-primary hover:underline font-medium">
-                登录
-              </Link>
+      </div>
+
+      {/* Right: Register form */}
+      <div className="flex flex-1 items-center justify-center px-6 py-12 bg-background">
+        <div className="w-full max-w-sm">
+          {/* Mobile logo */}
+          <div className="mb-8 text-center lg:hidden">
+            <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground text-lg font-bold">
+              T
+            </div>
+            <h1 className="text-xl font-bold">TrustMesh</h1>
+          </div>
+
+          <div className="mb-8">
+            <h1 className="text-2xl font-bold tracking-tight">创建账号</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              注册 TrustMesh 开始 AI 驱动的协作
             </p>
-          </CardContent>
-        </Card>
+          </div>
+
+          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">邮箱</label>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                required
+                autoFocus
+                className="h-11"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">用户名</label>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="输入用户名"
+                required
+                className="h-11"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">密码</label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={`设置密码（至少 ${MIN_PASSWORD_LENGTH} 位）`}
+                required
+                minLength={MIN_PASSWORD_LENGTH}
+                className="h-11"
+              />
+              <p className="text-xs text-muted-foreground">密码至少需要 {MIN_PASSWORD_LENGTH} 位</p>
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button type="submit" className="w-full h-11 mt-1" disabled={loading}>
+              {loading ? '注册中...' : '注册'}
+            </Button>
+          </form>
+
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            已有账号？{' '}
+            <Link to="/login" className="text-primary hover:underline font-medium">
+              登录
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   )

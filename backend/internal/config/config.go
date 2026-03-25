@@ -9,7 +9,8 @@ import (
 type Config struct {
 	Port                string
 	JWTSecret           string
-	TokenTTL            time.Duration
+	AccessTokenTTL      time.Duration
+	RefreshTokenTTL     time.Duration
 	LogLevel            string
 	AllowAllCORS        bool
 	ReadTimeout         time.Duration
@@ -22,13 +23,28 @@ type Config struct {
 	ClawSynapseNodeID   string
 	ClawSynapseTimeout  time.Duration
 	ClawSynapsePeerSync time.Duration
+
+	// Knowledge base
+	EmbeddingProvider  string
+	EmbeddingModel     string
+	EmbeddingAPIKey    string
+	EmbeddingAPIURL    string
+	EmbeddingDimension int
+	QdrantURL          string
+	KnowledgeStorePath string
+
+	// Assistant (LLM-powered)
+	AssistantAPIURL string
+	AssistantAPIKey string
+	AssistantModel  string
 }
 
 func Load() Config {
 	return Config{
 		Port:                getEnv("PORT", "8080"),
 		JWTSecret:           getEnv("JWT_SECRET", "trustmesh-dev-secret"),
-		TokenTTL:            getEnvDuration("TOKEN_TTL", 24*time.Hour),
+		AccessTokenTTL:      getEnvDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
+		RefreshTokenTTL:     getEnvDuration("REFRESH_TOKEN_TTL", 168*time.Hour),
 		LogLevel:            getEnv("LOG_LEVEL", "info"),
 		AllowAllCORS:        getEnvBool("ALLOW_ALL_CORS", true),
 		ReadTimeout:         getEnvDuration("READ_TIMEOUT", 10*time.Second),
@@ -41,6 +57,18 @@ func Load() Config {
 		ClawSynapseNodeID:   getEnv("CLAWSYNAPSE_NODE_ID", ""),
 		ClawSynapseTimeout:  getEnvDuration("CLAWSYNAPSE_TIMEOUT", 3*time.Second),
 		ClawSynapsePeerSync: getEnvDuration("CLAWSYNAPSE_PEER_SYNC_INTERVAL", 10*time.Second),
+
+		EmbeddingProvider:  getEnv("EMBEDDING_PROVIDER", "openai"),
+		EmbeddingModel:     getEnv("EMBEDDING_MODEL", "text-embedding-3-small"),
+		EmbeddingAPIKey:    getEnv("EMBEDDING_API_KEY", ""),
+		EmbeddingAPIURL:    getEnv("EMBEDDING_API_URL", "https://api.openai.com/v1"),
+		EmbeddingDimension: getEnvInt("EMBEDDING_DIMENSION", 1536),
+		QdrantURL:          getEnv("QDRANT_URL", "http://127.0.0.1:6333"),
+		KnowledgeStorePath: getEnv("KNOWLEDGE_STORAGE_PATH", "/var/lib/trustmesh-knowledge"),
+
+		AssistantAPIURL: getEnv("ASSISTANT_API_URL", "https://api.openai.com/v1"),
+		AssistantAPIKey: getEnv("ASSISTANT_API_KEY", ""),
+		AssistantModel:  getEnv("ASSISTANT_MODEL", "gpt-4o-mini"),
 	}
 }
 
@@ -56,6 +84,16 @@ func getEnvDuration(key string, fallback time.Duration) time.Duration {
 		d, err := time.ParseDuration(v)
 		if err == nil {
 			return d
+		}
+	}
+	return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+	if v, ok := os.LookupEnv(key); ok && v != "" {
+		n, err := strconv.Atoi(v)
+		if err == nil {
+			return n
 		}
 	}
 	return fallback

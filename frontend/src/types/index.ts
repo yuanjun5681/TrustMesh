@@ -302,6 +302,8 @@ export interface Notification {
   project_id: string
   task_id?: string
   conversation_id?: string
+  actor_type?: string
+  actor_name?: string
   title: string
   body: string
   category: 'task' | 'todo' | 'conversation' | 'system'
@@ -436,8 +438,16 @@ export interface AuthLoginRequest {
 }
 
 export interface AuthSuccessData {
-  token: string
+  access_token: string
+  refresh_token: string
+  expires_in: number
   user: User
+}
+
+export interface RefreshSuccessData {
+  access_token: string
+  refresh_token: string
+  expires_in: number
 }
 
 export interface CreateProjectRequest {
@@ -477,4 +487,97 @@ export interface UpdateAgentRequest {
   role?: AgentRole
   description?: string
   capabilities?: string[]
+}
+
+// ─── 知识库 ───
+
+export type KnowledgeDocStatus = 'processing' | 'ready' | 'failed'
+export type KnowledgeDocType = 'document' | 'note' | 'snippet' | 'reference'
+
+export interface KnowledgeDocument {
+  id: string
+  project_id: string | null
+  title: string
+  description: string
+  doc_type: KnowledgeDocType
+  mime_type: string
+  file_size: number
+  status: KnowledgeDocStatus
+  chunk_count: number
+  tags: string[]
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface KnowledgeChunk {
+  id: string
+  document_id: string
+  chunk_index: number
+  content: string
+  token_count: number
+  metadata: Record<string, unknown>
+  created_at: string
+}
+
+export interface KnowledgeSearchResult {
+  chunk_id: string
+  document_id: string
+  document_title: string
+  content: string
+  score: number
+  chunk_index: number
+  metadata?: Record<string, unknown>
+}
+
+export interface KnowledgeSearchRequest {
+  query: string
+  project_id?: string
+  top_k?: number
+  min_score?: number
+}
+
+export interface UpdateKnowledgeDocRequest {
+  title?: string
+  description?: string
+  tags?: string[]
+}
+
+// ─── Assistant ───
+
+export interface AssistantMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  toolCalls?: AssistantToolCall[]
+  results?: AssistantResult[]
+  navigateAction?: { path: string; label: string }
+  timestamp: number
+  isStreaming?: boolean
+}
+
+export interface AssistantToolCall {
+  tool: string
+  args: Record<string, unknown>
+  status: 'running' | 'done'
+}
+
+export type AssistantResult =
+  | { type: 'knowledge'; items: KnowledgeSearchResult[] }
+  | { type: 'tasks'; items: TaskListItem[] }
+  | { type: 'task_detail'; task: TaskDetail }
+  | { type: 'stats'; stats: DashboardStats }
+
+export interface AssistantChatRequest {
+  message: string
+  context?: {
+    current_page: string
+    project_id?: string
+  }
+  history?: { role: string; content: string }[]
+}
+
+export interface AssistantSSEEvent {
+  event: string
+  data: Record<string, unknown>
 }

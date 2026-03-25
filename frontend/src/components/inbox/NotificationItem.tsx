@@ -1,23 +1,18 @@
-import { Link } from 'react-router-dom'
-import { ExternalLink } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime } from '@/lib/utils'
 import type { Notification } from '@/types'
 
-const priorityColors: Record<string, string> = {
-  high: 'text-destructive',
-  medium: 'text-warning',
-  low: 'text-muted-foreground',
-}
-
-const priorityDotColors: Record<string, string> = {
-  high: 'bg-destructive',
-  medium: 'bg-warning',
-  low: 'bg-muted-foreground',
-}
-
 function stripMarkdown(body: string): string {
   return body.replace(/[*_~`#>\-\[\]()]/g, '').replace(/\n+/g, ' ').trim()
+}
+
+const categoryFallback: Record<string, string> = {
+  conversation: 'PM Agent',
+  task: 'PM Agent',
+  todo: '执行 Agent',
+  system: '系统',
 }
 
 interface NotificationItemProps {
@@ -27,90 +22,72 @@ interface NotificationItemProps {
 }
 
 export function NotificationItem({ notification, onMarkRead, onViewConversation }: NotificationItemProps) {
+  const navigate = useNavigate()
+  const isUnread = !notification.is_read
+  const from = notification.actor_name || categoryFallback[notification.category] || '未知'
+
+  const taskLink = (notification.category === 'task' || notification.category === 'todo') && notification.task_id
+    ? `/projects/${notification.project_id}`
+    : null
+
   const handleClick = () => {
-    if (!notification.is_read && onMarkRead) {
+    if (isUnread && onMarkRead) {
       onMarkRead(notification.id)
     }
-  }
-
-  const getLinkInfo = () => {
-    switch (notification.category) {
-      case 'task':
-      case 'todo':
-        return notification.task_id
-          ? { text: '查看任务', path: `/projects/${notification.project_id}` }
-          : null
-      case 'conversation':
-        return { text: '查看对话', path: null }
-      default:
-        return null
+    if (notification.category === 'conversation') {
+      onViewConversation?.(notification.project_id, notification.conversation_id)
+    } else if (taskLink) {
+      navigate(taskLink)
     }
-  }
-
-  const linkInfo = getLinkInfo()
-
-  const handleConversationClick = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    onViewConversation?.(notification.project_id, notification.conversation_id)
   }
 
   return (
     <div
       className={cn(
-        'rounded-lg transition-colors cursor-pointer hover:bg-accent/50',
-        !notification.is_read && 'bg-accent/30'
+        'flex items-center gap-0 px-3 h-10 cursor-pointer transition-colors hover:bg-accent/50 group',
+        isUnread && 'bg-accent/20'
       )}
       onClick={handleClick}
     >
-      <div className="flex gap-3 p-3">
-        <div className="flex items-start gap-2 pt-0.5">
-          {!notification.is_read ? (
-            <span className="inline-block size-2 rounded-full bg-primary mt-1.5 shrink-0" />
-          ) : (
-            <span className="inline-block size-2 shrink-0" />
-          )}
-          <span
-            className={cn(
-              'inline-block size-1.5 rounded-full mt-2 shrink-0',
-              priorityDotColors[notification.priority]
-            )}
-          />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className={cn('text-sm font-medium', priorityColors[notification.priority])}>
-              {notification.title}
-            </span>
-            <span className="text-xs text-muted-foreground ml-auto shrink-0">
-              {formatRelativeTime(notification.created_at)}
-            </span>
-          </div>
-          <p className="text-sm text-muted-foreground mt-0.5 truncate">
-            {stripMarkdown(notification.body)}
-          </p>
-          {linkInfo && (
-            <div className="mt-1.5">
-              {linkInfo.path ? (
-                <Link
-                  to={linkInfo.path}
-                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <ExternalLink className="size-3" />
-                  {linkInfo.text}
-                </Link>
-              ) : (
-                <button
-                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline cursor-pointer"
-                  onClick={handleConversationClick}
-                >
-                  <ExternalLink className="size-3" />
-                  {linkInfo.text}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+      {/* 未读指示器 */}
+      <div className="w-5 shrink-0 flex justify-center">
+        {isUnread && <span className="size-2 rounded-full bg-primary" />}
+      </div>
+
+      {/* 来源 */}
+      <div className={cn(
+        'w-[100px] shrink-0 truncate text-sm',
+        isUnread ? 'font-semibold text-foreground' : 'text-muted-foreground'
+      )}>
+        {from}
+      </div>
+
+      {/* 标题 */}
+      <div className={cn(
+        'w-[110px] shrink-0 truncate text-sm',
+        isUnread ? 'font-semibold text-foreground' : 'text-muted-foreground'
+      )}>
+        {notification.title}
+      </div>
+
+      {/* 分隔符 */}
+      <span className="text-muted-foreground/40 mx-1.5 shrink-0">—</span>
+
+      {/* 摘要 (自适应宽度) */}
+      <div className="flex-1 min-w-0 truncate text-sm text-muted-foreground">
+        {stripMarkdown(notification.body)}
+      </div>
+
+      {/* 时间 */}
+      <div className="w-[80px] shrink-0 text-right text-xs text-muted-foreground">
+        {formatRelativeTime(notification.created_at)}
+      </div>
+
+      {/* 跳转指示 */}
+      <div className="w-8 shrink-0 flex justify-center">
+        {(taskLink || notification.category === 'conversation') && (
+          <ChevronRight className="size-4 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground" />
+        )}
       </div>
     </div>
   )

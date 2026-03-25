@@ -9,6 +9,7 @@ import {
   LogOut,
   LayoutDashboard,
   Inbox,
+  BookOpen,
   Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -17,7 +18,7 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Avatar } from '@/components/ui/avatar'
-import { AgentStatusDot, ProjectWorkStatusDot } from '@/components/shared/StatusBadge'
+import { AgentStatusIcon, ProjectWorkStatusDot } from '@/components/shared/StatusBadge'
 import { useProjects } from '@/hooks/useProjects'
 import { useAgents } from '@/hooks/useAgents'
 import { useUnreadCount } from '@/hooks/useNotifications'
@@ -154,6 +155,17 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
               <span className="absolute right-1 top-0.5 size-2 rounded-full bg-primary" />
             )}
           </Link>
+
+          <Link
+            to="/knowledge"
+            className={cn(
+              'flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+              isActive('/knowledge') && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+            )}
+          >
+            <BookOpen className="size-4 shrink-0" />
+            {!collapsed && <span>知识库</span>}
+          </Link>
         </div>
 
         <Separator className="my-2" />
@@ -222,7 +234,7 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
               {!collapsed && (
                 <>
                   <span className="truncate">{agent.name}</span>
-                  <span className="ml-auto"><AgentStatusDot status={agent.status} /></span>
+                  <span className="ml-auto"><AgentStatusIcon status={agent.status} className="size-3.5" /></span>
                 </>
               )}
             </Link>

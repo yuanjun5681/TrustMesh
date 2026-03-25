@@ -2,7 +2,6 @@ import type { QueryClient } from '@tanstack/react-query'
 import type { Agent, Event } from '@/types'
 import { applyProjectAgentStatusChanged } from './projects'
 
-const DEFAULT_DASHBOARD_EVENTS_LIMIT = 20
 const DEFAULT_AGENT_EVENTS_LIMIT = 50
 
 function sortEventsDescending(items: Event[]) {
@@ -31,16 +30,6 @@ export function applyAgentStatusChanged(
   })
 
   queryClient.setQueryData(['agents', payload.agent.id], payload.agent)
-
-  queryClient.setQueryData<Event[] | undefined>(['dashboard', 'events', DEFAULT_DASHBOARD_EVENTS_LIMIT], (items) => {
-    if (!items) {
-      return items
-    }
-    if (items.some((item) => item.id === payload.event.id)) {
-      return items
-    }
-    return sortEventsDescending([payload.event, ...items]).slice(0, DEFAULT_DASHBOARD_EVENTS_LIMIT)
-  })
 
   queryClient.setQueryData<Event[] | undefined>(
     ['agents', payload.agent.id, 'events', DEFAULT_AGENT_EVENTS_LIMIT],

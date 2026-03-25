@@ -12,13 +12,15 @@ export function NotificationGroup({ label, notifications, onMarkRead, onViewConv
   if (notifications.length === 0) return null
 
   return (
-    <div className="flex flex-col gap-1">
-      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-3 py-1">
+    <div>
+      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-3 py-1.5 bg-muted/30">
         {label}
       </div>
-      {notifications.map((n) => (
-        <NotificationItem key={n.id} notification={n} onMarkRead={onMarkRead} onViewConversation={onViewConversation} />
-      ))}
+      <div className="divide-y divide-border/50">
+        {notifications.map((n) => (
+          <NotificationItem key={n.id} notification={n} onMarkRead={onMarkRead} onViewConversation={onViewConversation} />
+        ))}
+      </div>
     </div>
   )
 }

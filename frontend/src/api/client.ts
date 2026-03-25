@@ -1,6 +1,8 @@
 import ky from 'ky'
 import type { ApiError } from '@/types'
 import { apiBaseUrl } from '@/lib/apiBase'
+import { useAuthStore } from '@/stores/authStore'
+import { refresh as refreshApi } from '@/api/auth'
 
 export class ApiRequestError extends Error {
   code: string
@@ -16,27 +18,65 @@ export class ApiRequestError extends Error {
   }
 }
 
+// Concurrency lock: only one refresh at a time
+let refreshPromise: Promise<{ access_token: string; refresh_token: string }> | null = null
+
+async function doRefresh(): Promise<{ access_token: string; refresh_token: string }> {
+  const { refreshToken } = useAuthStore.getState()
+  if (!refreshToken) {
+    throw new Error('no refresh token')
+  }
+
+  if (refreshPromise) {
+    return refreshPromise
+  }
+
+  refreshPromise = refreshApi(refreshToken)
+    .then((res) => {
+      const { access_token, refresh_token } = res.data
+      useAuthStore.getState().setTokens(access_token, refresh_token)
+      return { access_token, refresh_token }
+    })
+    .finally(() => {
+      refreshPromise = null
+    })
+
+  return refreshPromise
+}
+
+function redirectToLogin() {
+  useAuthStore.getState().logout()
+  if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
+    window.location.href = '/login'
+  }
+}
+
 export const api = ky.create({
   prefixUrl: apiBaseUrl,
   hooks: {
     beforeRequest: [
       (request) => {
-        const token = localStorage.getItem('auth-token')
-        if (token) {
-          request.headers.set('Authorization', `Bearer ${token}`)
+        const { accessToken } = useAuthStore.getState()
+        if (accessToken) {
+          request.headers.set('Authorization', `Bearer ${accessToken}`)
         }
       },
     ],
     afterResponse: [
-      async (_request, _options, response) => {
-        if (!response.ok) {
-          if (response.status === 401) {
-            localStorage.removeItem('auth-token')
-            localStorage.removeItem('auth-storage')
-            if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
-              window.location.href = '/login'
-            }
+      async (request, options, response) => {
+        if (response.status === 401) {
+          // Try silent refresh
+          try {
+            const tokens = await doRefresh()
+            // Retry original request with new access token
+            request.headers.set('Authorization', `Bearer ${tokens.access_token}`)
+            return ky(request, { ...options, hooks: {} })
+          } catch {
+            redirectToLogin()
           }
+        }
+
+        if (!response.ok) {
           let apiError: ApiError | undefined
           try {
             const body = await response.json<{ error: ApiError }>()

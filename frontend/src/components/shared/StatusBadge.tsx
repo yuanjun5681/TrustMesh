@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { CircleCheck, CircleOff, Cog } from 'lucide-react'
 import type { TaskStatus, TaskPriority, AgentStatus, ProjectStatus, ProjectWorkStatus } from '@/types'
 
 const taskStatusConfig: Record<TaskStatus, { label: string; variant: 'secondary' | 'info' | 'success' | 'destructive' }> = {
@@ -79,4 +80,16 @@ export function AgentStatusDot({ status }: { status: AgentStatus }) {
     status === 'online' ? 'bg-status-online' :
     status === 'busy' ? 'bg-status-busy' : 'bg-status-offline'
   return <span className={cn('inline-block size-2 rounded-full', colorClass)} />
+}
+
+export function AgentStatusIcon({ status, className }: { status: AgentStatus; className?: string }) {
+  const size = cn('size-4', className)
+  switch (status) {
+    case 'online':
+      return <CircleCheck className={cn(size, 'text-status-online')} />
+    case 'busy':
+      return <Cog className={cn(size, 'text-status-busy animate-spin')} />
+    case 'offline':
+      return <CircleOff className={cn(size, 'text-status-offline')} />
+  }
 }
