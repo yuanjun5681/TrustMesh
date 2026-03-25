@@ -50,7 +50,7 @@ export function AgentStatusCard({ agent }: AgentStatusCardProps) {
           emptyText="暂无活动"
         />
         {(events?.length ?? 0) > 3 && (
-          <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-card to-transparent pointer-events-none" />
+          <div className="absolute inset-x-0 bottom-0 h-10 bg-linear-to-t from-card to-transparent pointer-events-none" />
         )}
       </CardContent>
     </Card>
