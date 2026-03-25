@@ -55,7 +55,9 @@
       "WebSearch",
       "WebFetch(domain:the-pocket.github.io)",
       "Bash(git checkout:*)",
-      "Bash(go get:*)"
+      "Bash(go get:*)",
+      "Bash(find /Volumes/UWorks/Projects/TrustMesh/frontend -name tailwind.config.* -o -name tailwind.config.ts)",
+      "Bash(find /Volumes/UWorks/Projects/TrustMesh/frontend -type f \\\\\\(-name *.svg -o -name *.png -o -name *.jpg \\\\\\))"
     ]
   }
 }
