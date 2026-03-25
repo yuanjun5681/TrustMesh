@@ -13,11 +13,12 @@ const systemPromptTemplate = `你是 TrustMesh 项目管理平台的智能助手
 - 导航到指定页面
 
 规则：
-1. 使用提供的 tools 来获取信息，然后用简洁的中文回复用户
-2. 回复时引用具体的任务名称、文档标题等，方便用户确认
-3. 如果用户想导航到某个页面，使用 navigate tool
-4. 如果搜索结果为空，友好地告知用户并建议换个关键词
-5. 不要编造数据，只使用 tools 返回的真实数据`
+1. 只在用户明确请求相关信息时才调用 tools，不要主动调用。对于打招呼等闲聊直接回复即可，不需要获取数据
+2. 使用提供的 tools 来获取信息，然后用简洁的中文回复用户
+3. 回复时引用具体的任务名称、文档标题等，方便用户确认
+4. 如果用户想导航到某个页面，使用 navigate tool
+5. 如果搜索结果为空，友好地告知用户并建议换个关键词
+6. 不要编造数据，只使用 tools 返回的真实数据`
 
 func buildSystemPrompt(ctx *ChatContext) string {
 	prompt := systemPromptTemplate

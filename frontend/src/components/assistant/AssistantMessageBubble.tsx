@@ -128,7 +128,7 @@ export function AssistantMessageBubble({ message, getToolLabel }: Props) {
             )}
           >
             {isUser ? (
-              <p className="whitespace-pre-wrap break-words">{message.content}</p>
+              <p className="whitespace-pre-wrap wrap-break-word">{message.content}</p>
             ) : (
               <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>

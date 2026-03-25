@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	openai "github.com/sashabaranov/go-openai"
@@ -13,6 +14,54 @@ import (
 	"trustmesh/backend/internal/model"
 	"trustmesh/backend/internal/store"
 )
+
+// validRoutes defines all valid frontend routes.
+// Static routes are matched exactly; dynamic routes use regex patterns.
+var validRoutes = []routeEntry{
+	{pattern: "/dashboard", label: "仪表盘"},
+	{pattern: "/inbox", label: "收件箱"},
+	{pattern: "/projects", label: "项目列表"},
+	{pattern: "/projects/[a-f0-9]+", label: "项目详情", dynamic: true},
+	{pattern: "/agents", label: "Agent 管理"},
+	{pattern: "/agents/[a-f0-9]+", label: "Agent 详情", dynamic: true},
+	{pattern: "/knowledge", label: "知识库"},
+}
+
+type routeEntry struct {
+	pattern string
+	label   string
+	dynamic bool
+}
+
+// isValidRoute checks if a given path matches any known frontend route.
+func isValidRoute(path string) bool {
+	for _, r := range validRoutes {
+		if r.dynamic {
+			if matched, _ := regexp.MatchString("^"+r.pattern+"$", path); matched {
+				return true
+			}
+		} else {
+			if path == r.pattern {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// routeDescriptionForLLM builds a description string listing all available routes.
+func routeDescriptionForLLM() string {
+	var parts []string
+	for _, r := range validRoutes {
+		example := r.pattern
+		if r.dynamic {
+			// Show a human-friendly placeholder
+			example = regexp.MustCompile(`\[a-f0-9\]\+`).ReplaceAllString(r.pattern, "{id}")
+		}
+		parts = append(parts, fmt.Sprintf("%s (%s)", example, r.label))
+	}
+	return "可用路由: " + strings.Join(parts, ", ")
+}
 
 // ToolExecutor executes tool calls using the application's Store and services.
 type ToolExecutor struct {
@@ -103,7 +152,7 @@ func ToolDefinitions(hasKnowledge bool) []openai.Tool {
 					Properties: map[string]jsonschema.Definition{
 						"path": {
 							Type:        jsonschema.String,
-							Description: "前端路由路径，如 /dashboard, /projects, /knowledge, /inbox, /agents, /projects/{projectId}",
+							Description: routeDescriptionForLLM(),
 						},
 						"label": {
 							Type:        jsonschema.String,
@@ -318,6 +367,9 @@ func (e *ToolExecutor) navigate(args map[string]any) (any, error) {
 	label, _ := args["label"].(string)
 	if path == "" {
 		return nil, fmt.Errorf("path is required")
+	}
+	if !isValidRoute(path) {
+		return nil, fmt.Errorf("无效的导航路径: %s", path)
 	}
 	return NavigateEvent{Path: path, Label: label}, nil
 }
