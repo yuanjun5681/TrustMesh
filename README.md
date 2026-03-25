@@ -83,6 +83,26 @@ docker volume rm trustmesh_trustmesh-transfer-data
 docker compose up -d --build
 ```
 
+知识库文件默认写入 `trustmesh-knowledge-data:/var/lib/trustmesh-knowledge`。后端容器启动时会自动校正这个卷的所有权后再降权启动应用，因此生产环境遇到知识库上传报错：
+
+```text
+mkdir /var/lib/trustmesh-knowledge/...: permission denied
+```
+
+通常只需要重新构建并重启后端：
+
+```bash
+docker compose up -d --build backend
+```
+
+如果卷权限已被外部手工改坏，仍可选择重建知识库卷：
+
+```bash
+docker compose down
+docker volume rm trustmesh_trustmesh-knowledge-data
+docker compose up -d --build backend
+```
+
 如果要覆盖默认值，可以在启动前注入：
 
 ```bash
