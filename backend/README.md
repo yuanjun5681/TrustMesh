@@ -95,6 +95,26 @@ docker volume rm trustmesh_trustmesh-transfer-data
 docker compose up -d --build
 ```
 
+知识库文件使用独立卷 `trustmesh-knowledge-data:/var/lib/trustmesh-knowledge`。后端镜像启动时会先修正该目录的所有权，再以非 root 用户运行 `trustmesh-server`，用来避免以下生产报错：
+
+```text
+mkdir /var/lib/trustmesh-knowledge/...: permission denied
+```
+
+线上已存在错误权限卷时，通常只需要重新构建并重启后端：
+
+```bash
+docker compose up -d --build backend
+```
+
+如果需要彻底清空知识库文件，再删除卷重建：
+
+```bash
+docker compose down
+docker volume rm trustmesh_trustmesh-knowledge-data
+docker compose up -d --build backend
+```
+
 ## 关键环境变量
 
 - `PORT`，默认 `8080`
