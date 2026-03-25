@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+	"trustmesh/backend/internal/assistant"
 	"trustmesh/backend/internal/auth"
 	"trustmesh/backend/internal/clawsynapse"
 	"trustmesh/backend/internal/config"
@@ -139,6 +140,16 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	kb.GET("/documents/:id/chunks", knowledgeHandler.ListChunks)
 	kb.POST("/documents/:id/reprocess", knowledgeHandler.Reprocess)
 	kb.POST("/search", knowledgeHandler.Search)
+
+	// Assistant (LLM-powered, optional)
+	if cfg.AssistantAPIKey != "" {
+		llmClient := assistant.NewLLMClient(cfg.AssistantAPIURL, cfg.AssistantAPIKey, cfg.AssistantModel)
+		toolExecutor := assistant.NewToolExecutor(s, embeddingClient, qdrantClient)
+		hasKnowledge := embeddingClient != nil && qdrantClient != nil
+		assistantHandler := handler.NewAssistantHandler(llmClient, toolExecutor, hasKnowledge, log)
+		authed.POST("/assistant/chat", assistantHandler.Chat)
+		log.Info("assistant enabled", zap.String("model", cfg.AssistantModel))
+	}
 
 	return &App{Engine: engine, Store: s, PeerSyncer: peerSyncer}, nil
 }

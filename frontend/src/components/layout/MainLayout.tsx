@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { useState } from 'react'
 import { CreateProjectDialog } from '@/components/project/CreateProjectDialog'
+import { AssistantFab } from '@/components/assistant/AssistantFab'
 
 export function MainLayout() {
   const [showCreateProject, setShowCreateProject] = useState(false)
@@ -16,6 +17,7 @@ export function MainLayout() {
         open={showCreateProject}
         onOpenChange={setShowCreateProject}
       />
+      <AssistantFab />
     </div>
   )
 }

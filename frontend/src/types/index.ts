@@ -532,3 +532,42 @@ export interface UpdateKnowledgeDocRequest {
   description?: string
   tags?: string[]
 }
+
+// ─── Assistant ───
+
+export interface AssistantMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  toolCalls?: AssistantToolCall[]
+  results?: AssistantResult[]
+  navigateAction?: { path: string; label: string }
+  timestamp: number
+  isStreaming?: boolean
+}
+
+export interface AssistantToolCall {
+  tool: string
+  args: Record<string, unknown>
+  status: 'running' | 'done'
+}
+
+export type AssistantResult =
+  | { type: 'knowledge'; items: KnowledgeSearchResult[] }
+  | { type: 'tasks'; items: TaskListItem[] }
+  | { type: 'task_detail'; task: TaskDetail }
+  | { type: 'stats'; stats: DashboardStats }
+
+export interface AssistantChatRequest {
+  message: string
+  context?: {
+    current_page: string
+    project_id?: string
+  }
+  history?: { role: string; content: string }[]
+}
+
+export interface AssistantSSEEvent {
+  event: string
+  data: Record<string, unknown>
+}

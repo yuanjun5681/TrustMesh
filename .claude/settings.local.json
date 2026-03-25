@@ -39,7 +39,23 @@
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZTdhY2QxYjYxNTFlM2YyODEwYTk0NTQ2IiwiZXhwIjoxNzc0NDQwMzc4LCJpYXQiOjE3NzQzNTM5Nzh9.rzyC_GmEFnZL_MLXSYRAnd-wwppKL107gWNK31FVqxs\" DOC_ID=\"kb_69f16ff67b055700bfd7d605\" __NEW_LINE_d9ad963c3e0c745b__ echo \"=== Reprocess ===\" curl -s -X POST http://127.0.0.1:8080/api/v1/knowledge/documents/$DOC_ID/reprocess -H \"Authorization: Bearer $TOKEN\")",
       "Bash(python3 -m json.tool __NEW_LINE_d9ad963c3e0c745b__ sleep 5 __NEW_LINE_d9ad963c3e0c745b__ echo \"=== Check status ===\" curl -s http://127.0.0.1:8080/api/v1/knowledge/documents/$DOC_ID -H \"Authorization: Bearer $TOKEN\")",
       "Bash(docker ps:*)",
-      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZTdhY2QxYjYxNTFlM2YyODEwYTk0NTQ2IiwiZXhwIjoxNzc0NDQwMzc4LCJpYXQiOjE3NzQzNTM5Nzh9.rzyC_GmEFnZL_MLXSYRAnd-wwppKL107gWNK31FVqxs\" DOC_ID=\"kb_619a16b1bfced31e0ff9b786\" __NEW_LINE_6ac5aec9ad032b0f__ echo \"=== Test: List documents ===\" curl -s \"http://127.0.0.1:8080/api/v1/knowledge/documents\" -H \"Authorization: Bearer $TOKEN\")"
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZTdhY2QxYjYxNTFlM2YyODEwYTk0NTQ2IiwiZXhwIjoxNzc0NDQwMzc4LCJpYXQiOjE3NzQzNTM5Nzh9.rzyC_GmEFnZL_MLXSYRAnd-wwppKL107gWNK31FVqxs\" DOC_ID=\"kb_619a16b1bfced31e0ff9b786\" __NEW_LINE_6ac5aec9ad032b0f__ echo \"=== Test: List documents ===\" curl -s \"http://127.0.0.1:8080/api/v1/knowledge/documents\" -H \"Authorization: Bearer $TOKEN\")",
+      "Bash(curl -s \"https://api.github.com/repos/tmc/langchaingo\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f''''Stars: {d.get\\(\"\"stargazers_count\"\"\\)}, Forks: {d.get\\(\"\"forks_count\"\"\\)}, Updated: {d.get\\(\"\"updated_at\"\"\\)}, Description: {d.get\\(\"\"description\"\"\\)}''''\\)\")",
+      "Bash(curl -s \"https://api.github.com/search/repositories?q=go+agent+llm+language:go&sort=stars&per_page=10\")",
+      "Bash(curl -s \"https://api.github.com/repos/google/adk-go\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f''''Stars: {d.get\\(\"\"stargazers_count\"\"\\)}, Created: {d.get\\(\"\"created_at\"\"\\)}, Updated: {d.get\\(\"\"updated_at\"\"\\)}, Description: {d.get\\(\"\"description\"\"\\)}''''\\)\")",
+      "Bash(curl -s \"https://api.github.com/repos/nlpodyssey/openai-agents-go\")",
+      "Bash(curl -s \"https://api.github.com/repos/sashabaranov/go-openai/contents/examples\")",
+      "Bash(python3 -c \"import sys,json; [print\\(f[''''name'''']\\) for f in json.load\\(sys.stdin\\) if isinstance\\(json.load\\(open\\(''''/dev/stdin''''\\) if False else sys.stdin\\), list\\) or True]\")",
+      "Bash(curl -s https://api.github.com/repos/sashabaranov/go-openai/contents/examples)",
+      "Bash(python3 -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\(f[''''name'''']\\) for f in data]\")",
+      "Bash(curl -s \"https://api.github.com/search/repositories?q=go+openai+agent+tool+language:go&sort=stars&per_page=5\")",
+      "Bash(curl -s \"https://api.github.com/repos/trpc-group/trpc-agent-go\")",
+      "WebSearch",
+      "WebFetch(domain:the-pocket.github.io)",
+      "Bash(git checkout:*)",
+      "Bash(go get:*)"
     ]
   }
 }

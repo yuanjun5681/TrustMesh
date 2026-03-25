@@ -31,6 +31,11 @@ type Config struct {
 	EmbeddingDimension int
 	QdrantURL          string
 	KnowledgeStorePath string
+
+	// Assistant (LLM-powered)
+	AssistantAPIURL string
+	AssistantAPIKey string
+	AssistantModel  string
 }
 
 func Load() Config {
@@ -58,6 +63,10 @@ func Load() Config {
 		EmbeddingDimension: getEnvInt("EMBEDDING_DIMENSION", 1536),
 		QdrantURL:          getEnv("QDRANT_URL", "http://127.0.0.1:6333"),
 		KnowledgeStorePath: getEnv("KNOWLEDGE_STORAGE_PATH", "/var/lib/trustmesh-knowledge"),
+
+		AssistantAPIURL: getEnv("ASSISTANT_API_URL", "https://api.openai.com/v1"),
+		AssistantAPIKey: getEnv("ASSISTANT_API_KEY", ""),
+		AssistantModel:  getEnv("ASSISTANT_MODEL", "gpt-4o-mini"),
 	}
 }
 
