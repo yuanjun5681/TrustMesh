@@ -71,6 +71,8 @@ func (s *Store) maybeCreateNotificationUnsafe(event *model.Event) {
 		ProjectID:      event.ProjectID,
 		TaskID:         event.TaskID,
 		ConversationID: conversationID,
+		ActorType:      event.ActorType,
+		ActorName:      event.ActorName,
 		Title:          title,
 		Body:           body,
 		Category:       category,

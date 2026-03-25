@@ -302,6 +302,8 @@ export interface Notification {
   project_id: string
   task_id?: string
   conversation_id?: string
+  actor_type?: string
+  actor_name?: string
   title: string
   body: string
   category: 'task' | 'todo' | 'conversation' | 'system'
