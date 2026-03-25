@@ -438,8 +438,16 @@ export interface AuthLoginRequest {
 }
 
 export interface AuthSuccessData {
-  token: string
+  access_token: string
+  refresh_token: string
+  expires_in: number
   user: User
+}
+
+export interface RefreshSuccessData {
+  access_token: string
+  refresh_token: string
+  expires_in: number
 }
 
 export interface CreateProjectRequest {

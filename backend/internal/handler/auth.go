@@ -54,13 +54,18 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	token, err := h.jwt.IssueToken(user.ID)
+	pair, err := h.jwt.IssueTokenPair(user.ID)
 	if err != nil {
 		transport.WriteError(c, &transport.AppError{Status: 500, Code: "INTERNAL_ERROR", Message: "failed to issue token", Details: map[string]any{}})
 		return
 	}
 
-	transport.WriteData(c, 201, gin.H{"token": token, "user": user})
+	transport.WriteData(c, 201, gin.H{
+		"access_token":  pair.AccessToken,
+		"refresh_token": pair.RefreshToken,
+		"expires_in":    pair.ExpiresIn,
+		"user":          user,
+	})
 }
 
 type loginRequest struct {
@@ -83,10 +88,55 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		transport.WriteError(c, &transport.AppError{Status: 401, Code: "INVALID_CREDENTIALS", Message: "invalid email or password", Details: map[string]any{}})
 		return
 	}
-	token, err := h.jwt.IssueToken(user.ID)
+	pair, err := h.jwt.IssueTokenPair(user.ID)
 	if err != nil {
 		transport.WriteError(c, &transport.AppError{Status: 500, Code: "INTERNAL_ERROR", Message: "failed to issue token", Details: map[string]any{}})
 		return
 	}
-	transport.WriteData(c, 200, gin.H{"token": token, "user": user})
+	transport.WriteData(c, 200, gin.H{
+		"access_token":  pair.AccessToken,
+		"refresh_token": pair.RefreshToken,
+		"expires_in":    pair.ExpiresIn,
+		"user":          user,
+	})
+}
+
+type refreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+func (h *AuthHandler) Refresh(c *gin.Context) {
+	var req refreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.RefreshToken == "" {
+		transport.WriteError(c, transport.BadRequest("BAD_REQUEST", "refresh_token is required"))
+		return
+	}
+
+	claims, err := h.jwt.ParseToken(req.RefreshToken)
+	if err != nil {
+		transport.WriteError(c, transport.Unauthorized("invalid or expired refresh token"))
+		return
+	}
+	if claims.TokenType != auth.TokenTypeRefresh {
+		transport.WriteError(c, transport.Unauthorized("invalid token type"))
+		return
+	}
+
+	// Verify user still exists
+	if _, ok := h.store.FindUserByID(claims.UserID); !ok {
+		transport.WriteError(c, transport.Unauthorized("user not found"))
+		return
+	}
+
+	pair, err := h.jwt.IssueTokenPair(claims.UserID)
+	if err != nil {
+		transport.WriteError(c, &transport.AppError{Status: 500, Code: "INTERNAL_ERROR", Message: "failed to issue token", Details: map[string]any{}})
+		return
+	}
+
+	transport.WriteData(c, 200, gin.H{
+		"access_token":  pair.AccessToken,
+		"refresh_token": pair.RefreshToken,
+		"expires_in":    pair.ExpiresIn,
+	})
 }

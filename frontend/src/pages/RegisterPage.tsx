@@ -39,7 +39,7 @@ export function RegisterPage() {
     setLoading(true)
     try {
       const res = await authApi.register({ email, name, password })
-      setAuth(res.data.token, res.data.user)
+      setAuth(res.data.access_token, res.data.refresh_token, res.data.user)
       navigate('/projects')
     } catch (err) {
       if (err instanceof ApiRequestError) setError(getRegisterErrorMessage(err))

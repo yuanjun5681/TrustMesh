@@ -22,7 +22,7 @@ export function LoginPage() {
     setLoading(true)
     try {
       const res = await authApi.login({ email, password })
-      setAuth(res.data.token, res.data.user)
+      setAuth(res.data.access_token, res.data.refresh_token, res.data.user)
       navigate('/projects')
     } catch (err) {
       const message = err instanceof ApiRequestError ? err.message : '登录失败，请重试'

@@ -1,4 +1,5 @@
 import { apiUrl } from '@/lib/apiBase'
+import { useAuthStore } from '@/stores/authStore'
 
 interface ChatParams {
   message: string
@@ -23,7 +24,7 @@ export function chatAssistant(params: ChatParams, callbacks: ChatCallbacks): Abo
   const controller = new AbortController()
 
   const run = async () => {
-    const token = localStorage.getItem('auth-token')
+    const token = useAuthStore.getState().accessToken
     const response = await fetch(apiUrl('assistant/chat'), {
       method: 'POST',
       headers: {

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MainLayout } from '@/components/layout/MainLayout'
@@ -13,6 +14,7 @@ import { KnowledgePage } from '@/pages/KnowledgePage'
 import { useAuthStore } from '@/stores/authStore'
 import { Toaster } from '@/components/ui/sonner'
 import { RealtimeProvider } from '@/realtime/provider'
+import { refresh as refreshApi } from '@/api/auth'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,7 +38,35 @@ function GuestRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function useTokenBootstrap() {
+  const [ready, setReady] = useState(false)
+  const { refreshToken, accessToken, setTokens, logout } = useAuthStore()
+
+  useEffect(() => {
+    if (refreshToken && !accessToken) {
+      refreshApi(refreshToken)
+        .then((res) => {
+          setTokens(res.data.access_token, res.data.refresh_token)
+        })
+        .catch(() => {
+          logout()
+        })
+        .finally(() => setReady(true))
+    } else {
+      setReady(true)
+    }
+    // Only run on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return ready
+}
+
 export default function App() {
+  const ready = useTokenBootstrap()
+
+  if (!ready) return null
+
   return (
     <QueryClientProvider client={queryClient}>
       <RealtimeProvider>

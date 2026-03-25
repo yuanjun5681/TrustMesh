@@ -53,7 +53,8 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 	application, err := New(config.Config{
 		Port:               "0",
 		JWTSecret:          "test-secret",
-		TokenTTL:           time.Hour,
+		AccessTokenTTL:     time.Hour,
+		RefreshTokenTTL:    168 * time.Hour,
 		LogLevel:           "error",
 		AllowAllCORS:       true,
 		ReadTimeout:        3 * time.Second,
@@ -79,7 +80,7 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 		"name":     "Webhook User",
 		"password": "StrongPass123!",
 	})
-	token := nestedString(decodeBody(t, registerResp), "data", "token")
+	token := nestedString(decodeBody(t, registerResp), "data", "access_token")
 
 	pmResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/agents", token, map[string]any{
 		"node_id":      "node-pm-001",

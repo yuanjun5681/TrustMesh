@@ -34,7 +34,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.TokenTTL)
+	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 	clawClient := clawsynapse.NewClient(cfg.ClawSynapseAPIURL, cfg.ClawSynapseTimeout)
 	webhookHandler := clawsynapse.NewWebhookHandler(s, clawClient, cfg.ClawSynapseNodeID, log)
 	peerSyncer := clawsynapse.NewPeerSyncer(clawClient, s, cfg.ClawSynapsePeerSync, log)
@@ -88,6 +88,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	v1 := engine.Group("/api/v1")
 	v1.POST("/auth/register", authHandler.Register)
 	v1.POST("/auth/login", authHandler.Login)
+	v1.POST("/auth/refresh", authHandler.Refresh)
 
 	authed := v1.Group("")
 	authed.Use(middleware.RequireAuth(jwtManager))

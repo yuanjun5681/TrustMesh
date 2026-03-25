@@ -1,6 +1,7 @@
 import { ApiRequestError } from '@/api/client'
 import type { ApiError } from '@/types'
 import { apiUrl } from '@/lib/apiBase'
+import { useAuthStore } from '@/stores/authStore'
 
 type MessageHandler<T> = (message: T) => void
 
@@ -132,8 +133,7 @@ async function readStream<T>(
 }
 
 function handleUnauthorized() {
-  localStorage.removeItem('auth-token')
-  localStorage.removeItem('auth-storage')
+  useAuthStore.getState().logout()
   if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
     window.location.href = '/login'
   }
@@ -143,7 +143,7 @@ async function connectOnce<T>(
   options: SubscribeSSEOptions<T>,
   signal?: AbortSignal
 ) {
-  const token = localStorage.getItem('auth-token')
+  const token = useAuthStore.getState().accessToken
   const response = await fetch(apiUrl(options.path), {
     headers: {
       Accept: 'text/event-stream',

@@ -9,7 +9,8 @@ import (
 type Config struct {
 	Port                string
 	JWTSecret           string
-	TokenTTL            time.Duration
+	AccessTokenTTL      time.Duration
+	RefreshTokenTTL     time.Duration
 	LogLevel            string
 	AllowAllCORS        bool
 	ReadTimeout         time.Duration
@@ -42,7 +43,8 @@ func Load() Config {
 	return Config{
 		Port:                getEnv("PORT", "8080"),
 		JWTSecret:           getEnv("JWT_SECRET", "trustmesh-dev-secret"),
-		TokenTTL:            getEnvDuration("TOKEN_TTL", 24*time.Hour),
+		AccessTokenTTL:      getEnvDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
+		RefreshTokenTTL:     getEnvDuration("REFRESH_TOKEN_TTL", 168*time.Hour),
 		LogLevel:            getEnv("LOG_LEVEL", "info"),
 		AllowAllCORS:        getEnvBool("ALLOW_ALL_CORS", true),
 		ReadTimeout:         getEnvDuration("READ_TIMEOUT", 10*time.Second),

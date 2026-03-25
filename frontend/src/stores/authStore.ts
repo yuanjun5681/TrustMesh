@@ -3,9 +3,11 @@ import { persist } from 'zustand/middleware'
 import type { User } from '@/types'
 
 interface AuthState {
-  token: string | null
+  accessToken: string | null
+  refreshToken: string | null
   user: User | null
-  setAuth: (token: string, user: User) => void
+  setAuth: (accessToken: string, refreshToken: string, user: User) => void
+  setTokens: (accessToken: string, refreshToken: string) => void
   logout: () => void
   isAuthenticated: () => boolean
 }
@@ -13,21 +15,26 @@ interface AuthState {
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
-      token: null,
+      accessToken: null,
+      refreshToken: null,
       user: null,
-      setAuth: (token, user) => {
-        localStorage.setItem('auth-token', token)
-        set({ token, user })
+      setAuth: (accessToken, refreshToken, user) => {
+        set({ accessToken, refreshToken, user })
+      },
+      setTokens: (accessToken, refreshToken) => {
+        set({ accessToken, refreshToken })
       },
       logout: () => {
-        localStorage.removeItem('auth-token')
-        set({ token: null, user: null })
+        set({ accessToken: null, refreshToken: null, user: null })
       },
-      isAuthenticated: () => !!get().token,
+      isAuthenticated: () => !!get().refreshToken,
     }),
     {
-      name: 'auth-storage',
-      partialize: (state) => ({ token: state.token, user: state.user }),
+      name: 'trustmesh:auth',
+      partialize: (state) => ({
+        refreshToken: state.refreshToken,
+        user: state.user,
+      }),
     }
   )
 )
