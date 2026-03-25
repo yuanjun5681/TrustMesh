@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Bot, ChevronRight } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { AgentStatusDot } from '@/components/shared/StatusBadge'
+import { AgentStatusIcon } from '@/components/shared/StatusBadge'
 import { EventTimeline } from '@/components/shared/EventTimeline'
 import { useAgentEvents } from '@/hooks/useDashboard'
 import { formatRelativeTime } from '@/lib/utils'
@@ -24,7 +24,7 @@ export function AgentStatusCard({ agent }: AgentStatusCardProps) {
           <div className="flex items-center gap-2 min-w-0">
             <Bot className="size-4 text-muted-foreground shrink-0" />
             <span className="text-sm font-medium truncate">{agent.name}</span>
-            <AgentStatusDot status={agent.status} />
+            <AgentStatusIcon status={agent.status} />
           </div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
             <span className="capitalize">{agent.role}</span>

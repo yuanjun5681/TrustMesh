@@ -18,7 +18,7 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Avatar } from '@/components/ui/avatar'
-import { AgentStatusDot, ProjectWorkStatusDot } from '@/components/shared/StatusBadge'
+import { AgentStatusIcon, ProjectWorkStatusDot } from '@/components/shared/StatusBadge'
 import { useProjects } from '@/hooks/useProjects'
 import { useAgents } from '@/hooks/useAgents'
 import { useUnreadCount } from '@/hooks/useNotifications'
@@ -234,7 +234,7 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
               {!collapsed && (
                 <>
                   <span className="truncate">{agent.name}</span>
-                  <span className="ml-auto"><AgentStatusDot status={agent.status} /></span>
+                  <span className="ml-auto"><AgentStatusIcon status={agent.status} className="size-3.5" /></span>
                 </>
               )}
             </Link>
