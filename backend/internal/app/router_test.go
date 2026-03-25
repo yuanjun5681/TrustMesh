@@ -1139,7 +1139,7 @@ func TestGetTaskArtifactContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create temp file: %v", err)
 	}
-	content := "# Git guide\n\nhello"
+	content := "# Git 指南\n\n你好，世界"
 	if _, err := tmpFile.WriteString(content); err != nil {
 		t.Fatalf("write temp file: %v", err)
 	}
@@ -1187,6 +1187,9 @@ func TestGetTaskArtifactContent(t *testing.T) {
 	}
 	if string(body) != content {
 		t.Fatalf("unexpected content body: %s", string(body))
+	}
+	if got := resp.Header.Get("Content-Type"); got != "text/markdown; charset=utf-8" {
+		t.Fatalf("unexpected content type: %s", got)
 	}
 	if !strings.Contains(resp.Header.Get("Content-Disposition"), `filename="git-guide.md"`) {
 		t.Fatalf("unexpected content disposition: %s", resp.Header.Get("Content-Disposition"))

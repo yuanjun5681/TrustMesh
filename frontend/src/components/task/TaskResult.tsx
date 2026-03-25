@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ApiRequestError } from '@/api/client'
-import { getTaskArtifactContent, getTaskArtifactTransfer } from '@/api/tasks'
+import { getTaskArtifactContent } from '@/api/tasks'
 import { cn } from '@/lib/utils'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -52,7 +52,6 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
   const hasArtifacts = safeArtifacts.length > 0
   const [loadingArtifactId, setLoadingArtifactId] = useState<string | null>(null)
   const [downloadingArtifactId, setDownloadingArtifactId] = useState<string | null>(null)
-  const [transferDetails, setTransferDetails] = useState<Record<string, TransferDetail>>({})
   const [transferErrors, setTransferErrors] = useState<Record<string, string>>({})
 
   if (!hasResult && !hasArtifacts) {
@@ -63,15 +62,12 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
     setLoadingArtifactId(artifact.id)
     setTransferErrors((current) => ({ ...current, [artifact.id]: '' }))
     try {
-      const res = await getTaskArtifactTransfer(taskId, artifact.id)
-      const detail = res.data
-      setTransferDetails((current) => ({ ...current, [artifact.id]: detail }))
       const fileBlob = await getTaskArtifactContent(taskId, artifact.id)
       const objectURL = URL.createObjectURL(fileBlob)
       window.open(objectURL, '_blank', 'noopener,noreferrer')
       window.setTimeout(() => URL.revokeObjectURL(objectURL), 60_000)
     } catch (err) {
-      const message = err instanceof ApiRequestError ? err.message : '加载传输详情失败'
+      const message = err instanceof ApiRequestError ? err.message : '打开文件失败'
       toast.error(message)
       setTransferErrors((current) => ({ ...current, [artifact.id]: message }))
     } finally {
@@ -84,7 +80,7 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
     setTransferErrors((current) => ({ ...current, [artifact.id]: '' }))
     try {
       const fileBlob = await getTaskArtifactContent(taskId, artifact.id)
-      const fileName = artifactFileName(artifact, transferDetails[artifact.id]) || `${artifact.title || artifact.id}`
+      const fileName = artifactFileName(artifact) || `${artifact.title || artifact.id}`
       downloadBlob(fileBlob, fileName)
     } catch (err) {
       const message = err instanceof ApiRequestError ? err.message : '下载文件失败'
@@ -138,9 +134,8 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
               const normalizedKind = normalizeArtifactKind(artifact.kind)
               const Icon = kindIcons[normalizedKind] ?? FileText
               const transferId = transferIdFromArtifact(artifact)
-              const transferDetail = transferDetails[artifact.id]
               const transferError = transferErrors[artifact.id]
-              const fileName = artifactFileName(artifact, transferDetail)
+              const fileName = artifactFileName(artifact)
 
               return (
                 <Card key={artifact.id}>
@@ -172,13 +167,11 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
                               <Loader2 className="size-3.5 animate-spin" />
                               加载中
                             </>
-                          ) : transferDetail ? (
+                          ) : (
                             <>
                               <ExternalLink className="size-3.5" />
                               打开文件
                             </>
-                          ) : (
-                            '查看传输'
                           )}
                         </Button>
                         <Button
@@ -206,20 +199,6 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
 
                     {transferError && (
                       <p className="text-xs text-destructive">{transferError}</p>
-                    )}
-
-                    {transferDetail && (
-                      <div className="flex flex-col gap-1 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
-                        {renderTransferLine('大小', firstString(transferDetail, ['size']))}
-                        {renderTransferLine('校验', firstString(transferDetail, ['checksum']))}
-                        {renderTransferLine('Bucket', firstString(transferDetail, ['bucket']))}
-                        {renderTransferLine('状态', firstString(transferDetail, ['status']))}
-                        {!firstString(transferDetail, ['size', 'checksum', 'bucket', 'status']) && (
-                          <pre className="whitespace-pre-wrap break-all text-[11px] text-foreground/80">
-                            {JSON.stringify(transferDetail, null, 2)}
-                          </pre>
-                        )}
-                      </div>
                     )}
                   </CardContent>
                 </Card>
@@ -267,15 +246,6 @@ function firstString(obj: TransferDetail | undefined, keys: string[]) {
     }
   }
   return ''
-}
-
-function renderTransferLine(label: string, value: string) {
-  if (!value) return null
-  return (
-    <p>
-      <span className="font-medium text-foreground/80">{label}:</span> {value}
-    </p>
-  )
 }
 
 function downloadBlob(blob: Blob, fileName: string) {
