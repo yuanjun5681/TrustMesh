@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { Select, SelectTrigger, SelectContent, SelectItem } from '@/components/ui/select'
 import { useCreateProject } from '@/hooks/useProjects'
 import { useAgents } from '@/hooks/useAgents'
 import { ApiRequestError } from '@/api/client'
