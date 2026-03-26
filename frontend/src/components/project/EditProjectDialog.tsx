@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { Select, SelectTrigger, SelectContent, SelectItem } from '@/components/ui/select'
 import { ApiRequestError } from '@/api/client'
 import { ProjectDialog } from '@/components/project/ProjectDialog'
 import { useUpdateProject } from '@/hooks/useProjects'
