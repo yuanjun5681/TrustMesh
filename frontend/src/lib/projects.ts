@@ -7,6 +7,7 @@ export function getEmptyProjectTaskSummary(): ProjectTaskSummary {
     in_progress_count: 0,
     done_count: 0,
     failed_count: 0,
+    canceled_count: 0,
     work_status: 'empty',
     latest_task_at: null,
   }

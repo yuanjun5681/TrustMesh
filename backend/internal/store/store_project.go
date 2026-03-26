@@ -12,6 +12,7 @@ import (
 type UpdateProjectInput struct {
 	Name        *string
 	Description *string
+	PMAgentID   *string
 }
 
 func (s *Store) buildProjectViewUnsafe(project *model.Project) *model.Project {
@@ -42,6 +43,8 @@ func (s *Store) aggregateProjectTaskSummaryUnsafe(project *model.Project) model.
 			summary.DoneCount++
 		case "failed":
 			summary.FailedCount++
+		case "canceled":
+			summary.CanceledCount++
 		}
 
 		if summary.LatestTaskAt == nil || task.UpdatedAt.After(*summary.LatestTaskAt) {
@@ -150,6 +153,18 @@ func (s *Store) UpdateProject(userID, projectID string, in UpdateProjectInput) (
 			return nil, transport.Validation("invalid description", map[string]any{"description": "cannot be empty"})
 		}
 		p.Description = desc
+	}
+	if in.PMAgentID != nil {
+		agentID := strings.TrimSpace(*in.PMAgentID)
+		if agentID == "" {
+			return nil, transport.Validation("invalid pm_agent_id", map[string]any{"pm_agent_id": "cannot be empty"})
+		}
+		pm, err := s.pmAgentForUserUnsafe(userID, agentID)
+		if err != nil {
+			return nil, err
+		}
+		p.PMAgentID = agentID
+		p.PMAgent = toPMSummary(pm)
 	}
 	p.UpdatedAt = time.Now().UTC()
 	if err := s.persistProjectUnsafe(p); err != nil {
@@ -282,7 +297,7 @@ func (s *Store) ensureTaskProjectActiveUnsafe(task *model.TaskDetail) *transport
 
 func (s *Store) pmAgentForUserUnsafe(userID, agentID string) (*model.Agent, *transport.AppError) {
 	a, ok := s.agents[agentID]
-	if !ok || a.UserID != userID || a.Role != "pm" {
+	if !ok || a.UserID != userID || a.Role != "pm" || a.Archived {
 		return nil, transport.Conflict("PROJECT_PM_AGENT_INVALID", "pm_agent_id must reference a PM agent of current user")
 	}
 	return a, nil

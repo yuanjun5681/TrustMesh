@@ -404,6 +404,123 @@ func TestCreateConversationPublishesInitialPMBrief(t *testing.T) {
 	}
 }
 
+func TestCancelTaskEndpointCancelsTaskAndRejectsLateUpdates(t *testing.T) {
+	log, err := logger.New("error")
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	defer func() { _ = log.Sync() }()
+
+	clawServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/peers":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(clawsynapsePeersResponse(t, "node-pm-001", "node-dev-001")))
+		case "/v1/publish":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"code":"OK","message":"ok","data":{"messageId":"msg-cancel"},"ts":1}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer clawServer.Close()
+
+	application, err := New(config.Config{
+		Port:               "0",
+		JWTSecret:          "test-secret",
+		AccessTokenTTL:     time.Hour,
+		RefreshTokenTTL:    168 * time.Hour,
+		LogLevel:           "error",
+		AllowAllCORS:       true,
+		ReadTimeout:        3 * time.Second,
+		ShutdownGrace:      3 * time.Second,
+		ClawSynapseAPIURL:  clawServer.URL,
+		ClawSynapseTimeout: time.Second,
+	}, log)
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
+	defer func() {
+		if closeErr := application.Close(); closeErr != nil {
+			t.Fatalf("close app: %v", closeErr)
+		}
+	}()
+
+	testServer := httptest.NewServer(application.Engine)
+	defer testServer.Close()
+
+	registerResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/auth/register", "", map[string]any{
+		"email":    "cancel@example.com",
+		"name":     "Cancel User",
+		"password": "StrongPass123!",
+	})
+	registerData := decodeBody(t, registerResp)
+	token := nestedString(registerData, "data", "access_token")
+	userID := nestedString(registerData, "data", "user", "id")
+
+	pm, appErr := application.Store.CreateAgent(userID, "node-pm-001", "PM Agent", "pm", "PM", []string{"plan"})
+	if appErr != nil {
+		t.Fatalf("create pm: %v", appErr)
+	}
+	dev, appErr := application.Store.CreateAgent(userID, "node-dev-001", "Developer", "developer", "Dev", []string{"backend"})
+	if appErr != nil {
+		t.Fatalf("create dev: %v", appErr)
+	}
+	application.Store.SyncAgentPresence([]store.AgentPresence{
+		{NodeID: pm.NodeID, LastSeenAt: time.Now().UTC()},
+		{NodeID: dev.NodeID, LastSeenAt: time.Now().UTC()},
+	}, time.Now().UTC())
+
+	project, appErr := application.Store.CreateProject(userID, "Cancel Project", "demo", pm.ID)
+	if appErr != nil {
+		t.Fatalf("create project: %v", appErr)
+	}
+	conversation, appErr := application.Store.CreateConversation(userID, project.ID, "Need login")
+	if appErr != nil {
+		t.Fatalf("create conversation: %v", appErr)
+	}
+	task, appErr := application.Store.CreateTaskByPMNode(pm.NodeID, store.TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: conversation.ID,
+		Title:          "Implement login",
+		Description:    "Support email/password login",
+		Todos: []store.TaskCreateTodoInput{
+			{
+				ID:             "todo-1",
+				Title:          "Build backend API",
+				Description:    "Implement auth endpoints",
+				AssigneeNodeID: dev.NodeID,
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("create task: %v", appErr)
+	}
+
+	cancelResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/tasks/"+task.ID+"/cancel", token, map[string]any{
+		"reason": "manual stop",
+	})
+	if cancelResp.StatusCode != http.StatusOK {
+		t.Fatalf("cancel task status=%d", cancelResp.StatusCode)
+	}
+	cancelData := decodeBody(t, cancelResp)
+	if nestedString(cancelData, "data", "status") != "canceled" {
+		t.Fatalf("unexpected cancel response: %#v", cancelData)
+	}
+	if nestedString(cancelData, "data", "cancel_reason") != "manual stop" {
+		t.Fatalf("unexpected cancel reason: %#v", cancelData)
+	}
+
+	_, appErr = application.Store.UpdateTodoProgressByNode(dev.NodeID, store.TodoProgressInput{
+		TaskID:  task.ID,
+		TodoID:  "todo-1",
+		Message: "late update",
+	})
+	if appErr == nil || appErr.Code != "TASK_CANCELED" {
+		t.Fatalf("expected TASK_CANCELED after endpoint cancel, got %#v", appErr)
+	}
+}
+
 func TestDispatchTodoPublishesAssignmentToAssignee(t *testing.T) {
 	log, err := logger.New("error")
 	if err != nil {
@@ -707,14 +824,14 @@ func TestUserRealtimeStreamPushesDomainEvents(t *testing.T) {
 	defer func() { _ = log.Sync() }()
 
 	application, err := New(config.Config{
-		Port:          "0",
-		JWTSecret:     "test-secret",
+		Port:            "0",
+		JWTSecret:       "test-secret",
 		AccessTokenTTL:  time.Hour,
 		RefreshTokenTTL: 168 * time.Hour,
-		LogLevel:      "error",
-		AllowAllCORS:  true,
-		ReadTimeout:   3 * time.Second,
-		ShutdownGrace: 3 * time.Second,
+		LogLevel:        "error",
+		AllowAllCORS:    true,
+		ReadTimeout:     3 * time.Second,
+		ShutdownGrace:   3 * time.Second,
 	}, log)
 	if err != nil {
 		t.Fatalf("new app: %v", err)
@@ -854,14 +971,14 @@ func TestUserRealtimeStreamPushesNotificationReadLifecycle(t *testing.T) {
 	defer func() { _ = log.Sync() }()
 
 	application, err := New(config.Config{
-		Port:          "0",
-		JWTSecret:     "test-secret",
+		Port:            "0",
+		JWTSecret:       "test-secret",
 		AccessTokenTTL:  time.Hour,
 		RefreshTokenTTL: 168 * time.Hour,
-		LogLevel:      "error",
-		AllowAllCORS:  true,
-		ReadTimeout:   3 * time.Second,
-		ShutdownGrace: 3 * time.Second,
+		LogLevel:        "error",
+		AllowAllCORS:    true,
+		ReadTimeout:     3 * time.Second,
+		ShutdownGrace:   3 * time.Second,
 	}, log)
 	if err != nil {
 		t.Fatalf("new app: %v", err)
@@ -1075,14 +1192,14 @@ func TestGetTaskArtifactContent(t *testing.T) {
 	defer func() { _ = log.Sync() }()
 
 	application, err := New(config.Config{
-		Port:          "0",
-		JWTSecret:     "test-secret",
+		Port:            "0",
+		JWTSecret:       "test-secret",
 		AccessTokenTTL:  time.Hour,
 		RefreshTokenTTL: 168 * time.Hour,
-		LogLevel:      "error",
-		AllowAllCORS:  true,
-		ReadTimeout:   3 * time.Second,
-		ShutdownGrace: 3 * time.Second,
+		LogLevel:        "error",
+		AllowAllCORS:    true,
+		ReadTimeout:     3 * time.Second,
+		ShutdownGrace:   3 * time.Second,
 	}, log)
 	if err != nil {
 		t.Fatalf("new app: %v", err)

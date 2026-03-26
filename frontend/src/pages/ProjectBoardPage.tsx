@@ -54,6 +54,7 @@ export function ProjectBoardPage() {
                 {project.task_summary.in_progress_count > 0 && ` · ${project.task_summary.in_progress_count} 执行中`}
                 {project.task_summary.pending_count > 0 && ` · ${project.task_summary.pending_count} 待处理`}
                 {project.task_summary.failed_count > 0 && ` · ${project.task_summary.failed_count} 失败`}
+                {project.task_summary.canceled_count > 0 && ` · ${project.task_summary.canceled_count} 已取消`}
               </span>
               <span title={formatDateTime(project.updated_at)}>
                 最后更新: {formatRelativeTime(project.updated_at)}

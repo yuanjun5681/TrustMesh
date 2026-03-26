@@ -33,18 +33,26 @@ type TodoResult struct {
 }
 
 type Todo struct {
-	ID          string       `json:"id" bson:"id"`
-	Order       int          `json:"order" bson:"order"`
-	Title       string       `json:"title" bson:"title"`
-	Description string       `json:"description" bson:"description"`
-	Status      string       `json:"status" bson:"status"`
-	Assignee    TodoAssignee `json:"assignee" bson:"assignee"`
-	StartedAt   *time.Time   `json:"started_at" bson:"started_at"`
-	CompletedAt *time.Time   `json:"completed_at" bson:"completed_at"`
-	FailedAt    *time.Time   `json:"failed_at" bson:"failed_at"`
-	Error       *string      `json:"error" bson:"error"`
-	Result      TodoResult   `json:"result" bson:"result"`
-	CreatedAt   time.Time    `json:"created_at" bson:"created_at"`
+	ID           string       `json:"id" bson:"id"`
+	Order        int          `json:"order" bson:"order"`
+	Title        string       `json:"title" bson:"title"`
+	Description  string       `json:"description" bson:"description"`
+	Status       string       `json:"status" bson:"status"`
+	Assignee     TodoAssignee `json:"assignee" bson:"assignee"`
+	StartedAt    *time.Time   `json:"started_at" bson:"started_at"`
+	CompletedAt  *time.Time   `json:"completed_at" bson:"completed_at"`
+	FailedAt     *time.Time   `json:"failed_at" bson:"failed_at"`
+	CanceledAt   *time.Time   `json:"canceled_at" bson:"canceled_at"`
+	Error        *string      `json:"error" bson:"error"`
+	CancelReason *string      `json:"cancel_reason" bson:"cancel_reason"`
+	Result       TodoResult   `json:"result" bson:"result"`
+	CreatedAt    time.Time    `json:"created_at" bson:"created_at"`
+}
+
+type ActorRef struct {
+	ActorType string `json:"actor_type" bson:"actor_type"`
+	ActorID   string `json:"actor_id" bson:"actor_id"`
+	ActorName string `json:"actor_name" bson:"actor_name"`
 }
 
 type TaskArtifact struct {
@@ -94,6 +102,9 @@ type TaskDetail struct {
 	Artifacts      []TaskArtifact `json:"artifacts" bson:"artifacts"`
 	Result         TaskResult     `json:"result" bson:"result"`
 	Version        int            `json:"version" bson:"version"`
+	CanceledAt     *time.Time     `json:"canceled_at" bson:"canceled_at"`
+	CanceledBy     *ActorRef      `json:"canceled_by" bson:"canceled_by"`
+	CancelReason   *string        `json:"cancel_reason" bson:"cancel_reason"`
 	CreatedAt      time.Time      `json:"created_at" bson:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at" bson:"updated_at"`
 }

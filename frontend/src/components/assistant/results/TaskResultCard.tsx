@@ -7,6 +7,7 @@ const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   in_progress: { label: '进行中', className: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' },
   done: { label: '已完成', className: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' },
   failed: { label: '失败', className: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' },
+  canceled: { label: '已取消', className: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' },
 }
 
 interface Props {

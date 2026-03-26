@@ -41,6 +41,7 @@ const taskStatusBadge: Record<string, { label: string; variant: 'secondary' | 'i
   in_progress: { label: '进行中', variant: 'info' },
   done: { label: '已完成', variant: 'success' },
   failed: { label: '失败', variant: 'destructive' },
+  canceled: { label: '已取消', variant: 'secondary' },
 }
 
 const agentStatusBadge: Record<string, { label: string; className: string }> = {

@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, Loader2, XCircle, ChevronDown, ChevronRight } from 'lucide-react'
+import { CheckCircle2, Circle, Loader2, XCircle, ChevronDown, ChevronRight, CircleSlash2 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -9,6 +9,7 @@ const statusIcons = {
   in_progress: Loader2,
   done: CheckCircle2,
   failed: XCircle,
+  canceled: CircleSlash2,
 }
 
 const statusColors = {
@@ -16,14 +17,16 @@ const statusColors = {
   in_progress: 'text-info animate-spin',
   done: 'text-success',
   failed: 'text-destructive',
+  canceled: 'text-muted-foreground',
 }
 
 interface TodoListProps {
   todos: Todo[]
   artifacts: TaskArtifact[]
+  variant?: 'card' | 'nested'
 }
 
-export function TodoList({ todos, artifacts }: TodoListProps) {
+export function TodoList({ todos, artifacts, variant = 'card' }: TodoListProps) {
   const safeArtifacts = artifacts ?? []
 
   if (todos.length === 0) {
@@ -31,12 +34,13 @@ export function TodoList({ todos, artifacts }: TodoListProps) {
   }
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className={cn('flex flex-col', variant === 'card' ? 'gap-1' : 'gap-0')}>
       {todos.map((todo) => (
         <TodoItem
           key={todo.id}
           todo={todo}
           artifacts={safeArtifacts}
+          variant={variant}
         />
       ))}
     </div>
@@ -46,34 +50,47 @@ export function TodoList({ todos, artifacts }: TodoListProps) {
 function TodoItem({
   todo,
   artifacts,
+  variant,
 }: {
   todo: Todo
   artifacts: TaskArtifact[]
+  variant: 'card' | 'nested'
 }) {
   const [expanded, setExpanded] = useState(false)
   const Icon = statusIcons[todo.status]
   const relatedArtifacts = (artifacts ?? []).filter((a) => a.source_todo_id === todo.id)
-  const hasDetails = todo.description || todo.result?.summary || todo.error || relatedArtifacts.length > 0
+  const hasDetails = todo.description || todo.error || relatedArtifacts.length > 0
+  const isCard = variant === 'card'
 
   return (
-    <div className="rounded-lg border bg-card">
-      <div className="flex items-start gap-3 p-3">
+    <div
+      className={cn(
+        isCard
+          ? 'rounded-lg border bg-card'
+          : 'border-t border-border/60 first:border-t-0'
+      )}
+    >
+      <div className={cn('flex items-start gap-3', isCard ? 'p-3' : 'py-3 pr-1')}>
         <button
           type="button"
           onClick={() => hasDetails && setExpanded(!expanded)}
           className={cn(
             'flex min-w-0 flex-1 items-start gap-3 text-left',
-            hasDetails && 'cursor-pointer rounded-md hover:bg-muted/50 transition-colors'
+            hasDetails && 'cursor-pointer rounded-md transition-colors hover:bg-muted/40',
           )}
         >
           <Icon className={cn('size-4 mt-0.5 shrink-0', statusColors[todo.status])} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">{todo.title}</span>
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className={cn('truncate font-medium', isCard ? 'text-sm' : 'text-[13px]')}>
+                  {todo.title}
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
-              <span>{todo.assignee.name}</span>
-            </div>
+            <span className="mt-0.5 shrink-0 text-xs text-muted-foreground">
+              {todo.assignee.name}
+            </span>
           </div>
           {hasDetails && (
             expanded
@@ -84,25 +101,24 @@ function TodoItem({
       </div>
 
       {expanded && hasDetails && (
-        <div className="flex flex-col gap-2 px-3 pb-3 pt-0 ml-7 text-sm">
+        <div
+          className={cn(
+            'ml-7 flex flex-col gap-2 text-sm',
+            isCard ? 'px-3 pb-3 pt-0' : 'mb-3 border-l border-border/70 pl-3',
+          )}
+        >
           {todo.description && (
             <p className="text-muted-foreground whitespace-pre-wrap">{todo.description}</p>
           )}
           {todo.error && (
-            <p className="text-destructive bg-destructive/10 rounded-md p-2 text-xs">
+            <p className="rounded-md bg-destructive/10 p-2 text-xs text-destructive">
               {todo.error}
             </p>
-          )}
-          {todo.result?.summary && (
-            <div className="bg-muted/50 rounded-md p-2">
-              <p className="font-medium text-xs mb-1">结果</p>
-              <p className="text-muted-foreground text-xs">{todo.result.summary}</p>
-            </div>
           )}
           {relatedArtifacts.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {relatedArtifacts.map((a) => (
-                <Badge key={a.id} variant="secondary" className="text-xs">
+                <Badge key={a.id} variant={isCard ? 'secondary' : 'outline'} className="text-xs">
                   {a.title}
                 </Badge>
               ))}

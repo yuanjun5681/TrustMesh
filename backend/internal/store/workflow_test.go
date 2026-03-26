@@ -119,15 +119,33 @@ func TestAgentUsageAndDeleteConflictDetails(t *testing.T) {
 		t.Fatalf("unexpected get agent usage: %#v", agent.Usage)
 	}
 
+	// 删除有引用的 agent 应该软删除（归档）而非报错
 	appErr = s.DeleteAgent(userID, developer.ID)
-	if appErr == nil {
-		t.Fatal("expected delete agent conflict")
+	if appErr != nil {
+		t.Fatalf("expected soft delete to succeed, got: %v", appErr)
 	}
-	if appErr.Code != "AGENT_IN_USE" {
-		t.Fatalf("unexpected delete error code: %s", appErr.Code)
+
+	// 归档后 ListAgents 不应包含该 agent
+	agentsAfterArchive := s.ListAgents(userID)
+	for _, a := range agentsAfterArchive {
+		if a.ID == developer.ID {
+			t.Fatal("archived agent should not appear in ListAgents")
+		}
 	}
-	if appErr.Details["project_count"] != 0 || appErr.Details["task_count"] != 0 || appErr.Details["todo_count"] != 1 || appErr.Details["total_count"] != 1 {
-		t.Fatalf("unexpected delete error details: %#v", appErr.Details)
+
+	// GetAgent 仍可查看归档 agent
+	archivedAgent, appErr := s.GetAgent(userID, developer.ID)
+	if appErr != nil {
+		t.Fatalf("GetAgent on archived agent should succeed: %v", appErr)
+	}
+	if !archivedAgent.Archived {
+		t.Fatal("expected agent to be archived")
+	}
+
+	// 再次删除归档 agent 应返回 not found
+	appErr = s.DeleteAgent(userID, developer.ID)
+	if appErr == nil || appErr.Status != 404 {
+		t.Fatalf("expected not found for already archived agent, got: %v", appErr)
 	}
 }
 
@@ -593,6 +611,88 @@ func TestTaskTodoOrderAndSequentialExecutionGuards(t *testing.T) {
 
 	if task.Status != "done" {
 		t.Fatalf("expected task done after ordered completion, got %s", task.Status)
+	}
+}
+
+func TestCancelTaskStopsFurtherTodoUpdates(t *testing.T) {
+	s, userID, pm, developer, project, conversation := seedWorkflowState(t)
+
+	task, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: conversation.ID,
+		Title:          "Implement login",
+		Description:    "Support email password login",
+		Todos: []TaskCreateTodoInput{
+			{
+				ID:             "todo-1",
+				Title:          "Build backend API",
+				Description:    "Implement auth endpoints",
+				AssigneeNodeID: developer.NodeID,
+			},
+			{
+				ID:             "todo-2",
+				Title:          "Write docs",
+				Description:    "Document rollout",
+				AssigneeNodeID: developer.NodeID,
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("create task: %v", appErr)
+	}
+
+	task, appErr = s.RecordSequentialTodoDispatch(task.ID, "todo-1")
+	if appErr != nil {
+		t.Fatalf("dispatch first todo: %v", appErr)
+	}
+	if task.Status != "in_progress" {
+		t.Fatalf("expected in_progress before cancel, got %s", task.Status)
+	}
+
+	task, appErr = s.CancelTask(userID, TaskCancelInput{
+		TaskID: task.ID,
+		Reason: "manual stop",
+	})
+	if appErr != nil {
+		t.Fatalf("cancel task: %v", appErr)
+	}
+	if task.Status != "canceled" {
+		t.Fatalf("expected canceled task status, got %s", task.Status)
+	}
+	if task.CancelReason == nil || *task.CancelReason != "manual stop" {
+		t.Fatalf("unexpected cancel reason: %#v", task.CancelReason)
+	}
+	if task.CanceledBy == nil || task.CanceledBy.ActorID != userID {
+		t.Fatalf("unexpected canceled_by: %#v", task.CanceledBy)
+	}
+	if task.Todos[0].Status != "canceled" || task.Todos[1].Status != "canceled" {
+		t.Fatalf("expected unfinished todos to be canceled: %#v", task.Todos)
+	}
+	if task.Result.Metadata["canceled_todo_count"] != 2 {
+		t.Fatalf("expected canceled_todo_count=2, got %#v", task.Result.Metadata["canceled_todo_count"])
+	}
+
+	_, appErr = s.UpdateTodoProgressByNode(developer.NodeID, TodoProgressInput{
+		TaskID:  task.ID,
+		TodoID:  "todo-1",
+		Message: "late progress",
+	})
+	if appErr == nil || appErr.Code != "TASK_CANCELED" {
+		t.Fatalf("expected TASK_CANCELED for progress after cancel, got %#v", appErr)
+	}
+
+	_, appErr = s.CompleteTodoByNode(developer.NodeID, TodoCompleteInput{
+		TaskID: task.ID,
+		TodoID: "todo-1",
+		Result: model.TodoResult{Summary: "late", Output: "late"},
+	})
+	if appErr == nil || appErr.Code != "TASK_CANCELED" {
+		t.Fatalf("expected TASK_CANCELED for complete after cancel, got %#v", appErr)
+	}
+
+	_, appErr = s.RecordSequentialTodoDispatch(task.ID, "todo-2")
+	if appErr == nil || appErr.Code != "TASK_CANCELED" {
+		t.Fatalf("expected TASK_CANCELED for dispatch after cancel, got %#v", appErr)
 	}
 }
 

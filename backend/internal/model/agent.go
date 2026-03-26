@@ -18,6 +18,7 @@ type Agent struct {
 	Capabilities []string   `json:"capabilities" bson:"capabilities"`
 	NodeID       string     `json:"node_id" bson:"node_id"`
 	Status       string     `json:"status" bson:"status"`
+	Archived     bool       `json:"archived" bson:"archived"`
 	LastSeenAt   *time.Time `json:"last_seen_at" bson:"last_seen_at"`
 	Usage        AgentUsage `json:"usage" bson:"-"`
 	CreatedAt    time.Time  `json:"created_at" bson:"created_at"`

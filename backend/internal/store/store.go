@@ -142,7 +142,43 @@ func copyTask(t *model.TaskDetail) *model.TaskDetail {
 		FinalOutput: t.Result.FinalOutput,
 		Metadata:    copyMap(t.Result.Metadata),
 	}
+	if t.CanceledAt != nil {
+		at := *t.CanceledAt
+		clone.CanceledAt = &at
+	}
+	if t.CanceledBy != nil {
+		actor := *t.CanceledBy
+		clone.CanceledBy = &actor
+	}
+	if t.CancelReason != nil {
+		reason := *t.CancelReason
+		clone.CancelReason = &reason
+	}
 	for i := range clone.Todos {
+		if clone.Todos[i].StartedAt != nil {
+			at := *clone.Todos[i].StartedAt
+			clone.Todos[i].StartedAt = &at
+		}
+		if clone.Todos[i].CompletedAt != nil {
+			at := *clone.Todos[i].CompletedAt
+			clone.Todos[i].CompletedAt = &at
+		}
+		if clone.Todos[i].FailedAt != nil {
+			at := *clone.Todos[i].FailedAt
+			clone.Todos[i].FailedAt = &at
+		}
+		if clone.Todos[i].CanceledAt != nil {
+			at := *clone.Todos[i].CanceledAt
+			clone.Todos[i].CanceledAt = &at
+		}
+		if clone.Todos[i].Error != nil {
+			errCopy := *clone.Todos[i].Error
+			clone.Todos[i].Error = &errCopy
+		}
+		if clone.Todos[i].CancelReason != nil {
+			reason := *clone.Todos[i].CancelReason
+			clone.Todos[i].CancelReason = &reason
+		}
 		clone.Todos[i].Result.Metadata = copyMap(clone.Todos[i].Result.Metadata)
 		clone.Todos[i].Result.ArtifactRefs = append([]model.TodoResultArtifactRef{}, clone.Todos[i].Result.ArtifactRefs...)
 	}

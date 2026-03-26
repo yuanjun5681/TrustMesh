@@ -15,7 +15,7 @@ func (s *Store) ListTasks(userID, projectID, status string) ([]model.TaskListIte
 		return nil, err
 	}
 	if status != "" && !isValidTaskStatus(status) {
-		return nil, transport.Validation("invalid status", map[string]any{"status": "must be pending/in_progress/done/failed"})
+		return nil, transport.Validation("invalid status", map[string]any{"status": "must be pending/in_progress/done/failed/canceled"})
 	}
 
 	ids := s.projectTasks[projectID]
@@ -171,7 +171,7 @@ func toPMSummary(a *model.Agent) model.PMAgentSummary {
 
 func isValidTaskStatus(status string) bool {
 	switch status {
-	case "pending", "in_progress", "done", "failed":
+	case "pending", "in_progress", "done", "failed", "canceled":
 		return true
 	default:
 		return false

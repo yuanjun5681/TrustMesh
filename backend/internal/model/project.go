@@ -8,6 +8,7 @@ type ProjectTaskSummary struct {
 	InProgressCount int        `json:"in_progress_count" bson:"in_progress_count"`
 	DoneCount       int        `json:"done_count" bson:"done_count"`
 	FailedCount     int        `json:"failed_count" bson:"failed_count"`
+	CanceledCount   int        `json:"canceled_count" bson:"canceled_count"`
 	WorkStatus      string     `json:"work_status" bson:"work_status"`
 	LatestTaskAt    *time.Time `json:"latest_task_at" bson:"latest_task_at"`
 }

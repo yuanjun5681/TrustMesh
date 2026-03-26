@@ -106,7 +106,7 @@ func (s *Store) ListAgents(userID string) []model.Agent {
 
 	items := make([]model.Agent, 0)
 	for _, a := range s.agents {
-		if a.UserID == userID {
+		if a.UserID == userID && !a.Archived {
 			clone := copyAgent(a)
 			clone.Usage = s.agentUsageUnsafe(a.ID)
 			items = append(items, *clone)
@@ -132,7 +132,7 @@ func (s *Store) UpdateAgent(userID, agentID string, in UpdateAgentInput) (*model
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	a, ok := s.agents[agentID]
-	if !ok || a.UserID != userID {
+	if !ok || a.UserID != userID || a.Archived {
 		return nil, transport.NotFound("agent not found")
 	}
 
@@ -181,18 +181,23 @@ func (s *Store) DeleteAgent(userID, agentID string) *transport.AppError {
 	if !ok || a.UserID != userID {
 		return transport.NotFound("agent not found")
 	}
+	if a.Archived {
+		return transport.NotFound("agent not found")
+	}
 
 	usage := s.agentUsageUnsafe(agentID)
 	if usage.InUse {
-		err := transport.Conflict("AGENT_IN_USE", "agent is referenced by project or task")
-		err.Details = map[string]any{
-			"project_count": usage.ProjectCount,
-			"task_count":    usage.TaskCount,
-			"todo_count":    usage.TodoCount,
-			"total_count":   usage.TotalCount,
+		// 软删除：标记为归档，释放 node_id 以便复用
+		a.Archived = true
+		a.Status = "offline"
+		a.UpdatedAt = time.Now().UTC()
+		delete(s.agentByNode, a.NodeID)
+		if err := s.persistAgentUnsafe(a); err != nil {
+			return mongoWriteError(err)
 		}
-		return err
+		return nil
 	}
+	// 无引用：硬删除
 	delete(s.agentByNode, a.NodeID)
 	delete(s.agents, agentID)
 	if err := s.deleteAgentUnsafe(agentID); err != nil {

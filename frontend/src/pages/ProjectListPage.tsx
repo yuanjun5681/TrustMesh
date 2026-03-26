@@ -79,6 +79,7 @@ export function ProjectListPage() {
                         {project.task_summary.task_total} 个任务
                         {project.task_summary.in_progress_count > 0 && ` · ${project.task_summary.in_progress_count} 执行中`}
                         {project.task_summary.failed_count > 0 && ` · ${project.task_summary.failed_count} 失败`}
+                        {project.task_summary.canceled_count > 0 && ` · ${project.task_summary.canceled_count} 已取消`}
                       </span>
                       <span>{formatRelativeTime(project.updated_at)}</span>
                     </div>

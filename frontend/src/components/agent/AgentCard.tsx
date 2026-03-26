@@ -61,12 +61,11 @@ export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={onDelete}
-                disabled={agent.usage.in_use}
-                className="text-destructive disabled:text-muted-foreground"
-                title={agent.usage.in_use ? `该 Agent 正被 ${usageText} 引用` : '删除 Agent'}
+                className="text-destructive"
+                title={agent.usage.in_use ? `该 Agent 正被 ${usageText} 引用，将被归档` : '删除 Agent'}
               >
                 <Trash2 className="size-3.5 mr-2" />
-                {agent.usage.in_use ? '删除前需解除引用' : '删除'}
+                {agent.usage.in_use ? '归档' : '删除'}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

@@ -4,6 +4,7 @@ import { PageContainer } from '@/components/layout/PageContainer'
 import { Button } from '@/components/ui/button'
 import { AgentCard } from '@/components/agent/AgentCard'
 import { AgentConfigDialog } from '@/components/agent/AgentConfigDialog'
+import { ArchiveAgentDialog } from '@/components/agent/ArchiveAgentDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAgents, useDeleteAgent } from '@/hooks/useAgents'
@@ -26,18 +27,11 @@ export function AgentListPage() {
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null)
   const [roleFilter, setRoleFilter] = useState<AgentRole | 'all'>('all')
   const [error, setError] = useState('')
+  const [archiveTarget, setArchiveTarget] = useState<Agent | null>(null)
 
   const filteredAgents = agents?.filter(
     (a) => roleFilter === 'all' || a.role === roleFilter
   ) ?? []
-
-  const formatUsage = (agent: Agent) => {
-    const parts: string[] = []
-    if (agent.usage.project_count > 0) parts.push(`${agent.usage.project_count} 个项目`)
-    if (agent.usage.task_count > 0) parts.push(`${agent.usage.task_count} 个任务`)
-    if (agent.usage.todo_count > 0) parts.push(`${agent.usage.todo_count} 个 Todo`)
-    return parts.join('、')
-  }
 
   const handleEdit = (agent: Agent) => {
     setError('')
@@ -48,9 +42,7 @@ export function AgentListPage() {
   const handleDelete = async (agent: Agent) => {
     setError('')
     if (agent.usage.in_use) {
-      const msg = `无法删除 Agent "${agent.name}"，当前仍被 ${formatUsage(agent)} 引用，请先解除关联。`
-      toast.error(msg)
-      setError(msg)
+      setArchiveTarget(agent)
       return
     }
 
@@ -59,12 +51,7 @@ export function AgentListPage() {
         await deleteAgent.mutateAsync(agent.id)
         toast.success(`Agent "${agent.name}" 已删除`)
       } catch (err) {
-        let message = '删除 Agent 失败'
-        if (err instanceof ApiRequestError) {
-          message = err.code === 'AGENT_IN_USE'
-            ? `无法删除 Agent "${agent.name}"，当前仍被引用，请先解除关联。`
-            : err.message
-        }
+        const message = err instanceof ApiRequestError ? err.message : '删除 Agent 失败'
         toast.error(message)
         setError(message)
       }
@@ -143,6 +130,12 @@ export function AgentListPage() {
         open={showConfig}
         onOpenChange={handleClose}
         agent={editingAgent}
+      />
+
+      <ArchiveAgentDialog
+        open={!!archiveTarget}
+        onOpenChange={(open) => { if (!open) setArchiveTarget(null) }}
+        agent={archiveTarget ?? undefined}
       />
     </PageContainer>
   )
