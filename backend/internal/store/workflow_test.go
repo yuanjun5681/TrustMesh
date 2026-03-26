@@ -119,15 +119,33 @@ func TestAgentUsageAndDeleteConflictDetails(t *testing.T) {
 		t.Fatalf("unexpected get agent usage: %#v", agent.Usage)
 	}
 
+	// 删除有引用的 agent 应该软删除（归档）而非报错
 	appErr = s.DeleteAgent(userID, developer.ID)
-	if appErr == nil {
-		t.Fatal("expected delete agent conflict")
+	if appErr != nil {
+		t.Fatalf("expected soft delete to succeed, got: %v", appErr)
 	}
-	if appErr.Code != "AGENT_IN_USE" {
-		t.Fatalf("unexpected delete error code: %s", appErr.Code)
+
+	// 归档后 ListAgents 不应包含该 agent
+	agentsAfterArchive := s.ListAgents(userID)
+	for _, a := range agentsAfterArchive {
+		if a.ID == developer.ID {
+			t.Fatal("archived agent should not appear in ListAgents")
+		}
 	}
-	if appErr.Details["project_count"] != 0 || appErr.Details["task_count"] != 0 || appErr.Details["todo_count"] != 1 || appErr.Details["total_count"] != 1 {
-		t.Fatalf("unexpected delete error details: %#v", appErr.Details)
+
+	// GetAgent 仍可查看归档 agent
+	archivedAgent, appErr := s.GetAgent(userID, developer.ID)
+	if appErr != nil {
+		t.Fatalf("GetAgent on archived agent should succeed: %v", appErr)
+	}
+	if !archivedAgent.Archived {
+		t.Fatal("expected agent to be archived")
+	}
+
+	// 再次删除归档 agent 应返回 not found
+	appErr = s.DeleteAgent(userID, developer.ID)
+	if appErr == nil || appErr.Status != 404 {
+		t.Fatalf("expected not found for already archived agent, got: %v", appErr)
 	}
 }
 

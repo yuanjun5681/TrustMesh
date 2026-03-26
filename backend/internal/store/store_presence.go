@@ -32,6 +32,9 @@ func (s *Store) SyncAgentPresence(items []AgentPresence, now time.Time) int {
 	updated := 0
 	persisted := make(map[string]struct{})
 	for _, agent := range s.agents {
+		if agent.Archived {
+			continue
+		}
 		lastSeen, online := seen[agent.NodeID]
 		nextStatus := "offline"
 		if online {

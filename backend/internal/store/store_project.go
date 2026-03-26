@@ -282,7 +282,7 @@ func (s *Store) ensureTaskProjectActiveUnsafe(task *model.TaskDetail) *transport
 
 func (s *Store) pmAgentForUserUnsafe(userID, agentID string) (*model.Agent, *transport.AppError) {
 	a, ok := s.agents[agentID]
-	if !ok || a.UserID != userID || a.Role != "pm" {
+	if !ok || a.UserID != userID || a.Role != "pm" || a.Archived {
 		return nil, transport.Conflict("PROJECT_PM_AGENT_INVALID", "pm_agent_id must reference a PM agent of current user")
 	}
 	return a, nil

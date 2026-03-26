@@ -159,6 +159,7 @@ export interface Agent {
   capabilities: string[]
   node_id: string
   status: AgentStatus
+  archived: boolean
   last_seen_at: string | null
   usage: AgentUsage
   created_at: string
