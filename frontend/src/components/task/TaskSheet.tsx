@@ -1,13 +1,14 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/StatusBadge'
-import { TodoList } from './TodoList'
 import { TaskTimeline } from './TaskTimeline'
 import { TaskResultView } from './TaskResult'
+import { TaskTodoSection } from './TaskTodoSection'
 import { useTask } from '@/hooks/useTasks'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useState } from 'react'
+import type { TaskDetail } from '@/types'
 
 interface TaskSheetProps {
   taskId: string | null
@@ -16,60 +17,60 @@ interface TaskSheetProps {
 
 export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
   const { data: task } = useTask(taskId ?? undefined)
-  const [tab, setTab] = useState('todos')
 
   return (
     <Sheet open={!!taskId} onOpenChange={() => onClose()}>
       <SheetContent className="max-w-2xl">
         {task && (
-          <>
-            <SheetHeader>
-              <div className="flex items-center gap-2 flex-wrap pr-8">
-                <TaskStatusBadge status={task.status} />
-                <PriorityBadge priority={task.priority} />
-              </div>
-              <SheetTitle className="text-lg mt-1">{task.title}</SheetTitle>
-              {task.description && (
-                <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">
-                  {task.description}
-                </p>
-              )}
-            </SheetHeader>
-
-            <Separator className="my-4" />
-
-            <div className="px-6 pb-6 flex-1">
-              <Tabs value={tab} onValueChange={setTab}>
-                <TabsList>
-                  <TabsTrigger value="todos">
-                    Todo ({task.todos.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="timeline">时间线</TabsTrigger>
-                  <TabsTrigger value="result">结果</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="todos">
-                  <ScrollArea className="max-h-[calc(100vh-280px)]">
-                    <TodoList todos={task.todos} artifacts={task.artifacts} />
-                  </ScrollArea>
-                </TabsContent>
-
-                <TabsContent value="timeline">
-                  <ScrollArea className="max-h-[calc(100vh-280px)]">
-                    <TaskTimeline taskId={task.id} />
-                  </ScrollArea>
-                </TabsContent>
-
-                <TabsContent value="result">
-                  <ScrollArea className="max-h-[calc(100vh-280px)]">
-                    <TaskResultView taskId={task.id} result={task.result} artifacts={task.artifacts} />
-                  </ScrollArea>
-                </TabsContent>
-              </Tabs>
-            </div>
-          </>
+          <TaskSheetBody key={task.id} task={task} />
         )}
       </SheetContent>
     </Sheet>
+  )
+}
+
+function TaskSheetBody({ task }: { task: TaskDetail }) {
+  const [tab, setTab] = useState('activity')
+
+  return (
+    <>
+      <SheetHeader>
+        <div className="flex items-center gap-2 flex-wrap pr-8">
+          <TaskStatusBadge status={task.status} />
+          <PriorityBadge priority={task.priority} />
+        </div>
+        <SheetTitle className="text-lg mt-1">{task.title}</SheetTitle>
+        {task.description && (
+          <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">
+            {task.description}
+          </p>
+        )}
+      </SheetHeader>
+
+      <Separator className="my-4" />
+
+      <div className="flex flex-1 flex-col gap-4 px-6 pb-6">
+        <TaskTodoSection todos={task.todos} artifacts={task.artifacts} />
+
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList>
+            <TabsTrigger value="activity">全部活动</TabsTrigger>
+            <TabsTrigger value="result">结果</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="activity">
+            <ScrollArea className="max-h-[calc(100vh-280px)]">
+              <TaskTimeline taskId={task.id} />
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="result">
+            <ScrollArea className="max-h-[calc(100vh-280px)]">
+              <TaskResultView taskId={task.id} result={task.result} artifacts={task.artifacts} />
+            </ScrollArea>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </>
   )
 }

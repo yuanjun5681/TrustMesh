@@ -2,7 +2,6 @@ import { X, MessageSquare, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/StatusBadge'
-import { TodoList } from './TodoList'
 import { TaskTimeline } from './TaskTimeline'
 import { TaskComments } from './TaskComments'
 import { TaskResultView } from './TaskResult'
@@ -19,7 +18,7 @@ interface TaskDetailPanelProps {
 
 export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
   const { data: task } = useTask(taskId)
-  const [tab, setTab] = useState('todos')
+  const [tab, setTab] = useState('activity')
   const [chatOpen, setChatOpen] = useState(false)
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   const [comment, setComment] = useState('')
@@ -100,24 +99,17 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
 
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList>
-              <TabsTrigger value="todos">
-                待办列表 ({task.todos.length})
-              </TabsTrigger>
-              <TabsTrigger value="comments">评论讨论</TabsTrigger>
               <TabsTrigger value="activity">全部活动</TabsTrigger>
+              <TabsTrigger value="comments">评论讨论</TabsTrigger>
               <TabsTrigger value="result">交付成果</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="todos" className="mt-3">
-              <TodoList todos={task.todos} artifacts={task.artifacts} />
+            <TabsContent value="activity" className="mt-3">
+              <TaskTimeline taskId={task.id} />
             </TabsContent>
 
             <TabsContent value="comments" className="mt-3">
               <TaskComments taskId={task.id} />
-            </TabsContent>
-
-            <TabsContent value="activity" className="mt-3">
-              <TaskTimeline taskId={task.id} />
             </TabsContent>
 
             <TabsContent value="result" className="mt-3">
