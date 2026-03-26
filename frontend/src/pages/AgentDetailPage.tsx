@@ -1,5 +1,5 @@
 import { useParams, Link } from 'react-router-dom'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, Plus } from 'lucide-react'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -17,6 +17,7 @@ import {
   AgentInsightPanels,
   AgentWorkload,
 } from '@/components/agent/AgentStatsPanel'
+import { CreateTaskDialog } from '@/components/task/CreateTaskDialog'
 import type { EventType } from '@/types'
 
 const eventTypeFilters: { label: string; value: EventType | 'all' }[] = [
@@ -34,6 +35,7 @@ export function AgentDetailPage() {
   const { data: insights, isLoading: insightsLoading } = useAgentInsights(id)
   const { data: events, isLoading: eventsLoading } = useAgentEvents(id)
   const [filter, setFilter] = useState<EventType | 'all'>('all')
+  const [createTaskOpen, setCreateTaskOpen] = useState(false)
 
   if (agentLoading) {
     return <div className="p-6 text-sm text-muted-foreground">加载中...</div>
@@ -59,6 +61,14 @@ export function AgentDetailPage() {
             </Link>
             <h1 className="text-2xl font-bold">{agent.name}</h1>
             <AgentStatusBadge status={agent.status} />
+            <div className="ml-auto">
+              {agent.role !== 'pm' && !agent.archived && (
+                <Button size="sm" variant="outline" onClick={() => setCreateTaskOpen(true)}>
+                  <Plus className="size-4 mr-1.5" />
+                  创建任务
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -142,6 +152,13 @@ export function AgentDetailPage() {
           </div>
         </div>
       </div>
+      {id && (
+        <CreateTaskDialog
+          open={createTaskOpen}
+          onOpenChange={setCreateTaskOpen}
+          defaultAgentId={id}
+        />
+      )}
     </PageContainer>
   )
 }
