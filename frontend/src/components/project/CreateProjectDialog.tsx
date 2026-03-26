@@ -18,6 +18,7 @@ export function CreateProjectDialog({ open, onOpenChange }: Props) {
   const createProject = useCreateProject()
 
   const pmAgents = agents?.filter((a) => a.role === 'pm') ?? []
+  const selectedAgent = pmAgents.find((a) => a.id === pmAgentId)
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
@@ -63,7 +64,11 @@ export function CreateProjectDialog({ open, onOpenChange }: Props) {
         <label className="text-sm font-medium">PM Agent</label>
         <Select value={pmAgentId} onValueChange={(val) => setPmAgentId(val ?? '')}>
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="选择 PM Agent..." />
+            <span>
+              {selectedAgent
+                ? `${selectedAgent.name} (${selectedAgent.node_id}) - ${selectedAgent.status === 'online' ? '在线' : '离线'}`
+                : '选择 PM Agent...'}
+            </span>
           </SelectTrigger>
           <SelectContent>
             {pmAgents.map((agent) => (

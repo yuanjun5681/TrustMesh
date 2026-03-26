@@ -80,14 +80,10 @@ func (h *ProjectHandler) Update(c *gin.Context) {
 		transport.WriteError(c, transport.BadRequest("BAD_REQUEST", "invalid json body"))
 		return
 	}
-	if req.PMAgentID != nil {
-		transport.WriteError(c, transport.Validation("pm_agent_id is immutable in this endpoint", map[string]any{"pm_agent_id": "not allowed to update"}))
-		return
-	}
-
 	project, appErr := h.store.UpdateProject(userID, c.Param("projectId"), store.UpdateProjectInput{
 		Name:        req.Name,
 		Description: req.Description,
+		PMAgentID:   req.PMAgentID,
 	})
 	if appErr != nil {
 		transport.WriteError(c, appErr)

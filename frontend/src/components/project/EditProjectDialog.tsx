@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { ApiRequestError } from '@/api/client'
 import { ProjectDialog } from '@/components/project/ProjectDialog'
 import { useUpdateProject } from '@/hooks/useProjects'
+import { useAgents } from '@/hooks/useAgents'
 import type { Project } from '@/types'
 
 interface Props {
@@ -13,7 +15,17 @@ interface Props {
 
 export function EditProjectDialog({ open, onOpenChange, project }: Props) {
   const [error, setError] = useState('')
+  const [pmAgentId, setPmAgentId] = useState(project?.pm_agent?.id ?? '')
   const updateProject = useUpdateProject()
+  const { data: agents } = useAgents()
+
+  const pmAgents = agents?.filter((a) => a.role === 'pm') ?? []
+  const selectedAgent = pmAgents.find((a) => a.id === pmAgentId)
+  const displayLabel = selectedAgent
+    ? `${selectedAgent.name} (${selectedAgent.node_id}) - ${selectedAgent.status === 'online' ? '在线' : '离线'}`
+    : project?.pm_agent
+      ? `${project.pm_agent.name} (${project.pm_agent.node_id})`
+      : '选择 PM Agent...'
 
   const initialValues = useMemo(
     () => ({
@@ -26,6 +38,7 @@ export function EditProjectDialog({ open, onOpenChange, project }: Props) {
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
       setError('')
+      setPmAgentId(project?.pm_agent?.id ?? '')
     }
     onOpenChange(nextOpen)
   }
@@ -39,7 +52,11 @@ export function EditProjectDialog({ open, onOpenChange, project }: Props) {
     try {
       await updateProject.mutateAsync({
         id: project.id,
-        input: { name, description },
+        input: {
+          name,
+          description,
+          ...(pmAgentId !== project.pm_agent?.id ? { pm_agent_id: pmAgentId } : {}),
+        },
       })
       toast.success('项目已更新')
       handleOpenChange(false)
@@ -56,14 +73,30 @@ export function EditProjectDialog({ open, onOpenChange, project }: Props) {
       open={open}
       onOpenChange={handleOpenChange}
       title="编辑项目"
-      description="更新项目名称和描述"
+      description="更新项目名称、描述和 PM Agent"
       submitLabel="保存修改"
       pending={updateProject.isPending}
       error={error}
-      submitDisabled={!project}
+      submitDisabled={!project || !pmAgentId}
       initialName={initialValues.name}
       initialDescription={initialValues.description}
       onSubmit={handleSubmit}
-    />
+    >
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-medium">PM Agent</label>
+        <Select value={pmAgentId} onValueChange={(val) => setPmAgentId(val ?? '')}>
+          <SelectTrigger className="w-full">
+            <span>{displayLabel}</span>
+          </SelectTrigger>
+          <SelectContent>
+            {pmAgents.map((agent) => (
+              <SelectItem key={agent.id} value={agent.id}>
+                {agent.name} ({agent.node_id}) - {agent.status === 'online' ? '在线' : '离线'}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </ProjectDialog>
   )
 }

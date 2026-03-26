@@ -472,6 +472,7 @@ export interface CreateProjectRequest {
 export interface UpdateProjectRequest {
   name?: string
   description?: string
+  pm_agent_id?: string
 }
 
 export interface CreateConversationRequest {

@@ -12,6 +12,7 @@ import (
 type UpdateProjectInput struct {
 	Name        *string
 	Description *string
+	PMAgentID   *string
 }
 
 func (s *Store) buildProjectViewUnsafe(project *model.Project) *model.Project {
@@ -152,6 +153,18 @@ func (s *Store) UpdateProject(userID, projectID string, in UpdateProjectInput) (
 			return nil, transport.Validation("invalid description", map[string]any{"description": "cannot be empty"})
 		}
 		p.Description = desc
+	}
+	if in.PMAgentID != nil {
+		agentID := strings.TrimSpace(*in.PMAgentID)
+		if agentID == "" {
+			return nil, transport.Validation("invalid pm_agent_id", map[string]any{"pm_agent_id": "cannot be empty"})
+		}
+		pm, err := s.pmAgentForUserUnsafe(userID, agentID)
+		if err != nil {
+			return nil, err
+		}
+		p.PMAgentID = agentID
+		p.PMAgent = toPMSummary(pm)
 	}
 	p.UpdatedAt = time.Now().UTC()
 	if err := s.persistProjectUnsafe(p); err != nil {
