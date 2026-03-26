@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as tasksApi from '@/api/tasks'
 import { usePageVisibility } from './usePageVisibility'
 import { useRealtimeStatus } from '@/realtime/hooks/useRealtimeStatus'
+import type { CreateTaskInput } from '@/api/tasks'
 import type { ListProjectTasksQuery, TaskDetail } from '@/types'
 
 function normalizeTaskDetail(task: TaskDetail): TaskDetail {
@@ -81,6 +82,20 @@ export function useAddTaskComment() {
     onSuccess: (_res, { taskId }) => {
       qc.invalidateQueries({ queryKey: ['tasks', 'comments', taskId] })
       qc.invalidateQueries({ queryKey: ['tasks', 'events', taskId] })
+    },
+  })
+}
+
+export function useCreateTask() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ projectId, input }: { projectId: string; input: CreateTaskInput }) =>
+      tasksApi.createTask(projectId, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tasks'] })
+      qc.invalidateQueries({ queryKey: ['projects'] })
+      qc.invalidateQueries({ queryKey: ['dashboard', 'tasks'] })
+      qc.invalidateQueries({ queryKey: ['dashboard', 'stats'] })
     },
   })
 }

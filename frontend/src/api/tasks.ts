@@ -4,11 +4,23 @@ import type {
   ApiListResponse,
   TaskListItem,
   TaskDetail,
+  TaskPriority,
   Event,
   Comment,
   TransferDetail,
   ListProjectTasksQuery,
 } from '@/types'
+
+export interface CreateTaskInput {
+  title: string
+  description: string
+  priority?: TaskPriority
+  assignee_agent_id: string
+}
+
+export async function createTask(projectId: string, input: CreateTaskInput) {
+  return api.post(`projects/${projectId}/tasks`, { json: input }).json<ApiResponse<TaskDetail>>()
+}
 
 export async function listProjectTasks(projectId: string, query?: ListProjectTasksQuery) {
   const searchParams: Record<string, string> = {}

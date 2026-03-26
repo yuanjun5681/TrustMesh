@@ -355,6 +355,117 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 	return copyTask(task), nil
 }
 
+type UserTaskCreateInput struct {
+	ProjectID      string
+	Title          string
+	Description    string
+	Priority       string
+	AssigneeAgentID string
+}
+
+func (s *Store) CreateTaskByUser(userID string, in UserTaskCreateInput) (*model.TaskDetail, *transport.AppError) {
+	in.Title = strings.TrimSpace(in.Title)
+	in.Description = strings.TrimSpace(in.Description)
+	in.Priority = strings.TrimSpace(in.Priority)
+	if strings.TrimSpace(in.ProjectID) == "" || in.Title == "" || in.Description == "" || strings.TrimSpace(in.AssigneeAgentID) == "" {
+		return nil, transport.Validation("invalid task create payload", map[string]any{
+			"project_id":       "required",
+			"title":            "required",
+			"description":      "required",
+			"assignee_agent_id": "required",
+		})
+	}
+	priority := in.Priority
+	if priority == "" {
+		priority = "medium"
+	}
+	validPriorities := map[string]bool{"low": true, "medium": true, "high": true, "urgent": true}
+	if !validPriorities[priority] {
+		return nil, transport.Validation("invalid priority", map[string]any{"priority": "must be low, medium, high, or urgent"})
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	project, ok := s.projects[in.ProjectID]
+	if !ok || project.UserID != userID {
+		return nil, transport.NotFound("project not found")
+	}
+	if project.Status == "archived" {
+		return nil, transport.Conflict("PROJECT_ARCHIVED", "archived project cannot create tasks")
+	}
+
+	assignee, ok := s.agents[in.AssigneeAgentID]
+	if !ok || assignee.UserID != userID {
+		return nil, transport.NotFound("assignee agent not found")
+	}
+	if assignee.Archived {
+		return nil, transport.Conflict("AGENT_ARCHIVED", "cannot assign to archived agent")
+	}
+
+	now := time.Now().UTC()
+	todoID := uuid.NewString()
+
+	todo := model.Todo{
+		ID:          todoID,
+		Order:       1,
+		Title:       in.Title,
+		Description: in.Description,
+		Status:      "pending",
+		Assignee: model.TodoAssignee{
+			AgentID: assignee.ID,
+			Name:    assignee.Name,
+			NodeID:  assignee.NodeID,
+		},
+		Result: model.TodoResult{
+			Summary:      "",
+			Output:       "",
+			ArtifactRefs: []model.TodoResultArtifactRef{},
+			Metadata:     map[string]any{},
+		},
+		CreatedAt: now,
+	}
+
+	task := &model.TaskDetail{
+		ID:             newID(),
+		UserID:         userID,
+		ProjectID:      project.ID,
+		ConversationID: "",
+		Title:          in.Title,
+		Description:    in.Description,
+		Status:         "pending",
+		Priority:       priority,
+		PMAgentID:      "",
+		PMAgent:        model.PMAgentSummary{},
+		Todos:          []model.Todo{todo},
+		Artifacts:      []model.TaskArtifact{},
+		Result: model.TaskResult{
+			Summary:     "",
+			FinalOutput: "",
+			Metadata:    map[string]any{},
+		},
+		Version:      1,
+		CanceledAt:   nil,
+		CanceledBy:   nil,
+		CancelReason: nil,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+
+	s.tasks[task.ID] = task
+	s.projectTasks[task.ProjectID] = append(s.projectTasks[task.ProjectID], task.ID)
+
+	taskTitle := task.Title
+	s.addEventUnsafe(userID, project.ID, task.ID, "", "user", userID, "", "task_created", &taskTitle, map[string]any{"task_title": task.Title}, now)
+
+	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.publishTaskUnsafe(task.ID)
+
+	return copyTask(task), nil
+}
+
 func (s *Store) recordTodoDispatchUnsafe(task *model.TaskDetail, todo *model.Todo, actorType, actorID, actorName string, message *string, metadata map[string]any, now time.Time) {
 	metadata["task_title"] = task.Title
 	metadata["todo_title"] = todo.Title

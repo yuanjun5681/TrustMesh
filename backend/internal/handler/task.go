@@ -24,6 +24,72 @@ func NewTaskHandler(s *store.Store, publisher *clawsynapse.Client, log *zap.Logg
 	return &TaskHandler{store: s, publisher: publisher, log: log}
 }
 
+func (h *TaskHandler) Create(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	var body struct {
+		Title           string `json:"title"`
+		Description     string `json:"description"`
+		Priority        string `json:"priority"`
+		AssigneeAgentID string `json:"assignee_agent_id"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid request body"))
+		return
+	}
+
+	task, appErr := h.store.CreateTaskByUser(userID, store.UserTaskCreateInput{
+		ProjectID:       c.Param("projectId"),
+		Title:           body.Title,
+		Description:     body.Description,
+		Priority:        body.Priority,
+		AssigneeAgentID: body.AssigneeAgentID,
+	})
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	// Auto-dispatch the todo to the agent
+	todo := &task.Todos[0]
+	if h.publisher != nil {
+		payload := protocol.TodoAssignedPayload{
+			TaskID:      task.ID,
+			TodoID:      todo.ID,
+			Title:       todo.Title,
+			Description: todo.Description,
+			Content:     "你收到了一个新的 Todo 任务。请使用 /tm-task-exec skill 执行此任务，按要求回报进度和结果。",
+			ExecBrief: &protocol.TodoExecBrief{
+				Objective:    "执行分派的 Todo 任务；及时回报进度；完成后提交结果，失败时说明原因。",
+				MustUseSkill: "tm-task-exec",
+			},
+		}
+		if _, err := h.publisher.Publish(c.Request.Context(), todo.Assignee.NodeID, "todo.assigned", payload, task.ID, map[string]any{"source": "user_created"}); err != nil {
+			if h.log != nil {
+				h.log.Warn("auto dispatch todo failed for user-created task", zap.String("task_id", task.ID), zap.String("todo_id", todo.ID), zap.Error(err))
+			}
+			// Task is created but dispatch failed — return the task anyway
+			transport.WriteData(c, http.StatusCreated, task)
+			return
+		}
+
+		dispatched, dispatchErr := h.store.RecordTodoDispatch(userID, task.ID, todo.ID)
+		if dispatchErr != nil {
+			if h.log != nil {
+				h.log.Warn("record todo dispatch failed", zap.String("task_id", task.ID), zap.String("todo_id", todo.ID), zap.Error(dispatchErr))
+			}
+			transport.WriteData(c, http.StatusCreated, task)
+			return
+		}
+		task = dispatched
+	}
+
+	transport.WriteData(c, http.StatusCreated, task)
+}
+
 func (h *TaskHandler) ListByProject(c *gin.Context) {
 	userID, ok := currentUserID(c)
 	if !ok {

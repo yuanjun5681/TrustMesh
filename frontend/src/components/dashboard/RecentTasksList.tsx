@@ -29,7 +29,7 @@ export function RecentTasksList({ tasks, loading }: RecentTasksListProps) {
           <div className="flex-1 min-w-0">
             <div className="text-sm font-medium truncate">{task.title}</div>
             <div className="text-xs text-muted-foreground mt-0.5">
-              {task.pm_agent.name} · {formatRelativeTime(task.updated_at)}
+              {task.pm_agent?.name || '用户创建'} · {formatRelativeTime(task.updated_at)}
               {task.todo_count > 0 && (
                 <span className="ml-1">
                   · {task.completed_todo_count}/{task.todo_count} Todo

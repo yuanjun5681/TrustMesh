@@ -43,7 +43,7 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
         )}
 
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="truncate">{task.pm_agent.name}</span>
+          <span className="truncate">{task.pm_agent?.name || '用户创建'}</span>
         </div>
       </CardContent>
     </Card>

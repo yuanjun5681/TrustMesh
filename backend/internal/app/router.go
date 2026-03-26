@@ -112,6 +112,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	authed.GET("/conversations/:id", conversationHandler.Get)
 	authed.POST("/conversations/:id/messages", conversationHandler.AppendMessage)
 
+	authed.POST("/projects/:projectId/tasks", taskHandler.Create)
 	authed.GET("/projects/:projectId/tasks", taskHandler.ListByProject)
 	authed.GET("/tasks/:id", taskHandler.Get)
 	authed.GET("/tasks/:id/events", taskHandler.ListEvents)

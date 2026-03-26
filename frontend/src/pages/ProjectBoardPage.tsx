@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { MessageSquarePlus, MoreHorizontal, Pencil, Archive, Loader2 } from 'lucide-react'
+import { MessageSquarePlus, Plus, MoreHorizontal, Pencil, Archive, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { AgentStatusDot, ProjectStatusBadge, ProjectWorkStatusBadge } from '@/components/shared/StatusBadge'
@@ -9,6 +9,7 @@ import { TaskDetailPanel } from '@/components/task/TaskDetailPanel'
 import { ConversationSheet } from '@/components/conversation/ConversationSheet'
 import { EditProjectDialog } from '@/components/project/EditProjectDialog'
 import { ArchiveProjectDialog } from '@/components/project/ArchiveProjectDialog'
+import { CreateTaskDialog } from '@/components/task/CreateTaskDialog'
 import { useProject } from '@/hooks/useProjects'
 import { useTasks } from '@/hooks/useTasks'
 import { formatDateTime, formatRelativeTime } from '@/lib/utils'
@@ -22,6 +23,7 @@ export function ProjectBoardPage() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
+  const [createTaskOpen, setCreateTaskOpen] = useState(false)
   const projectArchived = project?.status === 'archived'
 
   return (
@@ -71,6 +73,10 @@ export function ProjectBoardPage() {
           )}
           </div>
         <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" disabled={projectArchived} onClick={() => setCreateTaskOpen(true)}>
+            <Plus className="size-4 mr-1.5" />
+            创建任务
+          </Button>
           <Button size="sm" disabled={projectArchived} onClick={() => setSheetOpen(true)}>
             <MessageSquarePlus className="size-4 mr-1.5" />
             {projectArchived ? '项目已归档' : '提交新需求'}
@@ -140,6 +146,14 @@ export function ProjectBoardPage() {
         />
       )}
 
+      {projectId && (
+        <CreateTaskDialog
+          open={createTaskOpen}
+          onOpenChange={setCreateTaskOpen}
+          projectId={projectId}
+          onCreated={(taskId) => setSelectedTaskId(taskId)}
+        />
+      )}
       <EditProjectDialog open={editOpen} onOpenChange={setEditOpen} project={project} />
       <ArchiveProjectDialog
         open={archiveOpen}
