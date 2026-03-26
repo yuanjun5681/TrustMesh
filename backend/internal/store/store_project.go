@@ -42,6 +42,8 @@ func (s *Store) aggregateProjectTaskSummaryUnsafe(project *model.Project) model.
 			summary.DoneCount++
 		case "failed":
 			summary.FailedCount++
+		case "canceled":
+			summary.CanceledCount++
 		}
 
 		if summary.LatestTaskAt == nil || task.UpdatedAt.After(*summary.LatestTaskAt) {

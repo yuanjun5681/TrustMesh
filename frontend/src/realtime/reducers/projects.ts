@@ -20,6 +20,9 @@ function incrementStatusCount(summary: ProjectTaskSummary, status: TaskStatus) {
     case 'failed':
       summary.failed_count += 1
       break
+    case 'canceled':
+      summary.canceled_count += 1
+      break
   }
 }
 
@@ -36,6 +39,9 @@ function decrementStatusCount(summary: ProjectTaskSummary, status: TaskStatus) {
       break
     case 'failed':
       summary.failed_count = clampNonNegative(summary.failed_count - 1)
+      break
+    case 'canceled':
+      summary.canceled_count = clampNonNegative(summary.canceled_count - 1)
       break
   }
 }

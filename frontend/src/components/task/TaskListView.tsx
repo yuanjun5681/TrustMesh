@@ -9,6 +9,7 @@ const statusGroups: { status: TaskStatus; label: string }[] = [
   { status: 'pending', label: '待处理' },
   { status: 'done', label: '已完成' },
   { status: 'failed', label: '失败' },
+  { status: 'canceled', label: '已取消' },
 ]
 
 interface TaskListViewProps {

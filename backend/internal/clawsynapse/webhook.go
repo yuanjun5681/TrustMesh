@@ -322,6 +322,9 @@ func (h *WebhookHandler) dispatchNextTodo(ctx context.Context, task *model.TaskD
 	if h == nil || task == nil || h.client == nil {
 		return task
 	}
+	if task.Status == "canceled" {
+		return task
+	}
 
 	todo := task.NextDispatchableTodo()
 	if todo == nil {
@@ -364,6 +367,7 @@ func (h *WebhookHandler) publishTaskAndTodoStatusChanges(task *model.TaskDetail,
 		Status:      task.Status,
 		ActorNodeID: strings.TrimSpace(actorNodeID),
 		Cause:       strings.TrimSpace(cause),
+		Reason:      message,
 		Version:     task.Version,
 	}, task.ID)
 
@@ -378,6 +382,7 @@ func (h *WebhookHandler) publishTaskAndTodoStatusChanges(task *model.TaskDetail,
 		Status:      todo.Status,
 		ActorNodeID: strings.TrimSpace(actorNodeID),
 		Cause:       strings.TrimSpace(cause),
+		Reason:      message,
 		Version:     task.Version,
 		Message:     message,
 	}

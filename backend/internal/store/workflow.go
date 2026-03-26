@@ -45,6 +45,11 @@ type TodoFailInput struct {
 	Error  string
 }
 
+type TaskCancelInput struct {
+	TaskID string
+	Reason string
+}
+
 type TaskCommentInput struct {
 	TaskID  string
 	TodoID  string
@@ -75,6 +80,12 @@ func (s *Store) RecordTodoDispatch(userID, taskID, todoID string) (*model.TaskDe
 	}
 
 	todo := &task.Todos[todoIdx]
+	if appErr := ensureTaskAcceptingUpdates(task); appErr != nil {
+		return nil, appErr
+	}
+	if appErr := ensureTodoAcceptingUpdates(todo); appErr != nil {
+		return nil, appErr
+	}
 	if todo.Status != "pending" {
 		return nil, transport.Conflict("TODO_NOT_PENDING", "todo is not pending")
 	}
@@ -133,6 +144,12 @@ func (s *Store) RecordSequentialTodoDispatch(taskID, todoID string) (*model.Task
 	}
 
 	todo := &task.Todos[todoIdx]
+	if appErr := ensureTaskAcceptingUpdates(task); appErr != nil {
+		return nil, appErr
+	}
+	if appErr := ensureTodoAcceptingUpdates(todo); appErr != nil {
+		return nil, appErr
+	}
 	if todo.Status != "pending" {
 		return nil, transport.Conflict("TODO_NOT_PENDING", "todo is not pending")
 	}
@@ -267,10 +284,12 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 				Name:    assigneeAgent.Name,
 				NodeID:  assigneeAgent.NodeID,
 			},
-			StartedAt:   nil,
-			CompletedAt: nil,
-			FailedAt:    nil,
-			Error:       nil,
+			StartedAt:    nil,
+			CompletedAt:  nil,
+			FailedAt:     nil,
+			CanceledAt:   nil,
+			Error:        nil,
+			CancelReason: nil,
 			Result: model.TodoResult{
 				Summary:      "",
 				Output:       "",
@@ -299,9 +318,12 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 			FinalOutput: "",
 			Metadata:    map[string]any{},
 		},
-		Version:   1,
-		CreatedAt: now,
-		UpdatedAt: now,
+		Version:      1,
+		CanceledAt:   nil,
+		CanceledBy:   nil,
+		CancelReason: nil,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 
 	s.tasks[task.ID] = task
@@ -407,6 +429,12 @@ func (s *Store) UpdateTodoProgressByNode(nodeID string, in TodoProgressInput) (*
 		return nil, transport.NotFound("todo not found")
 	}
 	todo := &task.Todos[todoIdx]
+	if appErr := ensureTaskAcceptingUpdates(task); appErr != nil {
+		return nil, appErr
+	}
+	if appErr := ensureTodoAcceptingUpdates(todo); appErr != nil {
+		return nil, appErr
+	}
 	if todo.Assignee.AgentID != agent.ID {
 		return nil, transport.Forbidden("todo is not assigned to this agent")
 	}
@@ -422,6 +450,8 @@ func (s *Store) UpdateTodoProgressByNode(nodeID string, in TodoProgressInput) (*
 	if todo.Status == "pending" {
 		todo.Status = "in_progress"
 		todo.StartedAt = &now
+		todo.CanceledAt = nil
+		todo.CancelReason = nil
 		started := fmt.Sprintf("todo started: %s", todo.Title)
 		s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_started", &started, map[string]any{"todo_id": todo.ID, "task_title": task.Title, "todo_title": todo.Title}, now)
 	}
@@ -474,6 +504,12 @@ func (s *Store) CompleteTodoByNodeWithMessageID(nodeID, messageID string, in Tod
 		return nil, transport.NotFound("todo not found")
 	}
 	todo := &task.Todos[todoIdx]
+	if appErr := ensureTaskAcceptingUpdates(task); appErr != nil {
+		return nil, appErr
+	}
+	if appErr := ensureTodoAcceptingUpdates(todo); appErr != nil {
+		return nil, appErr
+	}
 	if todo.Assignee.AgentID != agent.ID {
 		return nil, transport.Forbidden("todo is not assigned to this agent")
 	}
@@ -495,7 +531,9 @@ func (s *Store) CompleteTodoByNodeWithMessageID(nodeID, messageID string, in Tod
 	todo.Status = "done"
 	todo.CompletedAt = &now
 	todo.FailedAt = nil
+	todo.CanceledAt = nil
 	todo.Error = nil
+	todo.CancelReason = nil
 	todo.Result = model.TodoResult{
 		Summary:      strings.TrimSpace(in.Result.Summary),
 		Output:       strings.TrimSpace(in.Result.Output),
@@ -556,6 +594,12 @@ func (s *Store) FailTodoByNodeWithMessageID(nodeID, messageID string, in TodoFai
 		return nil, transport.NotFound("todo not found")
 	}
 	todo := &task.Todos[todoIdx]
+	if appErr := ensureTaskAcceptingUpdates(task); appErr != nil {
+		return nil, appErr
+	}
+	if appErr := ensureTodoAcceptingUpdates(todo); appErr != nil {
+		return nil, appErr
+	}
 	if todo.Assignee.AgentID != agent.ID {
 		return nil, transport.Forbidden("todo is not assigned to this agent")
 	}
@@ -577,8 +621,10 @@ func (s *Store) FailTodoByNodeWithMessageID(nodeID, messageID string, in TodoFai
 	todo.Status = "failed"
 	todo.CompletedAt = nil
 	todo.FailedAt = &now
+	todo.CanceledAt = nil
 	errCopy := in.Error
 	todo.Error = &errCopy
+	todo.CancelReason = nil
 	failed := fmt.Sprintf("todo failed: %s", todo.Title)
 	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_failed", &failed, map[string]any{"todo_id": todo.ID, "error": in.Error, "task_title": task.Title, "todo_title": todo.Title}, now)
 
@@ -631,6 +677,51 @@ func (s *Store) AddTaskCommentByNode(nodeID string, in TaskCommentInput) (*model
 	}
 	s.publishTaskUnsafe(task.ID)
 	return comment, nil
+}
+
+func (s *Store) CancelTask(userID string, in TaskCancelInput) (*model.TaskDetail, *transport.AppError) {
+	in.TaskID = strings.TrimSpace(in.TaskID)
+	in.Reason = strings.TrimSpace(in.Reason)
+	if in.TaskID == "" {
+		return nil, transport.Validation("invalid cancel payload", map[string]any{"task_id": "required"})
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[in.TaskID]
+	if !ok || task.UserID != userID {
+		return nil, transport.NotFound("task not found")
+	}
+	if appErr := s.ensureTaskProjectActiveUnsafe(task); appErr != nil {
+		return nil, appErr
+	}
+
+	switch task.Status {
+	case "canceled":
+		return nil, transport.Conflict("TASK_ALREADY_CANCELED", "task already canceled")
+	case "done", "failed":
+		return nil, transport.Conflict("TASK_ALREADY_TERMINAL", "task already finalized")
+	}
+
+	now := time.Now().UTC()
+	userName := ""
+	if u, ok := s.users[userID]; ok {
+		userName = u.Name
+	}
+
+	affectedAgents := s.cancelTaskUnsafe(task, "user", userID, userName, in.Reason, now)
+	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	for agentID := range affectedAgents {
+		s.refreshAgentExecutionStatusUnsafe(agentID, now)
+		if err := s.persistAgentGraphUnsafe(agentID); err != nil {
+			return nil, mongoWriteError(err)
+		}
+	}
+	s.publishTaskUnsafe(task.ID)
+	return copyTask(task), nil
 }
 
 func (s *Store) AddTaskComment(userID, taskID string, in TaskCommentInput) (*model.Comment, *transport.AppError) {
@@ -726,6 +817,13 @@ func (s *Store) addCommentUnsafe(task *model.TaskDetail, todoID, actorType, acto
 }
 
 func (s *Store) updateTaskStatusUnsafe(task *model.TaskDetail, now time.Time) {
+	if task.Status == "canceled" {
+		task.Artifacts = aggregateTaskArtifacts(task.Todos)
+		task.Result = aggregateTaskResult(task.Todos, task.Status, task.Artifacts)
+		task.UpdatedAt = now
+		task.Version++
+		return
+	}
 	prev := task.Status
 	next := aggregateTaskStatus(*task)
 	artifacts := aggregateTaskArtifacts(task.Todos)
@@ -756,6 +854,8 @@ func aggregateTaskStatus(task model.TaskDetail) string {
 		case "in_progress":
 			allDone = false
 			hasWork = true
+		case "canceled":
+			allDone = false
 		default:
 			allDone = false
 		}
@@ -834,6 +934,7 @@ func aggregateTaskResult(todos []model.Todo, status string, artifacts []model.Ta
 	failedCount := 0
 	inProgressCount := 0
 	pendingCount := 0
+	canceledCount := 0
 	completedSummaries := make([]string, 0)
 	completedOutputs := make([]string, 0)
 	failedMessages := make([]string, 0)
@@ -857,6 +958,8 @@ func aggregateTaskResult(todos []model.Todo, status string, artifacts []model.Ta
 			}
 		case "in_progress":
 			inProgressCount++
+		case "canceled":
+			canceledCount++
 		default:
 			pendingCount++
 		}
@@ -892,6 +995,11 @@ func aggregateTaskResult(todos []model.Todo, status string, artifacts []model.Ta
 		summary = fmt.Sprintf("Task in progress: %d/%d completed, %d in progress, %d pending", doneCount, total, inProgressCount, pendingCount)
 	case "pending":
 		summary = fmt.Sprintf("Task pending: %d todos not started", total)
+	case "canceled":
+		summary = fmt.Sprintf("Task canceled: %d completed, %d canceled, %d pending before stop", doneCount, canceledCount, pendingCount)
+		if len(completedOutputs) > 0 {
+			finalOutput = strings.Join(completedOutputs, "\n\n")
+		}
 	}
 
 	return model.TaskResult{
@@ -904,9 +1012,83 @@ func aggregateTaskResult(todos []model.Todo, status string, artifacts []model.Ta
 			"failed_todo_count":      failedCount,
 			"in_progress_todo_count": inProgressCount,
 			"pending_todo_count":     pendingCount,
+			"canceled_todo_count":    canceledCount,
 			"artifact_count":         len(artifacts),
 		},
 	}
+}
+
+func ensureTaskAcceptingUpdates(task *model.TaskDetail) *transport.AppError {
+	if task != nil && task.Status == "canceled" {
+		return transport.Conflict("TASK_CANCELED", "task has been canceled")
+	}
+	return nil
+}
+
+func ensureTodoAcceptingUpdates(todo *model.Todo) *transport.AppError {
+	if todo != nil && todo.Status == "canceled" {
+		return transport.Conflict("TODO_CANCELED", "todo has been canceled")
+	}
+	return nil
+}
+
+func (s *Store) cancelTaskUnsafe(task *model.TaskDetail, actorType, actorID, actorName, reason string, now time.Time) map[string]struct{} {
+	affectedAgents := make(map[string]struct{})
+	prev := task.Status
+	reasonPtr := (*string)(nil)
+	if reason != "" {
+		reasonCopy := reason
+		reasonPtr = &reasonCopy
+	}
+	for i := range task.Todos {
+		todo := &task.Todos[i]
+		switch todo.Status {
+		case "pending", "in_progress":
+			s.cancelTodoUnsafe(todo, reason, now)
+			if todo.Assignee.AgentID != "" {
+				affectedAgents[todo.Assignee.AgentID] = struct{}{}
+			}
+		}
+	}
+
+	task.Status = "canceled"
+	task.CanceledAt = &now
+	task.CanceledBy = &model.ActorRef{
+		ActorType: actorType,
+		ActorID:   actorID,
+		ActorName: actorName,
+	}
+	task.CancelReason = reasonPtr
+	task.Artifacts = aggregateTaskArtifacts(task.Todos)
+	task.Result = aggregateTaskResult(task.Todos, task.Status, task.Artifacts)
+	task.UpdatedAt = now
+	task.Version++
+
+	msg := fmt.Sprintf("task status changed: %s -> canceled", prev)
+	if reason != "" {
+		msg = fmt.Sprintf("%s (%s)", msg, reason)
+	}
+	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, "", actorType, actorID, actorName, "task_status_changed", &msg, map[string]any{
+		"from":       prev,
+		"to":         "canceled",
+		"reason":     reason,
+		"task_title": task.Title,
+	}, now)
+	return affectedAgents
+}
+
+func (s *Store) cancelTodoUnsafe(todo *model.Todo, reason string, now time.Time) {
+	todo.Status = "canceled"
+	todo.CompletedAt = nil
+	todo.FailedAt = nil
+	todo.CanceledAt = &now
+	todo.Error = nil
+	if reason == "" {
+		todo.CancelReason = nil
+		return
+	}
+	reasonCopy := reason
+	todo.CancelReason = &reasonCopy
 }
 
 func uniqueTaskArtifactID(baseID string, usedIDs map[string]int) string {

@@ -97,3 +97,20 @@ export function useDispatchTodo() {
     },
   })
 }
+
+export function useCancelTask() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ taskId, reason }: { taskId: string; reason: string }) =>
+      tasksApi.cancelTask(taskId, reason),
+    onSuccess: (res, { taskId }) => {
+      qc.setQueryData(['tasks', 'detail', taskId], res.data)
+      qc.invalidateQueries({ queryKey: ['tasks'] })
+      qc.invalidateQueries({ queryKey: ['tasks', 'detail', taskId] })
+      qc.invalidateQueries({ queryKey: ['tasks', 'events', taskId] })
+      qc.invalidateQueries({ queryKey: ['projects'] })
+      qc.invalidateQueries({ queryKey: ['dashboard', 'tasks'] })
+      qc.invalidateQueries({ queryKey: ['dashboard', 'stats'] })
+    },
+  })
+}

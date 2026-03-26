@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils'
 import { formatRelativeTime } from '@/lib/utils'
 import { PriorityBadge } from '@/components/shared/StatusBadge'
-import { Circle, CircleDot, CheckCircle2, XCircle } from 'lucide-react'
+import { Circle, CircleDot, CheckCircle2, XCircle, CircleSlash2 } from 'lucide-react'
 import type { TaskListItem, TaskStatus } from '@/types'
 
 const statusIcon: Record<TaskStatus, { icon: typeof Circle; className: string }> = {
@@ -9,6 +9,7 @@ const statusIcon: Record<TaskStatus, { icon: typeof Circle; className: string }>
   in_progress: { icon: CircleDot, className: 'text-info animate-pulse' },
   done: { icon: CheckCircle2, className: 'text-success' },
   failed: { icon: XCircle, className: 'text-destructive' },
+  canceled: { icon: CircleSlash2, className: 'text-muted-foreground' },
 }
 
 interface TaskListRowProps {

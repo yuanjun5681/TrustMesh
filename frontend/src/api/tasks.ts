@@ -30,6 +30,10 @@ export async function dispatchTodo(taskId: string, todoId: string) {
   return api.post(`tasks/${taskId}/todos/${todoId}/dispatch`).json<ApiResponse<TaskDetail>>()
 }
 
+export async function cancelTask(taskId: string, reason: string) {
+  return api.post(`tasks/${taskId}/cancel`, { json: { reason } }).json<ApiResponse<TaskDetail>>()
+}
+
 export async function listTaskComments(taskId: string) {
   return api.get(`tasks/${taskId}/comments`).json<ApiListResponse<Comment>>()
 }

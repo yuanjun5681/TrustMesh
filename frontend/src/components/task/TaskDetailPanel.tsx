@@ -6,6 +6,7 @@ import { TodoList } from './TodoList'
 import { TaskTimeline } from './TaskTimeline'
 import { TaskComments } from './TaskComments'
 import { TaskResultView } from './TaskResult'
+import { CancelTaskDialog } from './CancelTaskDialog'
 import { ConversationSheet } from '@/components/conversation/ConversationSheet'
 import { useTask, useAddTaskComment } from '@/hooks/useTasks'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -20,9 +21,11 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
   const { data: task } = useTask(taskId)
   const [tab, setTab] = useState('todos')
   const [chatOpen, setChatOpen] = useState(false)
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   const [comment, setComment] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const addComment = useAddTaskComment()
+  const canCancelTask = task?.status === 'pending' || task?.status === 'in_progress'
 
   const handleSendComment = useCallback(() => {
     const text = comment.trim()
@@ -61,6 +64,14 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
           <PriorityBadge priority={task.priority} />
         </div>
         <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!canCancelTask}
+            onClick={() => setCancelDialogOpen(true)}
+          >
+            终止任务
+          </Button>
           <Button variant="ghost" size="icon" className="size-7" onClick={() => setChatOpen(true)} title="查看关联对话">
             <MessageSquare className="size-4" />
           </Button>
@@ -78,6 +89,11 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
             {task.description && (
               <p className="text-sm text-muted-foreground mt-1.5 whitespace-pre-wrap">
                 {task.description}
+              </p>
+            )}
+            {task.cancel_reason && (
+              <p className="mt-2 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+                终止原因：{task.cancel_reason}
               </p>
             )}
           </div>
@@ -143,6 +159,11 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
         initialConversationId={task.conversation_id}
         open={chatOpen}
         onOpenChange={setChatOpen}
+      />
+      <CancelTaskDialog
+        open={cancelDialogOpen}
+        onOpenChange={setCancelDialogOpen}
+        task={task}
       />
     </div>
   )

@@ -139,6 +139,43 @@ func TestProjectTaskSummaryPrioritizesAttentionAndArchive(t *testing.T) {
 	}
 }
 
+func TestProjectTaskSummaryTracksCanceledWithoutAttention(t *testing.T) {
+	s, userID, pm, developer, project, conversation := seedWorkflowState(t)
+
+	task, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: conversation.ID,
+		Title:          "Implement login",
+		Description:    "Support email password login",
+		Todos: []TaskCreateTodoInput{
+			{
+				ID:             "todo-1",
+				Title:          "Build backend API",
+				Description:    "Implement auth endpoints",
+				AssigneeNodeID: developer.NodeID,
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("create task: %v", appErr)
+	}
+
+	if _, appErr := s.CancelTask(userID, TaskCancelInput{TaskID: task.ID, Reason: "user stop"}); appErr != nil {
+		t.Fatalf("cancel task: %v", appErr)
+	}
+
+	projectState, appErr := s.GetProject(userID, project.ID)
+	if appErr != nil {
+		t.Fatalf("get project: %v", appErr)
+	}
+	if projectState.TaskSummary.CanceledCount != 1 {
+		t.Fatalf("expected canceled_count=1, got %#v", projectState.TaskSummary)
+	}
+	if projectState.TaskSummary.WorkStatus != "idle" {
+		t.Fatalf("expected idle work status after cancel, got %s", projectState.TaskSummary.WorkStatus)
+	}
+}
+
 func TestArchiveProjectBlocksAppendingConversationMessages(t *testing.T) {
 	s, userID, _, _, project, conversation := seedWorkflowState(t)
 

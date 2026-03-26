@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, Loader2, XCircle, ChevronDown, ChevronRight } from 'lucide-react'
+import { CheckCircle2, Circle, Loader2, XCircle, ChevronDown, ChevronRight, CircleSlash2 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -9,6 +9,7 @@ const statusIcons = {
   in_progress: Loader2,
   done: CheckCircle2,
   failed: XCircle,
+  canceled: CircleSlash2,
 }
 
 const statusColors = {
@@ -16,6 +17,7 @@ const statusColors = {
   in_progress: 'text-info animate-spin',
   done: 'text-success',
   failed: 'text-destructive',
+  canceled: 'text-muted-foreground',
 }
 
 interface TodoListProps {

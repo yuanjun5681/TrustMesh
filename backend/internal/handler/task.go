@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -149,6 +150,31 @@ func (h *TaskHandler) AddComment(c *gin.Context) {
 		return
 	}
 	transport.WriteData(c, http.StatusCreated, comment)
+}
+
+func (h *TaskHandler) Cancel(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid request body"))
+		return
+	}
+
+	task, appErr := h.store.CancelTask(userID, store.TaskCancelInput{
+		TaskID: c.Param("id"),
+		Reason: strings.TrimSpace(body.Reason),
+	})
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+	transport.WriteData(c, http.StatusOK, task)
 }
 
 func (h *TaskHandler) ListComments(c *gin.Context) {

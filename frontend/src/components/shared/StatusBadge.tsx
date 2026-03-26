@@ -8,6 +8,7 @@ const taskStatusConfig: Record<TaskStatus, { label: string; variant: 'secondary'
   in_progress: { label: '进行中', variant: 'info' },
   done: { label: '已完成', variant: 'success' },
   failed: { label: '失败', variant: 'destructive' },
+  canceled: { label: '已取消', variant: 'secondary' },
 }
 
 const priorityConfig: Record<TaskPriority, { label: string; className: string }> = {

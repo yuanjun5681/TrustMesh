@@ -69,6 +69,7 @@ type TaskStatusChangedPayload struct {
 	Status      string `json:"status"`
 	ActorNodeID string `json:"actor_node_id,omitempty"`
 	Cause       string `json:"cause,omitempty"`
+	Reason      string `json:"reason,omitempty"`
 	Version     int    `json:"version"`
 }
 
@@ -92,6 +93,7 @@ type TodoStatusChangedPayload struct {
 	Status      string `json:"status"`
 	ActorNodeID string `json:"actor_node_id,omitempty"`
 	Cause       string `json:"cause,omitempty"`
+	Reason      string `json:"reason,omitempty"`
 	Version     int    `json:"version"`
 	Message     string `json:"message,omitempty"`
 }

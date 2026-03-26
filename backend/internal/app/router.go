@@ -115,6 +115,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	authed.GET("/projects/:projectId/tasks", taskHandler.ListByProject)
 	authed.GET("/tasks/:id", taskHandler.Get)
 	authed.GET("/tasks/:id/events", taskHandler.ListEvents)
+	authed.POST("/tasks/:id/cancel", taskHandler.Cancel)
 	authed.POST("/tasks/:id/todos/:todoId/dispatch", taskHandler.DispatchTodo)
 	authed.GET("/tasks/:id/comments", taskHandler.ListComments)
 	authed.POST("/tasks/:id/comments", taskHandler.AddComment)

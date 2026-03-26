@@ -614,6 +614,88 @@ func TestTaskTodoOrderAndSequentialExecutionGuards(t *testing.T) {
 	}
 }
 
+func TestCancelTaskStopsFurtherTodoUpdates(t *testing.T) {
+	s, userID, pm, developer, project, conversation := seedWorkflowState(t)
+
+	task, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: conversation.ID,
+		Title:          "Implement login",
+		Description:    "Support email password login",
+		Todos: []TaskCreateTodoInput{
+			{
+				ID:             "todo-1",
+				Title:          "Build backend API",
+				Description:    "Implement auth endpoints",
+				AssigneeNodeID: developer.NodeID,
+			},
+			{
+				ID:             "todo-2",
+				Title:          "Write docs",
+				Description:    "Document rollout",
+				AssigneeNodeID: developer.NodeID,
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("create task: %v", appErr)
+	}
+
+	task, appErr = s.RecordSequentialTodoDispatch(task.ID, "todo-1")
+	if appErr != nil {
+		t.Fatalf("dispatch first todo: %v", appErr)
+	}
+	if task.Status != "in_progress" {
+		t.Fatalf("expected in_progress before cancel, got %s", task.Status)
+	}
+
+	task, appErr = s.CancelTask(userID, TaskCancelInput{
+		TaskID: task.ID,
+		Reason: "manual stop",
+	})
+	if appErr != nil {
+		t.Fatalf("cancel task: %v", appErr)
+	}
+	if task.Status != "canceled" {
+		t.Fatalf("expected canceled task status, got %s", task.Status)
+	}
+	if task.CancelReason == nil || *task.CancelReason != "manual stop" {
+		t.Fatalf("unexpected cancel reason: %#v", task.CancelReason)
+	}
+	if task.CanceledBy == nil || task.CanceledBy.ActorID != userID {
+		t.Fatalf("unexpected canceled_by: %#v", task.CanceledBy)
+	}
+	if task.Todos[0].Status != "canceled" || task.Todos[1].Status != "canceled" {
+		t.Fatalf("expected unfinished todos to be canceled: %#v", task.Todos)
+	}
+	if task.Result.Metadata["canceled_todo_count"] != 2 {
+		t.Fatalf("expected canceled_todo_count=2, got %#v", task.Result.Metadata["canceled_todo_count"])
+	}
+
+	_, appErr = s.UpdateTodoProgressByNode(developer.NodeID, TodoProgressInput{
+		TaskID:  task.ID,
+		TodoID:  "todo-1",
+		Message: "late progress",
+	})
+	if appErr == nil || appErr.Code != "TASK_CANCELED" {
+		t.Fatalf("expected TASK_CANCELED for progress after cancel, got %#v", appErr)
+	}
+
+	_, appErr = s.CompleteTodoByNode(developer.NodeID, TodoCompleteInput{
+		TaskID: task.ID,
+		TodoID: "todo-1",
+		Result: model.TodoResult{Summary: "late", Output: "late"},
+	})
+	if appErr == nil || appErr.Code != "TASK_CANCELED" {
+		t.Fatalf("expected TASK_CANCELED for complete after cancel, got %#v", appErr)
+	}
+
+	_, appErr = s.RecordSequentialTodoDispatch(task.ID, "todo-2")
+	if appErr == nil || appErr.Code != "TASK_CANCELED" {
+		t.Fatalf("expected TASK_CANCELED for dispatch after cancel, got %#v", appErr)
+	}
+}
+
 func seedWorkflowState(t *testing.T) (*Store, string, stringAgent, stringAgent, projectRef, conversationRef) {
 	t.Helper()
 

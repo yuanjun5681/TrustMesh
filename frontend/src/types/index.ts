@@ -47,6 +47,7 @@ export interface ProjectTaskSummary {
   in_progress_count: number
   done_count: number
   failed_count: number
+  canceled_count: number
   work_status: ProjectWorkStatus
   latest_task_at: string | null
 }
@@ -185,8 +186,14 @@ export interface TodoResult {
   metadata: Record<string, unknown>
 }
 
-export type TaskStatus = 'pending' | 'in_progress' | 'done' | 'failed'
+export type TaskStatus = 'pending' | 'in_progress' | 'done' | 'failed' | 'canceled'
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
+
+export interface ActorRef {
+  actor_type: string
+  actor_id: string
+  actor_name: string
+}
 
 export interface Todo {
   id: string
@@ -197,7 +204,9 @@ export interface Todo {
   started_at: string | null
   completed_at: string | null
   failed_at: string | null
+  canceled_at: string | null
   error: string | null
+  cancel_reason: string | null
   result: TodoResult
   created_at: string
 }
@@ -251,6 +260,9 @@ export interface TaskDetail {
   artifacts: TaskArtifact[]
   result: TaskResult
   version: number
+  canceled_at: string | null
+  canceled_by: ActorRef | null
+  cancel_reason: string | null
   created_at: string
   updated_at: string
 }
