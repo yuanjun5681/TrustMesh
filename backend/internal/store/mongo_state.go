@@ -116,7 +116,7 @@ func (s *Store) ensureMongoIndexes() error {
 		},
 		s.mongoTasks: {
 			{Keys: bson.D{{Key: "project_id", Value: 1}, {Key: "status", Value: 1}}},
-			{Keys: bson.D{{Key: "conversation_id", Value: 1}}, Options: options.Index().SetUnique(true)},
+			{Keys: bson.D{{Key: "conversation_id", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true)},
 			{Keys: bson.D{{Key: "pm_agent_id", Value: 1}}},
 			{Keys: bson.D{{Key: "todos.assignee.agent_id", Value: 1}, {Key: "todos.status", Value: 1}}},
 			{Keys: bson.D{{Key: "status", Value: 1}}},
@@ -144,6 +144,14 @@ func (s *Store) ensureMongoIndexes() error {
 			{Keys: bson.D{{Key: "document_id", Value: 1}, {Key: "chunk_index", Value: 1}}},
 			{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "project_id", Value: 1}}},
 		},
+	}
+
+	// Drop the old non-sparse conversation_id unique index if it exists,
+	// since we now need it to be sparse (to allow tasks without a conversation).
+	if s.mongoTasks != nil {
+		ctx, cancel := s.mongoContext()
+		_ = s.mongoTasks.Indexes().DropOne(ctx, "conversation_id_1")
+		cancel()
 	}
 
 	for collection, models := range indexes {
@@ -363,7 +371,9 @@ func (s *Store) loadTasks() (map[string]*model.TaskDetail, map[string][]string, 
 		task := tasks[i]
 		items[task.ID] = copyTask(&task)
 		projectTasks[task.ProjectID] = append(projectTasks[task.ProjectID], task.ID)
-		conversationTasks[task.ConversationID] = task.ID
+		if task.ConversationID != "" {
+			conversationTasks[task.ConversationID] = task.ID
+		}
 	}
 	return items, projectTasks, conversationTasks, nil
 }

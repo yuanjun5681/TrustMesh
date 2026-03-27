@@ -32,7 +32,7 @@ export function TaskListRow({ task, isSelected, onClick }: TaskListRowProps) {
   const canExpandTodos = task.todo_count > 0
 
   return (
-    <div>
+    <div data-task-id={task.id}>
       <div
         className={cn(
           'group grid grid-cols-[minmax(0,1fr)_auto_140px_80px] items-center gap-3 px-3 py-2.5 cursor-pointer rounded-md transition-colors',
@@ -74,7 +74,7 @@ export function TaskListRow({ task, isSelected, onClick }: TaskListRowProps) {
         {/* Meta */}
         <div className="flex items-center justify-end gap-2 whitespace-nowrap">
           <span className="text-xs text-muted-foreground truncate max-w-[88px]">
-            {task.pm_agent.name}
+            {task.pm_agent?.name || '用户创建'}
           </span>
           <PriorityBadge priority={task.priority} />
         </div>

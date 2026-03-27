@@ -5,10 +5,12 @@ interface AssistantState {
   isOpen: boolean
   messages: AssistantMessage[]
   isProcessing: boolean
+  fabVisibility: 'visible' | 'hidden'
 
   toggle: () => void
   open: () => void
   close: () => void
+  setFabVisibility: (visibility: 'visible' | 'hidden') => void
 
   addUserMessage: (content: string) => string
   addAssistantMessage: () => string
@@ -31,10 +33,12 @@ export const useAssistantStore = create<AssistantState>()((set) => ({
   isOpen: false,
   messages: [],
   isProcessing: false,
+  fabVisibility: 'visible',
 
   toggle: () => set((s) => ({ isOpen: !s.isOpen })),
   open: () => set({ isOpen: true }),
   close: () => set({ isOpen: false }),
+  setFabVisibility: (visibility) => set({ fabVisibility: visibility }),
 
   addUserMessage: (content: string) => {
     const id = nextId()

@@ -1,7 +1,6 @@
-import { Link, useLocation, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   FolderKanban,
-  Bot,
   Plus,
   ChevronLeft,
   Sun,
@@ -19,6 +18,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Avatar } from '@/components/ui/avatar'
 import { AgentStatusIcon, ProjectWorkStatusDot } from '@/components/shared/StatusBadge'
+import { TrustMeshLogo } from '@/components/shared/TrustMeshLogo'
+import { AgentConfigDialog } from '@/components/agent/AgentConfigDialog'
 import { useProjects } from '@/hooks/useProjects'
 import { useAgents } from '@/hooks/useAgents'
 import { useUnreadCount } from '@/hooks/useNotifications'
@@ -66,6 +67,7 @@ function ProjectSidebarStatus({ status }: { status: ProjectWorkStatus }) {
 
 export function Sidebar({ onCreateProject }: SidebarProps) {
   const location = useLocation()
+  const navigate = useNavigate()
   const { projectId } = useParams()
   const { data: projects } = useProjects()
   const { data: agents } = useAgents()
@@ -75,6 +77,7 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
   const { setTheme, resolvedTheme } = useThemeStore()
   const isDark = resolvedTheme() === 'dark'
   const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 1280px)').matches)
+  const [addAgentOpen, setAddAgentOpen] = useState(false)
 
   useEffect(() => {
     const mql = window.matchMedia('(max-width: 1280px)')
@@ -100,9 +103,7 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
       <div className="flex h-14 items-center gap-2 px-4">
         {!collapsed && (
           <Link to="/dashboard" className="flex items-center gap-2 font-semibold text-lg">
-            <div className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-bold">
-              T
-            </div>
+            <TrustMeshLogo size={28} />
             智能体协作平台
           </Link>
         )}
@@ -229,8 +230,15 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
                 'flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                 location.pathname === `/agents/${agent.id}` && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
               )}
+              title={collapsed ? agent.name : undefined}
             >
-              <Bot className="size-4 shrink-0" />
+              <Avatar
+                fallback={agent.name}
+                seed={agent.id}
+                kind="agent"
+                role={agent.role}
+                size="sm"
+              />
               {!collapsed && (
                 <>
                   <span className="truncate">{agent.name}</span>
@@ -240,16 +248,18 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
             </Link>
           ))}
 
-          <Link
-            to="/agents"
-            className={cn(
-              'flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-muted-foreground',
-              isActive('/agents') && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-            )}
+          <button
+            onClick={() => setAddAgentOpen(true)}
+            className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           >
-            <Bot className="size-4 shrink-0" />
-            {!collapsed && <span>Agent 管理</span>}
-          </Link>
+            <Plus className="size-4 shrink-0" />
+            {!collapsed && <span>添加智能体</span>}
+          </button>
+          <AgentConfigDialog
+            open={addAgentOpen}
+            onOpenChange={setAddAgentOpen}
+            onCreated={(id) => navigate(`/agents/${id}`)}
+          />
         </div>
       </ScrollArea>
 
@@ -258,10 +268,10 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
       {/* Footer */}
       <div className="p-2">
         <div className={cn('flex items-center gap-2', collapsed ? 'flex-col' : 'px-2')}>
-          {!collapsed && user && (
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <Avatar fallback={user.name} size="sm" />
-              <span className="truncate text-sm">{user.name}</span>
+          {user && (
+            <div className={cn('flex items-center gap-2 min-w-0', collapsed ? '' : 'flex-1')}>
+              <Avatar fallback={user.name} seed={user.id} kind="user" size="sm" />
+              {!collapsed && <span className="truncate text-sm">{user.name}</span>}
             </div>
           )}
           <Button variant="ghost" size="icon" className="size-7 shrink-0" onClick={toggleTheme}>

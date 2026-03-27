@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Skeleton } from '@/components/ui/skeleton'
 import { AgentStatusDot, ProjectWorkStatusBadge } from '@/components/shared/StatusBadge'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { Avatar } from '@/components/ui/avatar'
 import { CreateProjectDialog } from '@/components/project/CreateProjectDialog'
 import { useProjects } from '@/hooks/useProjects'
 import { formatRelativeTime } from '@/lib/utils'
@@ -85,8 +86,15 @@ export function ProjectListPage() {
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
-                      <AgentStatusDot status={project.pm_agent.status} />
-                      <span>{project.pm_agent.name}</span>
+                        <Avatar
+                          fallback={project.pm_agent.name}
+                          seed={project.pm_agent.id}
+                          kind="agent"
+                          role="pm"
+                          size="sm"
+                        />
+                        <span>{project.pm_agent.name}</span>
+                        <AgentStatusDot status={project.pm_agent.status} />
                       </div>
                       {project.task_summary.latest_task_at && (
                         <span>任务更新 {formatRelativeTime(project.task_summary.latest_task_at)}</span>

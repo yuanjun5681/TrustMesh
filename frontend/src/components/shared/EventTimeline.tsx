@@ -5,7 +5,6 @@ import {
   AlertCircle,
   PlayCircle,
   UserCircle,
-  Bot,
   Cog,
   MessageSquare,
   Radio,
@@ -13,6 +12,7 @@ import {
   FileText,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Avatar } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime } from '@/lib/utils'
 import type { Event, EventType } from '@/types'
@@ -28,12 +28,6 @@ const eventConfig: Record<EventType, { icon: typeof Circle; color: string; label
   task_comment: { icon: MessageSquare, color: 'text-muted-foreground', label: '评论' },
   conversation_reply: { icon: MessageSquare, color: 'text-info', label: 'PM 回复' },
   agent_status_changed: { icon: Radio, color: 'text-warning', label: 'Agent 状态' },
-}
-
-const actorIcons = {
-  user: UserCircle,
-  agent: Bot,
-  system: Cog,
 }
 
 const taskStatusBadge: Record<string, { label: string; variant: 'secondary' | 'info' | 'success' | 'destructive' }> = {
@@ -159,6 +153,26 @@ function buildEventLink(event: Event): string | null {
   return null
 }
 
+function ActorAvatar({ event }: { event: Event }) {
+  if (event.actor_type === 'system') {
+    return (
+      <div className="flex size-6 items-center justify-center rounded-full bg-muted text-muted-foreground shrink-0">
+        <Cog className="size-3.5" />
+      </div>
+    )
+  }
+
+  return (
+    <Avatar
+      fallback={event.actor_name || (event.actor_type === 'agent' ? 'Agent' : '用户')}
+      seed={event.actor_id || event.actor_name}
+      kind={event.actor_type === 'agent' ? 'agent' : 'user'}
+      role={event.actor_type === 'agent' ? 'custom' : undefined}
+      size="sm"
+    />
+  )
+}
+
 interface EventTimelineProps {
   events: Event[]
   loading?: boolean
@@ -189,7 +203,6 @@ export function EventTimeline({
           label: event.event_type,
         }
         const Icon = config.icon
-        const ActorIcon = actorIcons[event.actor_type]
         const isLast = index === events.length - 1
         const link = buildEventLink(event)
 
@@ -208,7 +221,7 @@ export function EventTimeline({
             </div>
             <div className={cn('pb-4 flex-1 min-w-0', isLast && 'pb-0')}>
               <div className="flex items-center gap-1.5">
-                <ActorIcon className="size-3.5 text-muted-foreground shrink-0" />
+                <ActorAvatar event={event} />
                 {showActorName && event.actor_name && (
                   <span className="text-xs text-muted-foreground">{event.actor_name}</span>
                 )}

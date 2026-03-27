@@ -91,7 +91,7 @@ type TaskDetail struct {
 	ID             string         `json:"id" bson:"_id"`
 	UserID         string         `json:"-" bson:"user_id"`
 	ProjectID      string         `json:"project_id" bson:"project_id"`
-	ConversationID string         `json:"conversation_id" bson:"conversation_id"`
+	ConversationID string         `json:"conversation_id,omitempty" bson:"conversation_id,omitempty"`
 	Title          string         `json:"title" bson:"title"`
 	Description    string         `json:"description" bson:"description"`
 	Status         string         `json:"status" bson:"status"`

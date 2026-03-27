@@ -1,8 +1,9 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/StatusBadge'
-import { TaskTimeline } from './TaskTimeline'
+import { TaskFeed } from './TaskFeed'
 import { TaskResultView } from './TaskResult'
+import { TaskDescription } from './TaskDescription'
 import { TaskTodoSection } from './TaskTodoSection'
 import { useTask } from '@/hooks/useTasks'
 import { Separator } from '@/components/ui/separator'
@@ -30,7 +31,7 @@ export function TaskSheet({ taskId, onClose }: TaskSheetProps) {
 }
 
 function TaskSheetBody({ task }: { task: TaskDetail }) {
-  const [tab, setTab] = useState('activity')
+  const [tab, setTab] = useState('feed')
 
   return (
     <>
@@ -41,9 +42,7 @@ function TaskSheetBody({ task }: { task: TaskDetail }) {
         </div>
         <SheetTitle className="text-lg mt-1">{task.title}</SheetTitle>
         {task.description && (
-          <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">
-            {task.description}
-          </p>
+          <TaskDescription description={task.description} />
         )}
       </SheetHeader>
 
@@ -54,14 +53,14 @@ function TaskSheetBody({ task }: { task: TaskDetail }) {
 
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
-            <TabsTrigger value="activity">全部活动</TabsTrigger>
+            <TabsTrigger value="feed">动态</TabsTrigger>
             <TabsTrigger value="result">结果</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="activity">
-            <ScrollArea className="max-h-[calc(100vh-280px)]">
-              <TaskTimeline taskId={task.id} />
-            </ScrollArea>
+          <TabsContent value="feed">
+            <div className="h-[calc(100vh-280px)]">
+              <TaskFeed taskId={task.id} />
+            </div>
           </TabsContent>
 
           <TabsContent value="result">

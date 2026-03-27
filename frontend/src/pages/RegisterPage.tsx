@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/authStore'
 import * as authApi from '@/api/auth'
 import { ApiRequestError } from '@/api/client'
 import agentNetworkSvg from '@/assets/agent-network.svg'
+import { TrustMeshLogo } from '@/components/shared/TrustMeshLogo'
 
 const MIN_PASSWORD_LENGTH = 8
 
@@ -58,9 +59,7 @@ export function RegisterPage() {
         <div className="absolute inset-0 bg-[linear-gradient(rgba(139,127,248,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(139,127,248,0.03)_1px,transparent_1px)] bg-[size:48px_48px]" />
 
         <div className="relative z-10 flex flex-col items-center px-12 max-w-lg">
-          <div className="mb-6 flex size-14 items-center justify-center rounded-2xl bg-primary/20 border border-primary/30 text-primary text-xl font-bold backdrop-blur-sm">
-            T
-          </div>
+          <TrustMeshLogo size={56} className="mb-6" />
           <h2 className="text-3xl font-bold text-white mb-3 text-center">TrustMesh</h2>
           <p className="text-base text-[#a1a1aa] text-center mb-10 leading-relaxed">
             多个 AI Agent 汇聚在同一工作空间，协同编排任务、驱动项目交付
@@ -83,10 +82,8 @@ export function RegisterPage() {
       <div className="flex flex-1 items-center justify-center px-6 py-12 bg-background">
         <div className="w-full max-w-sm">
           {/* Mobile logo */}
-          <div className="mb-8 text-center lg:hidden">
-            <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground text-lg font-bold">
-              T
-            </div>
+          <div className="mb-8 flex flex-col items-center lg:hidden">
+            <TrustMeshLogo size={48} className="mb-3" />
             <h1 className="text-xl font-bold">TrustMesh</h1>
           </div>
 

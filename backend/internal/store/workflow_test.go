@@ -696,6 +696,146 @@ func TestCancelTaskStopsFurtherTodoUpdates(t *testing.T) {
 	}
 }
 
+func TestCreateTaskByUser(t *testing.T) {
+	s, userID, _, developer, project, _ := seedWorkflowState(t)
+
+	task, appErr := s.CreateTaskByUser(userID, UserTaskCreateInput{
+		ProjectID:       project.ID,
+		Title:           "Implement login",
+		Description:     "Support email password login",
+		Priority:        "high",
+		AssigneeAgentID: developer.ID,
+	})
+	if appErr != nil {
+		t.Fatalf("create task: %v", appErr)
+	}
+	if task.Title != "Implement login" {
+		t.Fatalf("unexpected title: %s", task.Title)
+	}
+	if task.Status != "pending" {
+		t.Fatalf("expected pending, got %s", task.Status)
+	}
+	if task.Priority != "high" {
+		t.Fatalf("expected high priority, got %s", task.Priority)
+	}
+	if task.ConversationID != "" {
+		t.Fatalf("expected empty conversation_id, got %s", task.ConversationID)
+	}
+	if len(task.Todos) != 1 {
+		t.Fatalf("expected 1 todo, got %d", len(task.Todos))
+	}
+	todo := task.Todos[0]
+	if todo.Title != "Implement login" {
+		t.Fatalf("todo title should match task title, got %s", todo.Title)
+	}
+	if todo.Assignee.AgentID != developer.ID {
+		t.Fatalf("unexpected assignee: %s", todo.Assignee.AgentID)
+	}
+	if todo.Status != "pending" {
+		t.Fatalf("expected todo pending, got %s", todo.Status)
+	}
+
+	// Verify task appears in project tasks
+	fetched, appErr := s.GetTask(userID, task.ID)
+	if appErr != nil {
+		t.Fatalf("get task: %v", appErr)
+	}
+	if fetched.ID != task.ID {
+		t.Fatalf("fetched task id mismatch")
+	}
+}
+
+func TestCreateTaskByUserValidation(t *testing.T) {
+	s, userID, _, developer, project, _ := seedWorkflowState(t)
+
+	// Missing title
+	_, appErr := s.CreateTaskByUser(userID, UserTaskCreateInput{
+		ProjectID:       project.ID,
+		Title:           "",
+		Description:     "desc",
+		AssigneeAgentID: developer.ID,
+	})
+	if appErr == nil {
+		t.Fatal("expected validation error for missing title")
+	}
+
+	// Invalid priority
+	_, appErr = s.CreateTaskByUser(userID, UserTaskCreateInput{
+		ProjectID:       project.ID,
+		Title:           "Test",
+		Description:     "desc",
+		Priority:        "critical",
+		AssigneeAgentID: developer.ID,
+	})
+	if appErr == nil {
+		t.Fatal("expected validation error for invalid priority")
+	}
+
+	// Default priority
+	task, appErr := s.CreateTaskByUser(userID, UserTaskCreateInput{
+		ProjectID:       project.ID,
+		Title:           "Test",
+		Description:     "desc",
+		AssigneeAgentID: developer.ID,
+	})
+	if appErr != nil {
+		t.Fatalf("create task: %v", appErr)
+	}
+	if task.Priority != "medium" {
+		t.Fatalf("expected default medium priority, got %s", task.Priority)
+	}
+
+	// Archived project
+	s.mu.Lock()
+	s.projects[project.ID].Status = "archived"
+	s.mu.Unlock()
+	_, appErr = s.CreateTaskByUser(userID, UserTaskCreateInput{
+		ProjectID:       project.ID,
+		Title:           "Test",
+		Description:     "desc",
+		AssigneeAgentID: developer.ID,
+	})
+	if appErr == nil || appErr.Code != "PROJECT_ARCHIVED" {
+		t.Fatalf("expected PROJECT_ARCHIVED, got %v", appErr)
+	}
+}
+
+func TestCreateTaskByUserTodoWorkflow(t *testing.T) {
+	s, userID, _, developer, project, _ := seedWorkflowState(t)
+
+	task, appErr := s.CreateTaskByUser(userID, UserTaskCreateInput{
+		ProjectID:       project.ID,
+		Title:           "Build API",
+		Description:     "REST endpoints",
+		AssigneeAgentID: developer.ID,
+	})
+	if appErr != nil {
+		t.Fatalf("create task: %v", appErr)
+	}
+
+	// Dispatch the todo
+	task, appErr = s.RecordTodoDispatch(userID, task.ID, task.Todos[0].ID)
+	if appErr != nil {
+		t.Fatalf("dispatch todo: %v", appErr)
+	}
+	if task.Status != "in_progress" {
+		t.Fatalf("expected in_progress after dispatch, got %s", task.Status)
+	}
+
+	// Complete the todo
+	task, appErr = s.CompleteTodoByNode(developer.NodeID, TodoCompleteInput{
+		TaskID: task.ID,
+		TodoID: task.Todos[0].ID,
+		Result: model.TodoResult{Summary: "done"},
+	})
+	if appErr != nil {
+		t.Fatalf("complete todo: %v", appErr)
+	}
+	if task.Status != "done" {
+		t.Fatalf("expected done after completing only todo, got %s", task.Status)
+	}
+}
+
 func seedWorkflowState(t *testing.T) (*Store, string, stringAgent, stringAgent, projectRef, conversationRef) {
 	t.Helper()
 

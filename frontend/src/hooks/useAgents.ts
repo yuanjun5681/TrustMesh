@@ -40,6 +40,18 @@ export function useUpdateAgent() {
   })
 }
 
+export function useAgentTasks(id: string | undefined, status?: string) {
+  return useQuery({
+    queryKey: ['agents', id, 'tasks', status ?? 'all'],
+    queryFn: async () => {
+      const res = await agentsApi.listAgentTasks(id!, status)
+      return res.data.items
+    },
+    enabled: !!id,
+    staleTime: 30_000,
+  })
+}
+
 export function useAgentStats(id: string | undefined) {
   return useQuery({
     queryKey: ['agents', id, 'stats'],

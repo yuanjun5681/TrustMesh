@@ -57,6 +57,22 @@ type TaskCommentPayload struct {
 	Content string `json:"content"`
 }
 
+type TaskMentionPayload struct {
+	TaskID          string `json:"task_id"`
+	ProjectID       string `json:"project_id"`
+	ConversationID  string `json:"conversation_id,omitempty"`
+	CommentID       string `json:"comment_id"`
+	TodoID          string `json:"todo_id,omitempty"`
+	TaskTitle       string `json:"task_title"`
+	TaskDescription string `json:"task_description,omitempty"`
+	TaskStatus      string `json:"task_status"`
+	TaskPriority    string `json:"task_priority"`
+	TodoTitle       string `json:"todo_title,omitempty"`
+	AuthorName      string `json:"author_name"`
+	UserContent     string `json:"user_content"`
+	Content         string `json:"content"`
+}
+
 type TaskCreatedPayload struct {
 	TaskID         string `json:"task_id"`
 	ProjectID      string `json:"project_id"`

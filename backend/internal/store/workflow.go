@@ -51,9 +51,14 @@ type TaskCancelInput struct {
 }
 
 type TaskCommentInput struct {
-	TaskID  string
-	TodoID  string
-	Content string
+	TaskID   string
+	TodoID   string
+	Content  string
+	Mentions []TaskCommentMentionInput
+}
+
+type TaskCommentMentionInput struct {
+	AgentID string
 }
 
 func (s *Store) RecordTodoDispatch(userID, taskID, todoID string) (*model.TaskDetail, *transport.AppError) {
@@ -350,6 +355,117 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 		return nil, mongoWriteError(err)
 	}
 	s.publishConversationUnsafe(conv.ID)
+	s.publishTaskUnsafe(task.ID)
+
+	return copyTask(task), nil
+}
+
+type UserTaskCreateInput struct {
+	ProjectID       string
+	Title           string
+	Description     string
+	Priority        string
+	AssigneeAgentID string
+}
+
+func (s *Store) CreateTaskByUser(userID string, in UserTaskCreateInput) (*model.TaskDetail, *transport.AppError) {
+	in.Title = strings.TrimSpace(in.Title)
+	in.Description = strings.TrimSpace(in.Description)
+	in.Priority = strings.TrimSpace(in.Priority)
+	if strings.TrimSpace(in.ProjectID) == "" || in.Title == "" || in.Description == "" || strings.TrimSpace(in.AssigneeAgentID) == "" {
+		return nil, transport.Validation("invalid task create payload", map[string]any{
+			"project_id":        "required",
+			"title":             "required",
+			"description":       "required",
+			"assignee_agent_id": "required",
+		})
+	}
+	priority := in.Priority
+	if priority == "" {
+		priority = "medium"
+	}
+	validPriorities := map[string]bool{"low": true, "medium": true, "high": true, "urgent": true}
+	if !validPriorities[priority] {
+		return nil, transport.Validation("invalid priority", map[string]any{"priority": "must be low, medium, high, or urgent"})
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	project, ok := s.projects[in.ProjectID]
+	if !ok || project.UserID != userID {
+		return nil, transport.NotFound("project not found")
+	}
+	if project.Status == "archived" {
+		return nil, transport.Conflict("PROJECT_ARCHIVED", "archived project cannot create tasks")
+	}
+
+	assignee, ok := s.agents[in.AssigneeAgentID]
+	if !ok || assignee.UserID != userID {
+		return nil, transport.NotFound("assignee agent not found")
+	}
+	if assignee.Archived {
+		return nil, transport.Conflict("AGENT_ARCHIVED", "cannot assign to archived agent")
+	}
+
+	now := time.Now().UTC()
+	todoID := uuid.NewString()
+
+	todo := model.Todo{
+		ID:          todoID,
+		Order:       1,
+		Title:       in.Title,
+		Description: in.Description,
+		Status:      "pending",
+		Assignee: model.TodoAssignee{
+			AgentID: assignee.ID,
+			Name:    assignee.Name,
+			NodeID:  assignee.NodeID,
+		},
+		Result: model.TodoResult{
+			Summary:      "",
+			Output:       "",
+			ArtifactRefs: []model.TodoResultArtifactRef{},
+			Metadata:     map[string]any{},
+		},
+		CreatedAt: now,
+	}
+
+	task := &model.TaskDetail{
+		ID:             newID(),
+		UserID:         userID,
+		ProjectID:      project.ID,
+		ConversationID: "",
+		Title:          in.Title,
+		Description:    in.Description,
+		Status:         "pending",
+		Priority:       priority,
+		PMAgentID:      "",
+		PMAgent:        model.PMAgentSummary{},
+		Todos:          []model.Todo{todo},
+		Artifacts:      []model.TaskArtifact{},
+		Result: model.TaskResult{
+			Summary:     "",
+			FinalOutput: "",
+			Metadata:    map[string]any{},
+		},
+		Version:      1,
+		CanceledAt:   nil,
+		CanceledBy:   nil,
+		CancelReason: nil,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+
+	s.tasks[task.ID] = task
+	s.projectTasks[task.ProjectID] = append(s.projectTasks[task.ProjectID], task.ID)
+
+	taskTitle := task.Title
+	s.addEventUnsafe(userID, project.ID, task.ID, "", "user", userID, "", "task_created", &taskTitle, map[string]any{"task_title": task.Title}, now)
+
+	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
 	s.publishTaskUnsafe(task.ID)
 
 	return copyTask(task), nil
@@ -668,10 +784,14 @@ func (s *Store) AddTaskCommentByNode(nodeID string, in TaskCommentInput) (*model
 			return nil, transport.NotFound("todo not found")
 		}
 	}
+	mentions, appErr := s.normalizeTaskCommentMentionsUnsafe(task, in.Mentions)
+	if appErr != nil {
+		return nil, appErr
+	}
 
 	now := time.Now().UTC()
 	s.markAgentSeenUnsafe(agent.ID, now)
-	comment := s.addCommentUnsafe(task, in.TodoID, "agent", agent.ID, agent.Name, in.Content, now)
+	comment := s.addCommentUnsafe(task, in.TodoID, "agent", agent.ID, agent.Name, in.Content, mentions, now)
 	if err := s.persistCommentUnsafe(comment); err != nil {
 		return nil, mongoWriteError(err)
 	}
@@ -744,13 +864,17 @@ func (s *Store) AddTaskComment(userID, taskID string, in TaskCommentInput) (*mod
 			return nil, transport.NotFound("todo not found")
 		}
 	}
+	mentions, appErr := s.normalizeTaskCommentMentionsUnsafe(task, in.Mentions)
+	if appErr != nil {
+		return nil, appErr
+	}
 
 	now := time.Now().UTC()
 	userName := ""
 	if u, ok := s.users[userID]; ok {
 		userName = u.Name
 	}
-	comment := s.addCommentUnsafe(task, in.TodoID, "user", userID, userName, in.Content, now)
+	comment := s.addCommentUnsafe(task, in.TodoID, "user", userID, userName, in.Content, mentions, now)
 	if err := s.persistCommentUnsafe(comment); err != nil {
 		return nil, mongoWriteError(err)
 	}
@@ -777,7 +901,7 @@ func (s *Store) ListTaskComments(userID, taskID string) ([]model.Comment, *trans
 	return out, nil
 }
 
-func (s *Store) addCommentUnsafe(task *model.TaskDetail, todoID, actorType, actorID, actorName, content string, at time.Time) *model.Comment {
+func (s *Store) addCommentUnsafe(task *model.TaskDetail, todoID, actorType, actorID, actorName, content string, mentions []model.CommentMention, at time.Time) *model.Comment {
 	comment := &model.Comment{
 		ID:        newID(),
 		UserID:    task.UserID,
@@ -787,6 +911,7 @@ func (s *Store) addCommentUnsafe(task *model.TaskDetail, todoID, actorType, acto
 		ActorID:   actorID,
 		ActorName: actorName,
 		Content:   content,
+		Mentions:  append([]model.CommentMention(nil), mentions...),
 		CreatedAt: at,
 	}
 	s.taskComments[task.ID] = append(s.taskComments[task.ID], *comment)
@@ -796,24 +921,82 @@ func (s *Store) addCommentUnsafe(task *model.TaskDetail, todoID, actorType, acto
 		"comment":    *comment,
 	}, at)
 
-	// 只有 Agent 评论才添加到活动时间线，用户评论不进入 events
-	if actorType == "agent" {
-		metadata := map[string]any{"comment_id": comment.ID, "task_title": task.Title}
-		if todoID != "" {
-			metadata["todo_id"] = todoID
-			for i := range task.Todos {
-				if task.Todos[i].ID == todoID {
-					metadata["todo_title"] = task.Todos[i].Title
-					break
-				}
+	metadata := map[string]any{"comment_id": comment.ID, "task_title": task.Title}
+	if todoID != "" {
+		metadata["todo_id"] = todoID
+		for i := range task.Todos {
+			if task.Todos[i].ID == todoID {
+				metadata["todo_title"] = task.Todos[i].Title
+				break
 			}
 		}
-		s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todoID, actorType, actorID, actorName, "task_comment", &content, metadata, at)
 	}
+	if len(comment.Mentions) > 0 {
+		metadata["mentions"] = comment.Mentions
+	}
+	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todoID, actorType, actorID, actorName, "task_comment", &content, metadata, at)
 
 	task.UpdatedAt = at
 	task.Version++
 	return comment
+}
+
+func (s *Store) normalizeTaskCommentMentionsUnsafe(task *model.TaskDetail, inputs []TaskCommentMentionInput) ([]model.CommentMention, *transport.AppError) {
+	if len(inputs) == 0 {
+		return nil, nil
+	}
+
+	targets := s.taskCommentMentionTargetsUnsafe(task)
+	seen := make(map[string]struct{}, len(inputs))
+	mentions := make([]model.CommentMention, 0, len(inputs))
+	for i, input := range inputs {
+		agentID := strings.TrimSpace(input.AgentID)
+		if agentID == "" {
+			return nil, transport.Validation("invalid mentions", map[string]any{
+				fmt.Sprintf("mentions.%d.agent_id", i): "required",
+			})
+		}
+		mention, ok := targets[agentID]
+		if !ok {
+			return nil, transport.Validation("invalid mentions", map[string]any{
+				fmt.Sprintf("mentions.%d.agent_id", i): "must reference task participant",
+			})
+		}
+		if _, exists := seen[agentID]; exists {
+			continue
+		}
+		seen[agentID] = struct{}{}
+		mentions = append(mentions, mention)
+	}
+	return mentions, nil
+}
+
+func (s *Store) taskCommentMentionTargetsUnsafe(task *model.TaskDetail) map[string]model.CommentMention {
+	targets := make(map[string]model.CommentMention, len(task.Todos)+1)
+	if task.PMAgent.ID != "" {
+		targets[task.PMAgent.ID] = model.CommentMention{
+			AgentID:   task.PMAgent.ID,
+			AgentName: task.PMAgent.Name,
+			NodeID:    task.PMAgent.NodeID,
+			Role:      "pm",
+		}
+	}
+	for _, todo := range task.Todos {
+		agentID := strings.TrimSpace(todo.Assignee.AgentID)
+		if agentID == "" {
+			continue
+		}
+		if _, exists := targets[agentID]; exists {
+			continue
+		}
+		targets[agentID] = model.CommentMention{
+			AgentID:   agentID,
+			AgentName: todo.Assignee.Name,
+			NodeID:    todo.Assignee.NodeID,
+			Role:      "executor",
+		}
+	}
+	return targets
 }
 
 func (s *Store) updateTaskStatusUnsafe(task *model.TaskDetail, now time.Time) {

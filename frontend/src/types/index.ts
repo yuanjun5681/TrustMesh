@@ -301,7 +301,27 @@ export interface Comment {
   actor_id: string
   actor_name: string
   content: string
+  mentions?: CommentMention[]
   created_at: string
+}
+
+export interface CommentMention {
+  agent_id: string
+  agent_name: string
+  node_id: string
+  role: string
+}
+
+export interface CommentMentionDelivery {
+  agent_id: string
+  agent_name: string
+  status: 'sent' | 'failed'
+  error?: string
+}
+
+export interface AddTaskCommentResult {
+  comment: Comment
+  mention_deliveries: CommentMentionDelivery[]
 }
 
 export interface TaskStreamSnapshot {
@@ -424,6 +444,23 @@ export interface AgentInsights {
   priority_breakdown: AgentInsightPriorityRow[]
   project_contribution: AgentInsightProjectRow[]
   risk_items: AgentInsightRiskItem[]
+}
+
+export interface AgentTaskItem {
+  id: string
+  project_id: string
+  project_name: string
+  title: string
+  description: string
+  status: TaskStatus
+  priority: TaskPriority
+  pm_agent: PMAgentSummary
+  relation: 'pm' | 'executor'
+  todo_count: number
+  completed_todo_count: number
+  failed_todo_count: number
+  created_at: string
+  updated_at: string
 }
 
 export interface DashboardStats {

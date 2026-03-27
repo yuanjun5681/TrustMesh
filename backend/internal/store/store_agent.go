@@ -760,6 +760,81 @@ func (s *Store) executorStatsUnsafe(agentID string) *model.AgentStats {
 	return stats
 }
 
+func (s *Store) ListAgentTasks(userID, agentID, status string) ([]model.AgentTaskItem, *transport.AppError) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	a, ok := s.agents[agentID]
+	if !ok || a.UserID != userID {
+		return nil, transport.NotFound("agent not found")
+	}
+	if status != "" && !isValidTaskStatus(status) {
+		return nil, transport.Validation("invalid status", map[string]any{"status": "must be pending/in_progress/done/failed/canceled"})
+	}
+
+	seen := make(map[string]struct{})
+	items := make([]model.AgentTaskItem, 0)
+
+	for _, task := range s.tasks {
+		if task.UserID != userID {
+			continue
+		}
+
+		var relation string
+		if a.Role == "pm" && task.PMAgentID == agentID {
+			relation = "pm"
+		} else {
+			for _, todo := range task.Todos {
+				if todo.Assignee.AgentID == agentID {
+					relation = "executor"
+					break
+				}
+			}
+		}
+		if relation == "" {
+			continue
+		}
+		if _, dup := seen[task.ID]; dup {
+			continue
+		}
+		seen[task.ID] = struct{}{}
+
+		if status != "" && task.Status != status {
+			continue
+		}
+
+		completed, failed := 0, 0
+		for _, td := range task.Todos {
+			if td.Status == "done" {
+				completed++
+			}
+			if td.Status == "failed" {
+				failed++
+			}
+		}
+
+		items = append(items, model.AgentTaskItem{
+			ID:                 task.ID,
+			ProjectID:          task.ProjectID,
+			ProjectName:        s.projectNameUnsafe(task.ProjectID),
+			Title:              task.Title,
+			Description:        task.Description,
+			Status:             task.Status,
+			Priority:           task.Priority,
+			PMAgent:            task.PMAgent,
+			Relation:           relation,
+			TodoCount:          len(task.Todos),
+			CompletedTodoCount: completed,
+			FailedTodoCount:    failed,
+			CreatedAt:          task.CreatedAt,
+			UpdatedAt:          task.UpdatedAt,
+		})
+	}
+
+	sort.Slice(items, func(i, j int) bool { return items[i].UpdatedAt.After(items[j].UpdatedAt) })
+	return items, nil
+}
+
 func normalizeCapabilities(in []string) []string {
 	if len(in) == 0 {
 		return []string{}

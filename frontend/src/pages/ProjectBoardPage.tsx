@@ -1,17 +1,27 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { MessageSquarePlus, MoreHorizontal, Pencil, Archive, Loader2 } from 'lucide-react'
+import { MessageSquarePlus, Plus, MoreHorizontal, Pencil, Archive, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { AgentStatusDot, ProjectStatusBadge, ProjectWorkStatusBadge } from '@/components/shared/StatusBadge'
+import { Avatar } from '@/components/ui/avatar'
 import { TaskListView } from '@/components/task/TaskListView'
 import { TaskDetailPanel } from '@/components/task/TaskDetailPanel'
 import { ConversationSheet } from '@/components/conversation/ConversationSheet'
 import { EditProjectDialog } from '@/components/project/EditProjectDialog'
 import { ArchiveProjectDialog } from '@/components/project/ArchiveProjectDialog'
+import { CreateTaskDialog } from '@/components/task/CreateTaskDialog'
 import { useProject } from '@/hooks/useProjects'
 import { useTasks } from '@/hooks/useTasks'
 import { formatDateTime, formatRelativeTime } from '@/lib/utils'
+import { useAssistantStore } from '@/stores/assistantStore'
+import type { TaskListItem } from '@/types'
+
+interface TaskSelectionState {
+  observedTasks: TaskListItem[] | undefined
+  prevStatusMap: Record<string, string>
+  autoSelectedTaskId: string | null
+}
 
 export function ProjectBoardPage() {
   const navigate = useNavigate()
@@ -22,7 +32,49 @@ export function ProjectBoardPage() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
+  const [createTaskOpen, setCreateTaskOpen] = useState(false)
+  const setFabVisibility = useAssistantStore((state) => state.setFabVisibility)
+  const [taskSelectionState, setTaskSelectionState] = useState<TaskSelectionState>({
+    observedTasks: undefined,
+    prevStatusMap: {},
+    autoSelectedTaskId: null,
+  })
   const projectArchived = project?.status === 'archived'
+
+  if (tasks !== taskSelectionState.observedTasks) {
+    const currentMap: Record<string, string> = {}
+    let nextAutoSelectedTaskId = taskSelectionState.autoSelectedTaskId
+
+    for (const task of tasks ?? []) {
+      const prev = taskSelectionState.prevStatusMap[task.id]
+      if (task.status === 'in_progress' && prev !== undefined && prev !== 'in_progress') {
+        nextAutoSelectedTaskId = task.id
+      }
+      currentMap[task.id] = task.status
+    }
+
+    setTaskSelectionState({
+      observedTasks: tasks,
+      prevStatusMap: currentMap,
+      autoSelectedTaskId: nextAutoSelectedTaskId,
+    })
+  }
+
+  const activeSelectedTaskId = taskSelectionState.autoSelectedTaskId ?? selectedTaskId
+
+  useEffect(() => {
+    setFabVisibility(activeSelectedTaskId ? 'hidden' : 'visible')
+    return () => setFabVisibility('visible')
+  }, [activeSelectedTaskId, setFabVisibility])
+
+  const selectTask = (taskId: string | null) => {
+    setTaskSelectionState((prev) => (
+      prev.autoSelectedTaskId
+        ? { ...prev, autoSelectedTaskId: null }
+        : prev
+    ))
+    setSelectedTaskId(taskId)
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -46,6 +98,13 @@ export function ProjectBoardPage() {
           {project && (
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
               <div className="flex items-center gap-1.5">
+                <Avatar
+                  fallback={project.pm_agent.name}
+                  seed={project.pm_agent.id}
+                  kind="agent"
+                  role="pm"
+                  size="sm"
+                />
                 <AgentStatusDot status={project.pm_agent.status} />
                 <span>PM: {project.pm_agent.name}</span>
               </div>
@@ -71,6 +130,10 @@ export function ProjectBoardPage() {
           )}
           </div>
         <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" disabled={projectArchived} onClick={() => setCreateTaskOpen(true)}>
+            <Plus className="size-4 mr-1.5" />
+            创建任务
+          </Button>
           <Button size="sm" disabled={projectArchived} onClick={() => setSheetOpen(true)}>
             <MessageSquarePlus className="size-4 mr-1.5" />
             {projectArchived ? '项目已归档' : '提交新需求'}
@@ -106,21 +169,21 @@ export function ProjectBoardPage() {
       ) : (
         <div className="flex flex-1 min-h-0">
           {/* Left: Task List */}
-          <div className={`px-6 h-full ${selectedTaskId ? 'w-1/2 border-r' : 'w-full'}`}>
+          <div className={`px-6 h-full ${activeSelectedTaskId ? 'w-1/2 border-r' : 'w-full'}`}>
             <TaskListView
               tasks={tasks ?? []}
-              selectedTaskId={selectedTaskId}
-              onTaskClick={(id) => setSelectedTaskId(id === selectedTaskId ? null : id)}
+              selectedTaskId={activeSelectedTaskId}
+              onTaskClick={(id) => selectTask(id === activeSelectedTaskId ? null : id)}
             />
           </div>
 
           {/* Right: Detail Panel */}
-          {selectedTaskId && (
+          {activeSelectedTaskId && (
             <div className="w-1/2 h-full">
               <TaskDetailPanel
-                key={selectedTaskId}
-                taskId={selectedTaskId}
-                onClose={() => setSelectedTaskId(null)}
+                key={activeSelectedTaskId}
+                taskId={activeSelectedTaskId}
+                onClose={() => selectTask(null)}
               />
             </div>
           )}
@@ -135,11 +198,19 @@ export function ProjectBoardPage() {
           onOpenChange={setSheetOpen}
           onTaskCreated={(taskId) => {
             setSheetOpen(false)
-            setSelectedTaskId(taskId)
+            selectTask(taskId)
           }}
         />
       )}
 
+      {projectId && (
+        <CreateTaskDialog
+          open={createTaskOpen}
+          onOpenChange={setCreateTaskOpen}
+          projectId={projectId}
+          onCreated={(taskId) => selectTask(taskId)}
+        />
+      )}
       <EditProjectDialog open={editOpen} onOpenChange={setEditOpen} project={project} />
       <ArchiveProjectDialog
         open={archiveOpen}

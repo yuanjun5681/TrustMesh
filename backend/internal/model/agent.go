@@ -132,3 +132,21 @@ type WorkloadItem struct {
 	ProjectID string `json:"project_id"`
 	StartedAt string `json:"started_at"`
 }
+
+// AgentTaskItem represents a task associated with an agent (as PM or executor).
+type AgentTaskItem struct {
+	ID                 string         `json:"id"`
+	ProjectID          string         `json:"project_id"`
+	ProjectName        string         `json:"project_name"`
+	Title              string         `json:"title"`
+	Description        string         `json:"description"`
+	Status             string         `json:"status"`
+	Priority           string         `json:"priority"`
+	PMAgent            PMAgentSummary `json:"pm_agent"`
+	Relation           string         `json:"relation"` // "pm" or "executor"
+	TodoCount          int            `json:"todo_count"`
+	CompletedTodoCount int            `json:"completed_todo_count"`
+	FailedTodoCount    int            `json:"failed_todo_count"`
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
+}

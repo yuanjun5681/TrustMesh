@@ -5,7 +5,7 @@ import { useAssistantStore } from '@/stores/assistantStore'
 import { AssistantPanel } from './AssistantPanel'
 
 export function AssistantFab() {
-  const { isOpen, toggle } = useAssistantStore()
+  const { isOpen, toggle, fabVisibility } = useAssistantStore()
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -19,7 +19,12 @@ export function AssistantFab() {
   }, [toggle])
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+    <div
+      className={`fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3 transition-opacity ${
+        fabVisibility === 'hidden' ? 'pointer-events-none opacity-0' : 'opacity-100'
+      }`}
+      aria-hidden={fabVisibility === 'hidden'}
+    >
       {isOpen && <AssistantPanel />}
       <Button
         size="icon"

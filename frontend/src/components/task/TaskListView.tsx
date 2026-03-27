@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { TaskListRow } from './TaskListRow'
 import type { TaskListItem, TaskStatus } from '@/types'
@@ -20,6 +20,25 @@ interface TaskListViewProps {
 
 export function TaskListView({ tasks, selectedTaskId, onTaskClick }: TaskListViewProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const prevSelectedRef = useRef<string | null>(null)
+
+  // Derive effective collapsed state: force-expand group containing selected task
+  const selectedTask = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) : undefined
+  const effectiveCollapsed = selectedTask && collapsed[selectedTask.status]
+    ? { ...collapsed, [selectedTask.status]: false }
+    : collapsed
+
+  // Scroll to selected task when selection changes
+  useEffect(() => {
+    if (!selectedTaskId || selectedTaskId === prevSelectedRef.current) return
+    prevSelectedRef.current = selectedTaskId
+    requestAnimationFrame(() => {
+      const row = scrollRef.current?.querySelector(`[data-task-id="${selectedTaskId}"]`)
+      row?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
+  }, [selectedTaskId])
 
   const groups = statusGroups
     .map((g) => ({
@@ -42,9 +61,9 @@ export function TaskListView({ tasks, selectedTaskId, onTaskClick }: TaskListVie
       </div>
 
       {/* Groups */}
-      <div className="flex-1 overflow-y-auto py-1">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto py-1">
         {groups.map((group) => {
-          const isCollapsed = collapsed[group.status]
+          const isCollapsed = effectiveCollapsed[group.status]
           return (
             <div key={group.status} className="mb-1">
               {/* Section header */}
