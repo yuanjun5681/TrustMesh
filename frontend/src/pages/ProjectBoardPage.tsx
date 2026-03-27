@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { MessageSquarePlus, Plus, MoreHorizontal, Pencil, Archive, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,7 @@ import { CreateTaskDialog } from '@/components/task/CreateTaskDialog'
 import { useProject } from '@/hooks/useProjects'
 import { useTasks } from '@/hooks/useTasks'
 import { formatDateTime, formatRelativeTime } from '@/lib/utils'
+import { useAssistantStore } from '@/stores/assistantStore'
 import type { TaskListItem } from '@/types'
 
 interface TaskSelectionState {
@@ -31,6 +32,7 @@ export function ProjectBoardPage() {
   const [editOpen, setEditOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [createTaskOpen, setCreateTaskOpen] = useState(false)
+  const setFabVisibility = useAssistantStore((state) => state.setFabVisibility)
   const [taskSelectionState, setTaskSelectionState] = useState<TaskSelectionState>({
     observedTasks: undefined,
     prevStatusMap: {},
@@ -58,6 +60,11 @@ export function ProjectBoardPage() {
   }
 
   const activeSelectedTaskId = taskSelectionState.autoSelectedTaskId ?? selectedTaskId
+
+  useEffect(() => {
+    setFabVisibility(activeSelectedTaskId ? 'hidden' : 'visible')
+    return () => setFabVisibility('visible')
+  }, [activeSelectedTaskId, setFabVisibility])
 
   const selectTask = (taskId: string | null) => {
     setTaskSelectionState((prev) => (
