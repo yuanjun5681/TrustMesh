@@ -4,6 +4,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/StatusBadge'
 import { TaskFeed } from './TaskFeed'
 import { TaskResultView } from './TaskResult'
+import { TaskDescription } from './TaskDescription'
 import { CancelTaskDialog } from './CancelTaskDialog'
 import { ConversationSheet } from '@/components/conversation/ConversationSheet'
 import { useTask, useAddTaskComment } from '@/hooks/useTasks'
@@ -83,9 +84,7 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
       <div className="px-5 py-4 shrink-0 border-b">
         <h2 className="text-lg font-semibold">{task.title}</h2>
         {task.description && (
-          <p className="text-sm text-muted-foreground mt-1.5 whitespace-pre-wrap">
-            {task.description}
-          </p>
+          <TaskDescription description={task.description} />
         )}
         {task.cancel_reason && (
           <p className="mt-2 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">

@@ -3,6 +3,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/StatusBadge'
 import { TaskFeed } from './TaskFeed'
 import { TaskResultView } from './TaskResult'
+import { TaskDescription } from './TaskDescription'
 import { TaskTodoSection } from './TaskTodoSection'
 import { useTask } from '@/hooks/useTasks'
 import { Separator } from '@/components/ui/separator'
@@ -41,9 +42,7 @@ function TaskSheetBody({ task }: { task: TaskDetail }) {
         </div>
         <SheetTitle className="text-lg mt-1">{task.title}</SheetTitle>
         {task.description && (
-          <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">
-            {task.description}
-          </p>
+          <TaskDescription description={task.description} />
         )}
       </SheetHeader>
 
