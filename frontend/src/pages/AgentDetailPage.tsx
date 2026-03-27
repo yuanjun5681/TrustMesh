@@ -10,7 +10,7 @@ import { useAgent, useAgentStats } from '@/hooks/useAgents'
 import { useAgentInsights } from '@/hooks/useAgentInsights'
 import { useAgentEvents } from '@/hooks/useDashboard'
 import { formatRelativeTime } from '@/lib/utils'
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import {
   AgentMetricCards,
   AgentDailyChart,
@@ -36,6 +36,14 @@ export function AgentDetailPage() {
   const { data: events, isLoading: eventsLoading } = useAgentEvents(id)
   const [filter, setFilter] = useState<EventType | 'all'>('all')
   const [createTaskOpen, setCreateTaskOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const headerRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return
+    const observer = new ResizeObserver(() => {
+      containerRef.current?.style.setProperty('--agent-header-h', `${node.offsetHeight}px`)
+    })
+    observer.observe(node)
+  }, [])
 
   if (agentLoading) {
     return <div className="p-6 text-sm text-muted-foreground">加载中...</div>
@@ -50,9 +58,9 @@ export function AgentDetailPage() {
     : (events ?? []).filter((e) => e.event_type === filter)
 
   return (
-    <PageContainer className="h-full overflow-y-auto overflow-x-hidden p-0 [--agent-header-h:4.5rem]">
+    <PageContainer ref={containerRef} className="h-full overflow-y-auto overflow-x-hidden p-0 [--agent-header-h:4.5rem]">
       <div className="min-h-full bg-background">
-        <div className="sticky top-0 z-20 border-b bg-background/95 px-6 py-4 supports-backdrop-filter:backdrop-blur-xs">
+        <div ref={headerRef} className="sticky top-0 z-20 border-b bg-background/95 px-6 py-4 supports-backdrop-filter:backdrop-blur-xs">
           <div className="flex items-center gap-2">
             <Link to="/dashboard">
               <Button variant="ghost" size="icon">
