@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { Bot, Plus, Pencil, MoreHorizontal, Trash2, Archive } from 'lucide-react'
+import { Plus, Pencil, MoreHorizontal, Trash2, Archive } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { Badge } from '@/components/ui/badge'
@@ -24,6 +24,7 @@ import { AgentTaskList } from '@/components/agent/AgentTaskList'
 import { AgentConfigDialog } from '@/components/agent/AgentConfigDialog'
 import { ArchiveAgentDialog } from '@/components/agent/ArchiveAgentDialog'
 import { CreateTaskDialog } from '@/components/task/CreateTaskDialog'
+import { Avatar } from '@/components/ui/avatar'
 import type { EventType } from '@/types'
 
 const eventTypeFilters: { label: string; value: EventType | 'all' }[] = [
@@ -91,9 +92,13 @@ export function AgentDetailPage() {
         {/* Sticky header with integrated tab navigation */}
         <div ref={headerRef} className="sticky top-0 z-20 border-b bg-background/95 px-6 py-3 supports-backdrop-filter:backdrop-blur-xs">
           <div className="relative flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary shrink-0">
-              <Bot className="size-6" />
-            </div>
+            <Avatar
+              fallback={agent.name}
+              seed={agent.id}
+              kind="agent"
+              role={agent.role}
+              size="lg"
+            />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <h1 className="text-lg font-bold truncate">{agent.name}</h1>

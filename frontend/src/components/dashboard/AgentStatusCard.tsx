@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom'
-import { Bot, ChevronRight } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { AgentStatusIcon } from '@/components/shared/StatusBadge'
 import { EventTimeline } from '@/components/shared/EventTimeline'
 import { useAgentEvents } from '@/hooks/useDashboard'
 import { formatRelativeTime } from '@/lib/utils'
+import { Avatar } from '@/components/ui/avatar'
 import type { Agent } from '@/types'
 
 interface AgentStatusCardProps {
@@ -22,7 +23,13 @@ export function AgentStatusCard({ agent }: AgentStatusCardProps) {
           className="flex items-center justify-between group"
         >
           <div className="flex items-center gap-2 min-w-0">
-            <Bot className="size-4 text-muted-foreground shrink-0" />
+            <Avatar
+              fallback={agent.name}
+              seed={agent.id}
+              kind="agent"
+              role={agent.role}
+              size="sm"
+            />
             <span className="text-sm font-medium truncate">{agent.name}</span>
             <AgentStatusIcon status={agent.status} />
           </div>

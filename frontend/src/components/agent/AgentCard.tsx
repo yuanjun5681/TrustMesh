@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom'
-import { Bot, Pencil, Trash2, MoreHorizontal } from 'lucide-react'
+import { Pencil, Trash2, MoreHorizontal } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { AgentStatusBadge } from '@/components/shared/StatusBadge'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
+import { Avatar } from '@/components/ui/avatar'
 import type { Agent } from '@/types'
 import { formatRelativeTime } from '@/lib/utils'
 
@@ -36,9 +37,13 @@ export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
           <Link to={`/agents/${agent.id}`} className="flex items-center gap-3 min-w-0 flex-1">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary shrink-0">
-              <Bot className="size-5" />
-            </div>
+            <Avatar
+              fallback={agent.name}
+              seed={agent.id}
+              kind="agent"
+              role={agent.role}
+              size="lg"
+            />
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-semibold truncate">{agent.name}</h3>

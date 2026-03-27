@@ -4,6 +4,7 @@ import { MessageSquarePlus, Plus, MoreHorizontal, Pencil, Archive, Loader2 } fro
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { AgentStatusDot, ProjectStatusBadge, ProjectWorkStatusBadge } from '@/components/shared/StatusBadge'
+import { Avatar } from '@/components/ui/avatar'
 import { TaskListView } from '@/components/task/TaskListView'
 import { TaskDetailPanel } from '@/components/task/TaskDetailPanel'
 import { ConversationSheet } from '@/components/conversation/ConversationSheet'
@@ -97,6 +98,13 @@ export function ProjectBoardPage() {
           {project && (
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
               <div className="flex items-center gap-1.5">
+                <Avatar
+                  fallback={project.pm_agent.name}
+                  seed={project.pm_agent.id}
+                  kind="agent"
+                  role="pm"
+                  size="sm"
+                />
                 <AgentStatusDot status={project.pm_agent.status} />
                 <span>PM: {project.pm_agent.name}</span>
               </div>

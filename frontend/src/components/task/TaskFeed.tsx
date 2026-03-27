@@ -7,7 +7,6 @@ import {
   AlertCircle,
   PlayCircle,
   UserCircle,
-  Bot,
   Cog,
   MessageSquare,
   Radio,
@@ -16,6 +15,7 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Avatar } from '@/components/ui/avatar'
 import { cn, formatRelativeTime } from '@/lib/utils'
 import { TrustMeshLogo } from '@/components/shared/TrustMeshLogo'
 import { useTaskEvents } from '@/hooks/useTasks'
@@ -34,12 +34,6 @@ const eventConfig: Record<EventType, { icon: typeof Circle; color: string; label
   task_comment: { icon: MessageSquare, color: 'text-muted-foreground', label: '评论' },
   conversation_reply: { icon: MessageSquare, color: 'text-info', label: '回复了对话' },
   agent_status_changed: { icon: Radio, color: 'text-warning', label: '状态变更' },
-}
-
-const actorIcons: Record<string, typeof UserCircle> = {
-  user: UserCircle,
-  agent: Bot,
-  system: Cog,
 }
 
 const actorRoleBadge: Record<string, { label: string; className: string } | null> = {
@@ -296,10 +290,24 @@ function EventContent({ event }: { event: Event }) {
 
 // ─── 消息组件 ───
 
+function FeedActorAvatar({ event }: { event: Event }) {
+  if (event.actor_type === 'system') {
+    return <TrustMeshLogo size={32} />
+  }
+
+  return (
+    <Avatar
+      fallback={event.actor_name || (event.actor_type === 'agent' ? 'Agent' : '用户')}
+      seed={event.actor_id || event.actor_name}
+      kind={event.actor_type === 'agent' ? 'agent' : 'user'}
+      role={event.actor_type === 'agent' ? 'custom' : undefined}
+      size="md"
+    />
+  )
+}
+
 function FeedMessage({ event, showHeader }: { event: Event; showHeader: boolean }) {
-  const ActorIcon = actorIcons[event.actor_type] ?? UserCircle
   const roleBadge = actorRoleBadge[event.actor_type]
-  const isComment = event.event_type === 'task_comment'
   const isSystem = event.actor_type === 'system'
 
   if (!showHeader) {
@@ -314,18 +322,7 @@ function FeedMessage({ event, showHeader }: { event: Event; showHeader: boolean 
 
   return (
     <div className="flex items-start gap-3">
-      {isSystem ? (
-        <TrustMeshLogo size={32} />
-      ) : (
-        <div className={cn(
-          'flex size-8 shrink-0 items-center justify-center rounded-full',
-          isComment
-            ? (event.actor_type === 'agent' ? 'bg-muted' : 'bg-primary/10')
-            : 'bg-muted'
-        )}>
-          <ActorIcon className="size-4 text-muted-foreground" />
-        </div>
-      )}
+      <FeedActorAvatar event={event} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <span className="text-sm font-semibold">{isSystem ? 'TrustMesh' : event.actor_name}</span>
@@ -385,13 +382,6 @@ export function TaskFeed({ taskId }: TaskFeedProps) {
     }
     prevCountRef.current = events.length
   }, [events, isAtBottom, scrollToBottom])
-
-  // taskId 变化时重置
-  useEffect(() => {
-    initialScrollDone.current = false
-    prevCountRef.current = 0
-    setIsAtBottom(true)
-  }, [taskId])
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-full text-sm text-muted-foreground">加载中...</div>

@@ -1,5 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { PriorityBadge } from '@/components/shared/StatusBadge'
+import { Avatar } from '@/components/ui/avatar'
 import type { TaskListItem } from '@/types'
 
 interface TaskCardProps {
@@ -43,7 +44,23 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
         )}
 
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="truncate">{task.pm_agent?.name || '用户创建'}</span>
+          {task.pm_agent ? (
+            <>
+              <Avatar
+                fallback={task.pm_agent.name}
+                seed={task.pm_agent.id}
+                kind="agent"
+                role="pm"
+                size="sm"
+              />
+              <span className="truncate">{task.pm_agent.name}</span>
+            </>
+          ) : (
+            <>
+              <Avatar fallback="用户" seed="task-user" kind="user" size="sm" />
+              <span className="truncate">用户创建</span>
+            </>
+          )}
         </div>
       </CardContent>
     </Card>

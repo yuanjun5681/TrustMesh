@@ -1,7 +1,6 @@
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   FolderKanban,
-  Bot,
   Plus,
   ChevronLeft,
   Sun,
@@ -231,8 +230,15 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
                 'flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                 location.pathname === `/agents/${agent.id}` && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
               )}
+              title={collapsed ? agent.name : undefined}
             >
-              <Bot className="size-4 shrink-0" />
+              <Avatar
+                fallback={agent.name}
+                seed={agent.id}
+                kind="agent"
+                role={agent.role}
+                size="sm"
+              />
               {!collapsed && (
                 <>
                   <span className="truncate">{agent.name}</span>
@@ -262,10 +268,10 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
       {/* Footer */}
       <div className="p-2">
         <div className={cn('flex items-center gap-2', collapsed ? 'flex-col' : 'px-2')}>
-          {!collapsed && user && (
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <Avatar fallback={user.name} size="sm" />
-              <span className="truncate text-sm">{user.name}</span>
+          {user && (
+            <div className={cn('flex items-center gap-2 min-w-0', collapsed ? '' : 'flex-1')}>
+              <Avatar fallback={user.name} seed={user.id} kind="user" size="sm" />
+              {!collapsed && <span className="truncate text-sm">{user.name}</span>}
             </div>
           )}
           <Button variant="ghost" size="icon" className="size-7 shrink-0" onClick={toggleTheme}>
