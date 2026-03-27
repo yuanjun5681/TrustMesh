@@ -1,4 +1,6 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import {
   CheckCircle2,
   Circle,
@@ -61,21 +63,6 @@ const agentStatusBadge: Record<string, { label: string; className: string }> = {
 }
 
 // ─── 工具函数 ───
-
-function isSameDay(a: string, b: string): boolean {
-  return a.slice(0, 10) === b.slice(0, 10)
-}
-
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  const today = new Date()
-  const yesterday = new Date(today)
-  yesterday.setDate(yesterday.getDate() - 1)
-
-  if (date.toDateString() === today.toDateString()) return '今天'
-  if (date.toDateString() === yesterday.toDateString()) return '昨天'
-  return date.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })
-}
 
 function shouldGroupWithPrev(current: Event, prev: Event | undefined): boolean {
   if (!prev) return false
@@ -141,8 +128,18 @@ function EventContent({ event }: { event: Event }) {
 
   if (event.event_type === 'task_comment') {
     return (
-      <div className="mt-1 text-sm whitespace-pre-wrap">
-        {event.content}
+      <div className={cn(
+        'mt-1 text-sm',
+        'prose prose-sm dark:prose-invert max-w-none',
+        'prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-headings:my-2 prose-headings:text-foreground',
+        'prose-pre:my-1.5 prose-pre:bg-zinc-200/70 prose-pre:text-xs prose-pre:text-zinc-800 dark:prose-pre:bg-zinc-800 dark:prose-pre:text-zinc-200',
+        'prose-code:text-xs prose-code:bg-zinc-200/70 prose-code:text-zinc-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded dark:prose-code:bg-zinc-800 dark:prose-code:text-zinc-200',
+        'prose-hr:my-2',
+        '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
+      )}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          {event.content ?? ''}
+        </ReactMarkdown>
       </div>
     )
   }
@@ -209,7 +206,20 @@ function EventContent({ event }: { event: Event }) {
         {(event.content || todoTitle) && (
           <QuoteBlock>
             {todoTitle && <p className="text-xs font-medium text-muted-foreground">{todoTitle}</p>}
-            {event.content && <p className="text-xs text-muted-foreground mt-0.5">{event.content}</p>}
+            {event.content && (
+              <div className={cn(
+                'text-xs text-muted-foreground mt-0.5',
+                'prose prose-xs dark:prose-invert max-w-none',
+                'prose-p:my-0.5 prose-headings:my-1 prose-headings:text-xs prose-headings:text-muted-foreground',
+                'prose-pre:my-1 prose-pre:bg-zinc-200/70 prose-pre:text-[11px] prose-pre:text-zinc-800 dark:prose-pre:bg-zinc-800 dark:prose-pre:text-zinc-200',
+                'prose-code:text-[11px] prose-code:bg-zinc-200/70 prose-code:text-zinc-800 dark:prose-code:bg-zinc-800 dark:prose-code:text-zinc-200 prose-code:px-1 prose-code:py-0.5 prose-code:rounded',
+                '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
+              )}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {event.content}
+                </ReactMarkdown>
+              </div>
+            )}
           </QuoteBlock>
         )}
       </div>
@@ -248,7 +258,18 @@ function EventContent({ event }: { event: Event }) {
         <p className="text-sm">{config.label}</p>
         {event.content && (
           <QuoteBlock color="border-info/30">
-            <p className="text-xs text-muted-foreground">{event.content}</p>
+            <div className={cn(
+              'text-xs text-muted-foreground',
+              'prose prose-xs dark:prose-invert max-w-none',
+              'prose-p:my-0.5 prose-headings:my-1 prose-headings:text-xs prose-headings:text-muted-foreground',
+              'prose-pre:my-1 prose-pre:bg-muted prose-pre:text-[11px]',
+              'prose-code:text-[11px] prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded',
+              '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
+            )}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {event.content}
+              </ReactMarkdown>
+            </div>
           </QuoteBlock>
         )}
       </div>
@@ -323,18 +344,6 @@ function FeedMessage({ event, showHeader }: { event: Event; showHeader: boolean 
   )
 }
 
-// ─── 日期分隔线 ───
-
-function DateSeparator({ dateStr }: { dateStr: string }) {
-  return (
-    <div className="flex items-center gap-3 py-2">
-      <div className="flex-1 h-px bg-border" />
-      <span className="text-[11px] text-muted-foreground font-medium">{formatDate(dateStr)}</span>
-      <div className="flex-1 h-px bg-border" />
-    </div>
-  )
-}
-
 // ─── 主组件 ───
 
 interface TaskFeedProps {
@@ -402,12 +411,10 @@ export function TaskFeed({ taskId }: TaskFeedProps) {
         <div className="flex flex-col gap-1">
           {events.map((event, index) => {
             const prev = index > 0 ? events[index - 1] : undefined
-            const showDateSep = !prev || !isSameDay(prev.created_at, event.created_at)
-            const showHeader = !shouldGroupWithPrev(event, prev) || showDateSep
+            const showHeader = !shouldGroupWithPrev(event, prev)
 
             return (
               <div key={event.id}>
-                {showDateSep && <DateSeparator dateStr={event.created_at} />}
                 <div className={cn('py-1.5 rounded-md hover:bg-accent/30 px-2 -mx-2 transition-colors', !showHeader && 'pt-0')}>
                   <FeedMessage event={event} showHeader={showHeader} />
                 </div>

@@ -13,6 +13,13 @@ import { CreateTaskDialog } from '@/components/task/CreateTaskDialog'
 import { useProject } from '@/hooks/useProjects'
 import { useTasks } from '@/hooks/useTasks'
 import { formatDateTime, formatRelativeTime } from '@/lib/utils'
+import type { TaskListItem } from '@/types'
+
+interface TaskSelectionState {
+  observedTasks: TaskListItem[] | undefined
+  prevStatusMap: Record<string, string>
+  autoSelectedTaskId: string | null
+}
 
 export function ProjectBoardPage() {
   const navigate = useNavigate()
@@ -24,7 +31,42 @@ export function ProjectBoardPage() {
   const [editOpen, setEditOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [createTaskOpen, setCreateTaskOpen] = useState(false)
+  const [taskSelectionState, setTaskSelectionState] = useState<TaskSelectionState>({
+    observedTasks: undefined,
+    prevStatusMap: {},
+    autoSelectedTaskId: null,
+  })
   const projectArchived = project?.status === 'archived'
+
+  if (tasks !== taskSelectionState.observedTasks) {
+    const currentMap: Record<string, string> = {}
+    let nextAutoSelectedTaskId = taskSelectionState.autoSelectedTaskId
+
+    for (const task of tasks ?? []) {
+      const prev = taskSelectionState.prevStatusMap[task.id]
+      if (task.status === 'in_progress' && prev !== undefined && prev !== 'in_progress') {
+        nextAutoSelectedTaskId = task.id
+      }
+      currentMap[task.id] = task.status
+    }
+
+    setTaskSelectionState({
+      observedTasks: tasks,
+      prevStatusMap: currentMap,
+      autoSelectedTaskId: nextAutoSelectedTaskId,
+    })
+  }
+
+  const activeSelectedTaskId = taskSelectionState.autoSelectedTaskId ?? selectedTaskId
+
+  const selectTask = (taskId: string | null) => {
+    setTaskSelectionState((prev) => (
+      prev.autoSelectedTaskId
+        ? { ...prev, autoSelectedTaskId: null }
+        : prev
+    ))
+    setSelectedTaskId(taskId)
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -112,21 +154,21 @@ export function ProjectBoardPage() {
       ) : (
         <div className="flex flex-1 min-h-0">
           {/* Left: Task List */}
-          <div className={`px-6 h-full ${selectedTaskId ? 'w-1/2 border-r' : 'w-full'}`}>
+          <div className={`px-6 h-full ${activeSelectedTaskId ? 'w-1/2 border-r' : 'w-full'}`}>
             <TaskListView
               tasks={tasks ?? []}
-              selectedTaskId={selectedTaskId}
-              onTaskClick={(id) => setSelectedTaskId(id === selectedTaskId ? null : id)}
+              selectedTaskId={activeSelectedTaskId}
+              onTaskClick={(id) => selectTask(id === activeSelectedTaskId ? null : id)}
             />
           </div>
 
           {/* Right: Detail Panel */}
-          {selectedTaskId && (
+          {activeSelectedTaskId && (
             <div className="w-1/2 h-full">
               <TaskDetailPanel
-                key={selectedTaskId}
-                taskId={selectedTaskId}
-                onClose={() => setSelectedTaskId(null)}
+                key={activeSelectedTaskId}
+                taskId={activeSelectedTaskId}
+                onClose={() => selectTask(null)}
               />
             </div>
           )}
@@ -141,7 +183,7 @@ export function ProjectBoardPage() {
           onOpenChange={setSheetOpen}
           onTaskCreated={(taskId) => {
             setSheetOpen(false)
-            setSelectedTaskId(taskId)
+            selectTask(taskId)
           }}
         />
       )}
@@ -151,7 +193,7 @@ export function ProjectBoardPage() {
           open={createTaskOpen}
           onOpenChange={setCreateTaskOpen}
           projectId={projectId}
-          onCreated={(taskId) => setSelectedTaskId(taskId)}
+          onCreated={(taskId) => selectTask(taskId)}
         />
       )}
       <EditProjectDialog open={editOpen} onOpenChange={setEditOpen} project={project} />
