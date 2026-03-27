@@ -15,9 +15,10 @@ interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   agent?: Agent | null
+  onCreated?: (id: string) => void
 }
 
-export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
+export function AgentConfigDialog({ open, onOpenChange, agent, onCreated }: Props) {
   const [nodeId, setNodeId] = useState('')
   const [name, setName] = useState('')
   const [role, setRole] = useState<AgentRole>('developer')
@@ -67,13 +68,14 @@ export function AgentConfigDialog({ open, onOpenChange, agent }: Props) {
           input: { name, role, description, capabilities },
         })
       } else {
-        await createAgent.mutateAsync({
+        const res = await createAgent.mutateAsync({
           node_id: nodeId,
           name,
           role,
           description,
           capabilities,
         })
+        onCreated?.(res.data.id)
       }
       toast.success(isEditing ? 'Agent 已更新' : 'Agent 已添加')
       onOpenChange(false)

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { Bot, Pencil, Trash2, MoreHorizontal } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -34,7 +35,7 @@ export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
     <Card className="transition-all hover:shadow-md">
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
+          <Link to={`/agents/${agent.id}`} className="flex items-center gap-3 min-w-0 flex-1">
             <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary shrink-0">
               <Bot className="size-5" />
             </div>
@@ -47,7 +48,7 @@ export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
                 {roleLabels[agent.role]} &middot; {agent.node_id}
               </p>
             </div>
-          </div>
+          </Link>
 
           <DropdownMenu>
             <DropdownMenuTrigger className="p-1 rounded hover:bg-muted shrink-0">
@@ -71,34 +72,36 @@ export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
           </DropdownMenu>
         </div>
 
-        {agent.description && (
-          <p className="text-sm text-muted-foreground mt-3 line-clamp-2">{agent.description}</p>
-        )}
+        <Link to={`/agents/${agent.id}`} className="block">
+          {agent.description && (
+            <p className="text-sm text-muted-foreground mt-3 line-clamp-2">{agent.description}</p>
+          )}
 
-        <div className="flex flex-wrap gap-1 mt-3">
-          {agent.capabilities.map((cap) => (
-            <Badge key={cap} variant="secondary" className="text-xs">
-              {cap}
+          <div className="flex flex-wrap gap-1 mt-3">
+            {agent.capabilities.map((cap) => (
+              <Badge key={cap} variant="secondary" className="text-xs">
+                {cap}
+              </Badge>
+            ))}
+          </div>
+
+          <div className="mt-3 flex items-center gap-2">
+            <Badge variant={agent.usage.in_use ? 'destructive' : 'secondary'} className="text-xs">
+              {agent.usage.in_use ? '已被引用' : '可删除'}
             </Badge>
-          ))}
-        </div>
+            {agent.usage.in_use && (
+              <p className="text-xs text-muted-foreground truncate" title={`被 ${usageText} 引用`}>
+                被 {usageText} 引用
+              </p>
+            )}
+          </div>
 
-        <div className="mt-3 flex items-center gap-2">
-          <Badge variant={agent.usage.in_use ? 'destructive' : 'secondary'} className="text-xs">
-            {agent.usage.in_use ? '已被引用' : '可删除'}
-          </Badge>
-          {agent.usage.in_use && (
-            <p className="text-xs text-muted-foreground truncate" title={`被 ${usageText} 引用`}>
-              被 {usageText} 引用
+          {agent.last_seen_at && (
+            <p className="text-xs text-muted-foreground mt-3">
+              最近在线: {formatRelativeTime(agent.last_seen_at)}
             </p>
           )}
-        </div>
-
-        {agent.last_seen_at && (
-          <p className="text-xs text-muted-foreground mt-3">
-            最近在线: {formatRelativeTime(agent.last_seen_at)}
-          </p>
-        )}
+        </Link>
       </CardContent>
     </Card>
   )
