@@ -19,6 +19,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Avatar } from '@/components/ui/avatar'
 import { AgentStatusIcon, ProjectWorkStatusDot } from '@/components/shared/StatusBadge'
+import { TrustMeshLogo } from '@/components/shared/TrustMeshLogo'
 import { AgentConfigDialog } from '@/components/agent/AgentConfigDialog'
 import { useProjects } from '@/hooks/useProjects'
 import { useAgents } from '@/hooks/useAgents'
@@ -103,9 +104,7 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
       <div className="flex h-14 items-center gap-2 px-4">
         {!collapsed && (
           <Link to="/dashboard" className="flex items-center gap-2 font-semibold text-lg">
-            <div className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-bold">
-              T
-            </div>
+            <TrustMeshLogo size={28} />
             智能体协作平台
           </Link>
         )}

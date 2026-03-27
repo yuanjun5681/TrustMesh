@@ -2,8 +2,7 @@ import { X, MessageSquare, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/StatusBadge'
-import { TaskTimeline } from './TaskTimeline'
-import { TaskComments } from './TaskComments'
+import { TaskFeed } from './TaskFeed'
 import { TaskResultView } from './TaskResult'
 import { CancelTaskDialog } from './CancelTaskDialog'
 import { ConversationSheet } from '@/components/conversation/ConversationSheet'
@@ -18,7 +17,7 @@ interface TaskDetailPanelProps {
 
 export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
   const { data: task } = useTask(taskId)
-  const [tab, setTab] = useState('activity')
+  const [tab, setTab] = useState('feed')
   const [chatOpen, setChatOpen] = useState(false)
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   const [comment, setComment] = useState('')
@@ -80,44 +79,40 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
         </div>
       </div>
 
-      {/* Content */}
-      <ScrollArea className="flex-1">
-        <div className="flex flex-col gap-4 px-5 py-4">
-          <div>
-            <h2 className="text-lg font-semibold">{task.title}</h2>
-            {task.description && (
-              <p className="text-sm text-muted-foreground mt-1.5 whitespace-pre-wrap">
-                {task.description}
-              </p>
-            )}
-            {task.cancel_reason && (
-              <p className="mt-2 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-                终止原因：{task.cancel_reason}
-              </p>
-            )}
-          </div>
+      {/* Task info */}
+      <div className="px-5 py-4 shrink-0 border-b">
+        <h2 className="text-lg font-semibold">{task.title}</h2>
+        {task.description && (
+          <p className="text-sm text-muted-foreground mt-1.5 whitespace-pre-wrap">
+            {task.description}
+          </p>
+        )}
+        {task.cancel_reason && (
+          <p className="mt-2 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+            终止原因：{task.cancel_reason}
+          </p>
+        )}
+      </div>
 
-          <Tabs value={tab} onValueChange={setTab}>
-            <TabsList>
-              <TabsTrigger value="activity">全部活动</TabsTrigger>
-              <TabsTrigger value="comments">评论讨论</TabsTrigger>
-              <TabsTrigger value="result">交付成果</TabsTrigger>
-            </TabsList>
+      {/* Tabs */}
+      <Tabs value={tab} onValueChange={setTab} className="flex flex-col flex-1 min-h-0">
+        <TabsList className="mx-5 mt-3 shrink-0">
+          <TabsTrigger value="feed">动态</TabsTrigger>
+          <TabsTrigger value="result">交付成果</TabsTrigger>
+        </TabsList>
 
-            <TabsContent value="activity" className="mt-3">
-              <TaskTimeline taskId={task.id} />
-            </TabsContent>
+        <TabsContent value="feed" className="flex-1 min-h-0 mt-0">
+          <TaskFeed taskId={task.id} />
+        </TabsContent>
 
-            <TabsContent value="comments" className="mt-3">
-              <TaskComments taskId={task.id} />
-            </TabsContent>
-
-            <TabsContent value="result" className="mt-3">
+        <TabsContent value="result" className="flex-1 min-h-0 mt-0">
+          <ScrollArea className="h-full">
+            <div className="px-5 py-3">
               <TaskResultView taskId={task.id} result={task.result} artifacts={task.artifacts} />
-            </TabsContent>
-          </Tabs>
-        </div>
-      </ScrollArea>
+            </div>
+          </ScrollArea>
+        </TabsContent>
+      </Tabs>
 
       {/* Comment input */}
       <div className="border-t px-4 py-3 shrink-0">

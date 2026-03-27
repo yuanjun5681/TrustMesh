@@ -907,20 +907,17 @@ func (s *Store) addCommentUnsafe(task *model.TaskDetail, todoID, actorType, acto
 		"comment":    *comment,
 	}, at)
 
-	// 只有 Agent 评论才添加到活动时间线，用户评论不进入 events
-	if actorType == "agent" {
-		metadata := map[string]any{"comment_id": comment.ID, "task_title": task.Title}
-		if todoID != "" {
-			metadata["todo_id"] = todoID
-			for i := range task.Todos {
-				if task.Todos[i].ID == todoID {
-					metadata["todo_title"] = task.Todos[i].Title
-					break
-				}
+	metadata := map[string]any{"comment_id": comment.ID, "task_title": task.Title}
+	if todoID != "" {
+		metadata["todo_id"] = todoID
+		for i := range task.Todos {
+			if task.Todos[i].ID == todoID {
+				metadata["todo_title"] = task.Todos[i].Title
+				break
 			}
 		}
-		s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todoID, actorType, actorID, actorName, "task_comment", &content, metadata, at)
 	}
+	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todoID, actorType, actorID, actorName, "task_comment", &content, metadata, at)
 
 	task.UpdatedAt = at
 	task.Version++
