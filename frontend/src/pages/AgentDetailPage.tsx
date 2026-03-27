@@ -2,9 +2,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Bot, Plus, Pencil, MoreHorizontal, Trash2, Archive } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageContainer } from '@/components/layout/PageContainer'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { AgentStatusBadge } from '@/components/shared/StatusBadge'
 import { EventTimeline } from '@/components/shared/EventTimeline'
@@ -20,6 +20,7 @@ import {
   AgentInsightPanels,
   AgentWorkload,
 } from '@/components/agent/AgentStatsPanel'
+import { AgentTaskList } from '@/components/agent/AgentTaskList'
 import { AgentConfigDialog } from '@/components/agent/AgentConfigDialog'
 import { ArchiveAgentDialog } from '@/components/agent/ArchiveAgentDialog'
 import { CreateTaskDialog } from '@/components/task/CreateTaskDialog'
@@ -45,6 +46,7 @@ export function AgentDetailPage() {
   const [createTaskOpen, setCreateTaskOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState('overview')
   const containerRef = useRef<HTMLDivElement>(null)
   const headerRef = useCallback((node: HTMLDivElement | null) => {
     if (!node) return
@@ -85,9 +87,10 @@ export function AgentDetailPage() {
 
   return (
     <PageContainer ref={containerRef} className="h-full overflow-y-auto overflow-x-hidden p-0 [--agent-header-h:4.5rem]">
-      <div className="min-h-full bg-background">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="min-h-full bg-background">
+        {/* Sticky header with integrated tab navigation */}
         <div ref={headerRef} className="sticky top-0 z-20 border-b bg-background/95 px-6 py-3 supports-backdrop-filter:backdrop-blur-xs">
-          <div className="flex items-center gap-3">
+          <div className="relative flex items-center gap-3">
             <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary shrink-0">
               <Bot className="size-6" />
             </div>
@@ -124,6 +127,13 @@ export function AgentDetailPage() {
                   </div>
                 )}
               </div>
+            </div>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <TabsList variant="line" className="pointer-events-auto">
+                <TabsTrigger value="overview">概览</TabsTrigger>
+                <TabsTrigger value="tasks">工作记录</TabsTrigger>
+                <TabsTrigger value="activity">活动日志</TabsTrigger>
+              </TabsList>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {agent.role !== 'pm' && !agent.archived && (
@@ -166,52 +176,51 @@ export function AgentDetailPage() {
           </div>
         )}
 
-        <div className="px-6 py-6">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_480px] lg:items-start">
-            {/* 左侧：指标 + 图表 + 工作负载 */}
-            <div className="flex min-w-0 flex-col gap-4 lg:pr-2">
-
+        <div className="px-6 py-4">
+          {/* Tab: 概览 */}
+          <TabsContent value="overview">
+            <div className="flex flex-col gap-4">
               {stats && <AgentMetricCards stats={stats} />}
               {stats && <AgentDailyChart stats={stats} />}
               {stats && (
-              <AgentInsightPanels
-                stats={stats}
-                insights={insights ?? null}
-                loading={insightsLoading}
-              />
+                <AgentInsightPanels
+                  stats={stats}
+                  insights={insights ?? null}
+                  loading={insightsLoading}
+                />
               )}
               {stats && <AgentWorkload stats={stats} />}
             </div>
+          </TabsContent>
 
-            {/* 右侧：活动历史 */}
-            <Card className="flex flex-col overflow-hidden lg:sticky lg:top-[calc(var(--agent-header-h)+1.5rem)] lg:max-h-[calc(100dvh-var(--agent-header-h)-3rem)]">
-              <CardHeader className="shrink-0 pb-3">
-                <CardTitle className="text-base">活动历史</CardTitle>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {eventTypeFilters.map((f) => (
-                    <Button
-                      key={f.value}
-                      variant={filter === f.value ? 'default' : 'ghost'}
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={() => setFilter(f.value)}
-                    >
-                      {f.label}
-                    </Button>
-                  ))}
-                </div>
-              </CardHeader>
-              <CardContent className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
-                <EventTimeline
-                  events={filteredEvents}
-                  loading={eventsLoading}
-                  emptyText="暂无活动记录"
-                />
-              </CardContent>
-            </Card>
-          </div>
+          {/* Tab: 工作记录 */}
+          <TabsContent value="tasks">
+            {id && <AgentTaskList agentId={id} />}
+          </TabsContent>
+
+          {/* Tab: 活动日志 */}
+          <TabsContent value="activity">
+            <div className="flex flex-wrap gap-1 mb-4">
+              {eventTypeFilters.map((f) => (
+                <Button
+                  key={f.value}
+                  variant={filter === f.value ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setFilter(f.value)}
+                >
+                  {f.label}
+                </Button>
+              ))}
+            </div>
+            <EventTimeline
+              events={filteredEvents}
+              loading={eventsLoading}
+              emptyText="暂无活动记录"
+            />
+          </TabsContent>
         </div>
-      </div>
+      </Tabs>
       {id && (
         <CreateTaskDialog
           open={createTaskOpen}

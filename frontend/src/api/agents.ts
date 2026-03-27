@@ -5,6 +5,7 @@ import type {
   Agent,
   AgentInsights,
   AgentStats,
+  AgentTaskItem,
   CreateAgentRequest,
   UpdateAgentRequest,
 } from '@/types'
@@ -35,4 +36,10 @@ export async function getAgentStats(id: string) {
 
 export async function getAgentInsights(id: string) {
   return api.get(`agents/${id}/insights`).json<ApiResponse<AgentInsights>>()
+}
+
+export async function listAgentTasks(id: string, status?: string) {
+  const searchParams: Record<string, string> = {}
+  if (status) searchParams.status = status
+  return api.get(`agents/${id}/tasks`, { searchParams }).json<ApiListResponse<AgentTaskItem>>()
 }

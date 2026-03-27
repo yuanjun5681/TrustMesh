@@ -100,6 +100,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	authed.DELETE("/agents/:id", agentHandler.Delete)
 	authed.GET("/agents/:id/stats", agentHandler.Stats)
 	authed.GET("/agents/:id/insights", agentHandler.Insights)
+	authed.GET("/agents/:id/tasks", agentHandler.Tasks)
 
 	authed.POST("/projects", projectHandler.Create)
 	authed.GET("/projects", projectHandler.List)

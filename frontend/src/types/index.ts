@@ -426,6 +426,23 @@ export interface AgentInsights {
   risk_items: AgentInsightRiskItem[]
 }
 
+export interface AgentTaskItem {
+  id: string
+  project_id: string
+  project_name: string
+  title: string
+  description: string
+  status: TaskStatus
+  priority: TaskPriority
+  pm_agent: PMAgentSummary
+  relation: 'pm' | 'executor'
+  todo_count: number
+  completed_todo_count: number
+  failed_todo_count: number
+  created_at: string
+  updated_at: string
+}
+
 export interface DashboardStats {
   agents_online: number
   agents_total: number

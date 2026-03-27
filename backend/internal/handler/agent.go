@@ -151,6 +151,20 @@ func (h *AgentHandler) Insights(c *gin.Context) {
 	transport.WriteData(c, http.StatusOK, insights)
 }
 
+func (h *AgentHandler) Tasks(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+	status := c.Query("status")
+	items, appErr := h.store.ListAgentTasks(userID, c.Param("id"), status)
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+	transport.WriteList(c, items, len(items))
+}
+
 func (h *AgentHandler) ensureNodeOnline(ctx context.Context, nodeID string) *transport.AppError {
 	if h.clawClient == nil {
 		err := transport.NewError(http.StatusServiceUnavailable, "CLAWSYNAPSE_UNAVAILABLE", "暂时无法校验节点在线状态")
