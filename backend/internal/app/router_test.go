@@ -694,6 +694,170 @@ func TestDispatchTodoPublishesAssignmentToAssignee(t *testing.T) {
 	}
 }
 
+func TestAddTaskCommentPublishesMentionsToTaskParticipants(t *testing.T) {
+	log, err := logger.New("error")
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	defer func() { _ = log.Sync() }()
+
+	var (
+		mu              sync.Mutex
+		publishRequests []map[string]any
+	)
+
+	clawServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/publish":
+			defer r.Body.Close()
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode publish payload: %v", err)
+			}
+			mu.Lock()
+			publishRequests = append(publishRequests, payload)
+			mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"code":"OK","message":"ok","data":{"messageId":"msg-comment"},"ts":1}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer clawServer.Close()
+
+	application, err := New(config.Config{
+		Port:               "0",
+		JWTSecret:          "test-secret",
+		AccessTokenTTL:     time.Hour,
+		RefreshTokenTTL:    168 * time.Hour,
+		LogLevel:           "error",
+		AllowAllCORS:       true,
+		ReadTimeout:        3 * time.Second,
+		ShutdownGrace:      3 * time.Second,
+		ClawSynapseAPIURL:  clawServer.URL,
+		ClawSynapseTimeout: time.Second,
+	}, log)
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
+	defer func() {
+		if closeErr := application.Close(); closeErr != nil {
+			t.Fatalf("close app: %v", closeErr)
+		}
+	}()
+
+	testServer := httptest.NewServer(application.Engine)
+	defer testServer.Close()
+
+	registerResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/auth/register", "", map[string]any{
+		"email":    "task-comment@example.com",
+		"name":     "Task Comment User",
+		"password": "StrongPass123!",
+	})
+	registerData := decodeBody(t, registerResp)
+	token := nestedString(registerData, "data", "access_token")
+	userID := nestedString(registerData, "data", "user", "id")
+
+	pm, appErr := application.Store.CreateAgent(userID, "node-pm-001", "PM Agent", "pm", "PM", []string{"plan"})
+	if appErr != nil {
+		t.Fatalf("create pm: %v", appErr)
+	}
+	dev, appErr := application.Store.CreateAgent(userID, "node-dev-001", "Developer", "developer", "Dev", []string{"backend"})
+	if appErr != nil {
+		t.Fatalf("create dev: %v", appErr)
+	}
+	if _, appErr = application.Store.CreateAgent(userID, "node-other-001", "Other Agent", "developer", "Other", []string{"misc"}); appErr != nil {
+		t.Fatalf("create other agent: %v", appErr)
+	}
+	application.Store.SyncAgentPresence([]store.AgentPresence{
+		{NodeID: pm.NodeID, LastSeenAt: time.Now().UTC()},
+		{NodeID: dev.NodeID, LastSeenAt: time.Now().UTC()},
+	}, time.Now().UTC())
+
+	project, appErr := application.Store.CreateProject(userID, "Mention Project", "demo", pm.ID)
+	if appErr != nil {
+		t.Fatalf("create project: %v", appErr)
+	}
+	conversation, appErr := application.Store.CreateConversation(userID, project.ID, "Need auth work")
+	if appErr != nil {
+		t.Fatalf("create conversation: %v", appErr)
+	}
+	task, appErr := application.Store.CreateTaskByPMNode(pm.NodeID, store.TaskCreateInput{
+		ProjectID:      project.ID,
+		ConversationID: conversation.ID,
+		Title:          "Implement login",
+		Description:    "Support email/password login",
+		Todos: []store.TaskCreateTodoInput{
+			{
+				ID:             "todo-1",
+				Title:          "Build backend API",
+				Description:    "Implement auth endpoints",
+				AssigneeNodeID: dev.NodeID,
+			},
+		},
+	})
+	if appErr != nil {
+		t.Fatalf("create task: %v", appErr)
+	}
+
+	commentResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/tasks/"+task.ID+"/comments", token, map[string]any{
+		"content": "请 @PM Agent 和 @Developer 一起看看",
+		"mentions": []map[string]any{
+			{"agent_id": pm.ID},
+			{"agent_id": dev.ID},
+		},
+	})
+	if commentResp.StatusCode != http.StatusCreated {
+		t.Fatalf("add comment status=%d", commentResp.StatusCode)
+	}
+
+	body := decodeBody(t, commentResp)
+	if nestedString(body, "data", "comment", "content") != "请 @PM Agent 和 @Developer 一起看看" {
+		t.Fatalf("unexpected comment response: %#v", body)
+	}
+
+	mentionDeliveries, ok := body["data"].(map[string]any)["mention_deliveries"].([]any)
+	if !ok || len(mentionDeliveries) != 2 {
+		t.Fatalf("unexpected mention deliveries: %#v", body)
+	}
+
+	mu.Lock()
+	if len(publishRequests) != 2 {
+		t.Fatalf("expected 2 publish requests, got %d", len(publishRequests))
+	}
+	firstReq := publishRequests[0]
+	secondReq := publishRequests[1]
+	mu.Unlock()
+
+	if firstReq["type"] != "task.mention" || secondReq["type"] != "task.mention" {
+		t.Fatalf("unexpected publish types: %#v / %#v", firstReq["type"], secondReq["type"])
+	}
+
+	targetNodes := map[string]bool{
+		firstReq["targetNode"].(string):  true,
+		secondReq["targetNode"].(string): true,
+	}
+	if !targetNodes["node-pm-001"] || !targetNodes["node-dev-001"] {
+		t.Fatalf("unexpected target nodes: %#v", targetNodes)
+	}
+
+	rawMessage, ok := firstReq["message"].(string)
+	if !ok || rawMessage == "" {
+		t.Fatalf("first publish message missing: %#v", firstReq)
+	}
+
+	var message map[string]any
+	if err := json.Unmarshal([]byte(rawMessage), &message); err != nil {
+		t.Fatalf("unmarshal publish message: %v", err)
+	}
+	if message["task_id"] != task.ID {
+		t.Fatalf("unexpected task mention payload: %#v", message)
+	}
+	if message["comment_id"] == "" {
+		t.Fatalf("comment_id missing from task mention payload: %#v", message)
+	}
+}
+
 func TestDispatchTodoDoesNotPublishForArchivedProject(t *testing.T) {
 	log, err := logger.New("error")
 	if err != nil {

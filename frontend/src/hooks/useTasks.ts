@@ -77,8 +77,17 @@ export function useTaskComments(taskId: string | undefined) {
 export function useAddTaskComment() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ taskId, content, todoId }: { taskId: string; content: string; todoId?: string }) =>
-      tasksApi.addTaskComment(taskId, content, todoId),
+    mutationFn: ({ taskId, content, todoId, mentionAgentIds }: {
+      taskId: string
+      content: string
+      todoId?: string
+      mentionAgentIds?: string[]
+    }) =>
+      tasksApi.addTaskComment(taskId, {
+        content,
+        todo_id: todoId,
+        mentions: mentionAgentIds?.map((agentId) => ({ agent_id: agentId })),
+      }),
     onSuccess: (_res, { taskId }) => {
       qc.invalidateQueries({ queryKey: ['tasks', 'comments', taskId] })
       qc.invalidateQueries({ queryKey: ['tasks', 'events', taskId] })

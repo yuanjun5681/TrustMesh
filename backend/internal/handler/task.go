@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -13,6 +14,11 @@ import (
 	"trustmesh/backend/internal/store"
 	"trustmesh/backend/internal/transport"
 )
+
+type addTaskCommentResponse struct {
+	Comment           model.Comment                  `json:"comment"`
+	MentionDeliveries []model.CommentMentionDelivery `json:"mention_deliveries,omitempty"`
+}
 
 type TaskHandler struct {
 	store     *store.Store
@@ -198,24 +204,46 @@ func (h *TaskHandler) AddComment(c *gin.Context) {
 	}
 
 	var body struct {
-		Content string `json:"content"`
-		TodoID  string `json:"todo_id"`
+		Content  string `json:"content"`
+		TodoID   string `json:"todo_id"`
+		Mentions []struct {
+			AgentID string `json:"agent_id"`
+		} `json:"mentions"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid request body"))
 		return
 	}
 
+	mentions := make([]store.TaskCommentMentionInput, 0, len(body.Mentions))
+	for _, mention := range body.Mentions {
+		mentions = append(mentions, store.TaskCommentMentionInput{AgentID: mention.AgentID})
+	}
+
 	comment, appErr := h.store.AddTaskComment(userID, c.Param("id"), store.TaskCommentInput{
-		TaskID:  c.Param("id"),
-		TodoID:  body.TodoID,
-		Content: body.Content,
+		TaskID:   c.Param("id"),
+		TodoID:   body.TodoID,
+		Content:  body.Content,
+		Mentions: mentions,
 	})
 	if appErr != nil {
 		transport.WriteError(c, appErr)
 		return
 	}
-	transport.WriteData(c, http.StatusCreated, comment)
+
+	task, appErr := h.store.GetTask(userID, c.Param("id"))
+	if appErr != nil {
+		if h.log != nil {
+			h.log.Warn("load task after comment failed", zap.String("task_id", c.Param("id")), zap.Error(appErr))
+		}
+		transport.WriteData(c, http.StatusCreated, addTaskCommentResponse{Comment: *comment})
+		return
+	}
+
+	transport.WriteData(c, http.StatusCreated, addTaskCommentResponse{
+		Comment:           *comment,
+		MentionDeliveries: h.publishTaskCommentMentions(c.Request.Context(), task, comment),
+	})
 }
 
 func (h *TaskHandler) Cancel(c *gin.Context) {
@@ -263,4 +291,83 @@ func findTaskTodo(task *model.TaskDetail, todoID string) *model.Todo {
 		}
 	}
 	return nil
+}
+
+func (h *TaskHandler) publishTaskCommentMentions(ctx context.Context, task *model.TaskDetail, comment *model.Comment) []model.CommentMentionDelivery {
+	if comment == nil || len(comment.Mentions) == 0 {
+		return nil
+	}
+
+	deliveries := make([]model.CommentMentionDelivery, 0, len(comment.Mentions))
+	for _, mention := range comment.Mentions {
+		delivery := model.CommentMentionDelivery{
+			AgentID:   mention.AgentID,
+			AgentName: mention.AgentName,
+			Status:    "sent",
+		}
+
+		if h.publisher == nil {
+			delivery.Status = "failed"
+			delivery.Error = "clawsynapse client is disabled"
+			deliveries = append(deliveries, delivery)
+			continue
+		}
+		if strings.TrimSpace(mention.NodeID) == "" {
+			delivery.Status = "failed"
+			delivery.Error = "target agent node is missing"
+			deliveries = append(deliveries, delivery)
+			continue
+		}
+
+		payload := h.buildTaskMentionPayload(task, comment, mention)
+		if _, err := h.publisher.Publish(ctx, mention.NodeID, "task.mention", payload, task.ID, map[string]any{
+			"source":     "task_comment_mention",
+			"task_id":    task.ID,
+			"comment_id": comment.ID,
+		}); err != nil {
+			delivery.Status = "failed"
+			delivery.Error = err.Error()
+			if h.log != nil {
+				h.log.Warn(
+					"publish task mention failed",
+					zap.String("task_id", task.ID),
+					zap.String("comment_id", comment.ID),
+					zap.String("target_agent_id", mention.AgentID),
+					zap.String("target_node", mention.NodeID),
+					zap.Error(err),
+				)
+			}
+		}
+
+		deliveries = append(deliveries, delivery)
+	}
+
+	return deliveries
+}
+
+func (h *TaskHandler) buildTaskMentionPayload(task *model.TaskDetail, comment *model.Comment, mention model.CommentMention) protocol.TaskMentionPayload {
+	payload := protocol.TaskMentionPayload{
+		TaskID:          task.ID,
+		ProjectID:       task.ProjectID,
+		ConversationID:  task.ConversationID,
+		CommentID:       comment.ID,
+		TodoID:          comment.TodoID,
+		TaskTitle:       task.Title,
+		TaskDescription: task.Description,
+		TaskStatus:      task.Status,
+		TaskPriority:    task.Priority,
+		AuthorName:      comment.ActorName,
+		UserContent:     comment.Content,
+		Content: fmt.Sprintf(
+			"用户在任务评论中 @%s。请结合任务上下文阅读这条评论；如需回应，请通过 task.comment 回复并携带 task_id=%s。",
+			mention.AgentName,
+			task.ID,
+		),
+	}
+
+	if todo := findTaskTodo(task, comment.TodoID); todo != nil {
+		payload.TodoTitle = todo.Title
+	}
+
+	return payload
 }

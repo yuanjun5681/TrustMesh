@@ -51,9 +51,14 @@ type TaskCancelInput struct {
 }
 
 type TaskCommentInput struct {
-	TaskID  string
-	TodoID  string
-	Content string
+	TaskID   string
+	TodoID   string
+	Content  string
+	Mentions []TaskCommentMentionInput
+}
+
+type TaskCommentMentionInput struct {
+	AgentID string
 }
 
 func (s *Store) RecordTodoDispatch(userID, taskID, todoID string) (*model.TaskDetail, *transport.AppError) {
@@ -356,10 +361,10 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 }
 
 type UserTaskCreateInput struct {
-	ProjectID      string
-	Title          string
-	Description    string
-	Priority       string
+	ProjectID       string
+	Title           string
+	Description     string
+	Priority        string
 	AssigneeAgentID string
 }
 
@@ -369,9 +374,9 @@ func (s *Store) CreateTaskByUser(userID string, in UserTaskCreateInput) (*model.
 	in.Priority = strings.TrimSpace(in.Priority)
 	if strings.TrimSpace(in.ProjectID) == "" || in.Title == "" || in.Description == "" || strings.TrimSpace(in.AssigneeAgentID) == "" {
 		return nil, transport.Validation("invalid task create payload", map[string]any{
-			"project_id":       "required",
-			"title":            "required",
-			"description":      "required",
+			"project_id":        "required",
+			"title":             "required",
+			"description":       "required",
 			"assignee_agent_id": "required",
 		})
 	}
@@ -779,10 +784,14 @@ func (s *Store) AddTaskCommentByNode(nodeID string, in TaskCommentInput) (*model
 			return nil, transport.NotFound("todo not found")
 		}
 	}
+	mentions, appErr := s.normalizeTaskCommentMentionsUnsafe(task, in.Mentions)
+	if appErr != nil {
+		return nil, appErr
+	}
 
 	now := time.Now().UTC()
 	s.markAgentSeenUnsafe(agent.ID, now)
-	comment := s.addCommentUnsafe(task, in.TodoID, "agent", agent.ID, agent.Name, in.Content, now)
+	comment := s.addCommentUnsafe(task, in.TodoID, "agent", agent.ID, agent.Name, in.Content, mentions, now)
 	if err := s.persistCommentUnsafe(comment); err != nil {
 		return nil, mongoWriteError(err)
 	}
@@ -855,13 +864,17 @@ func (s *Store) AddTaskComment(userID, taskID string, in TaskCommentInput) (*mod
 			return nil, transport.NotFound("todo not found")
 		}
 	}
+	mentions, appErr := s.normalizeTaskCommentMentionsUnsafe(task, in.Mentions)
+	if appErr != nil {
+		return nil, appErr
+	}
 
 	now := time.Now().UTC()
 	userName := ""
 	if u, ok := s.users[userID]; ok {
 		userName = u.Name
 	}
-	comment := s.addCommentUnsafe(task, in.TodoID, "user", userID, userName, in.Content, now)
+	comment := s.addCommentUnsafe(task, in.TodoID, "user", userID, userName, in.Content, mentions, now)
 	if err := s.persistCommentUnsafe(comment); err != nil {
 		return nil, mongoWriteError(err)
 	}
@@ -888,7 +901,7 @@ func (s *Store) ListTaskComments(userID, taskID string) ([]model.Comment, *trans
 	return out, nil
 }
 
-func (s *Store) addCommentUnsafe(task *model.TaskDetail, todoID, actorType, actorID, actorName, content string, at time.Time) *model.Comment {
+func (s *Store) addCommentUnsafe(task *model.TaskDetail, todoID, actorType, actorID, actorName, content string, mentions []model.CommentMention, at time.Time) *model.Comment {
 	comment := &model.Comment{
 		ID:        newID(),
 		UserID:    task.UserID,
@@ -898,6 +911,7 @@ func (s *Store) addCommentUnsafe(task *model.TaskDetail, todoID, actorType, acto
 		ActorID:   actorID,
 		ActorName: actorName,
 		Content:   content,
+		Mentions:  append([]model.CommentMention(nil), mentions...),
 		CreatedAt: at,
 	}
 	s.taskComments[task.ID] = append(s.taskComments[task.ID], *comment)
@@ -917,11 +931,72 @@ func (s *Store) addCommentUnsafe(task *model.TaskDetail, todoID, actorType, acto
 			}
 		}
 	}
+	if len(comment.Mentions) > 0 {
+		metadata["mentions"] = comment.Mentions
+	}
 	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todoID, actorType, actorID, actorName, "task_comment", &content, metadata, at)
 
 	task.UpdatedAt = at
 	task.Version++
 	return comment
+}
+
+func (s *Store) normalizeTaskCommentMentionsUnsafe(task *model.TaskDetail, inputs []TaskCommentMentionInput) ([]model.CommentMention, *transport.AppError) {
+	if len(inputs) == 0 {
+		return nil, nil
+	}
+
+	targets := s.taskCommentMentionTargetsUnsafe(task)
+	seen := make(map[string]struct{}, len(inputs))
+	mentions := make([]model.CommentMention, 0, len(inputs))
+	for i, input := range inputs {
+		agentID := strings.TrimSpace(input.AgentID)
+		if agentID == "" {
+			return nil, transport.Validation("invalid mentions", map[string]any{
+				fmt.Sprintf("mentions.%d.agent_id", i): "required",
+			})
+		}
+		mention, ok := targets[agentID]
+		if !ok {
+			return nil, transport.Validation("invalid mentions", map[string]any{
+				fmt.Sprintf("mentions.%d.agent_id", i): "must reference task participant",
+			})
+		}
+		if _, exists := seen[agentID]; exists {
+			continue
+		}
+		seen[agentID] = struct{}{}
+		mentions = append(mentions, mention)
+	}
+	return mentions, nil
+}
+
+func (s *Store) taskCommentMentionTargetsUnsafe(task *model.TaskDetail) map[string]model.CommentMention {
+	targets := make(map[string]model.CommentMention, len(task.Todos)+1)
+	if task.PMAgent.ID != "" {
+		targets[task.PMAgent.ID] = model.CommentMention{
+			AgentID:   task.PMAgent.ID,
+			AgentName: task.PMAgent.Name,
+			NodeID:    task.PMAgent.NodeID,
+			Role:      "pm",
+		}
+	}
+	for _, todo := range task.Todos {
+		agentID := strings.TrimSpace(todo.Assignee.AgentID)
+		if agentID == "" {
+			continue
+		}
+		if _, exists := targets[agentID]; exists {
+			continue
+		}
+		targets[agentID] = model.CommentMention{
+			AgentID:   agentID,
+			AgentName: todo.Assignee.Name,
+			NodeID:    todo.Assignee.NodeID,
+			Role:      "executor",
+		}
+	}
+	return targets
 }
 
 func (s *Store) updateTaskStatusUnsafe(task *model.TaskDetail, now time.Time) {

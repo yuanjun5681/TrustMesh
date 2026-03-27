@@ -301,7 +301,27 @@ export interface Comment {
   actor_id: string
   actor_name: string
   content: string
+  mentions?: CommentMention[]
   created_at: string
+}
+
+export interface CommentMention {
+  agent_id: string
+  agent_name: string
+  node_id: string
+  role: string
+}
+
+export interface CommentMentionDelivery {
+  agent_id: string
+  agent_name: string
+  status: 'sent' | 'failed'
+  error?: string
+}
+
+export interface AddTaskCommentResult {
+  comment: Comment
+  mention_deliveries: CommentMentionDelivery[]
 }
 
 export interface TaskStreamSnapshot {

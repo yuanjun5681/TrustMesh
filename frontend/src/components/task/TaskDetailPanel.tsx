@@ -1,19 +1,55 @@
-import { X, MessageSquare, Send } from 'lucide-react'
+import { X, MessageSquare } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/StatusBadge'
 import { TaskFeed } from './TaskFeed'
 import { TaskResultView } from './TaskResult'
 import { TaskDescription } from './TaskDescription'
+import { TaskCommentComposer, type TaskCommentSubmitInput, type TaskMentionCandidate } from './TaskCommentComposer'
 import { CancelTaskDialog } from './CancelTaskDialog'
 import { ConversationSheet } from '@/components/conversation/ConversationSheet'
 import { useTask, useAddTaskComment } from '@/hooks/useTasks'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { useState, useRef, useCallback } from 'react'
+import { ApiRequestError } from '@/api/client'
+import { useState } from 'react'
+import type { TaskDetail } from '@/types'
 
 interface TaskDetailPanelProps {
   taskId: string
   onClose: () => void
+}
+
+function buildTaskMentionCandidates(task: TaskDetail | undefined): TaskMentionCandidate[] {
+  if (!task) {
+    return []
+  }
+
+  const seen = new Set<string>()
+  const candidates: TaskMentionCandidate[] = []
+
+  if (task.pm_agent.id && !seen.has(task.pm_agent.id)) {
+    candidates.push({
+      id: task.pm_agent.id,
+      name: task.pm_agent.name,
+      roleLabel: 'PM Agent',
+    })
+    seen.add(task.pm_agent.id)
+  }
+
+  for (const todo of task.todos) {
+    if (!todo.assignee.agent_id || seen.has(todo.assignee.agent_id)) {
+      continue
+    }
+    candidates.push({
+      id: todo.assignee.agent_id,
+      name: todo.assignee.name,
+      roleLabel: '执行 Agent',
+    })
+    seen.add(todo.assignee.agent_id)
+  }
+
+  return candidates
 }
 
 export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
@@ -21,30 +57,28 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
   const [tab, setTab] = useState('feed')
   const [chatOpen, setChatOpen] = useState(false)
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
-  const [comment, setComment] = useState('')
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const addComment = useAddTaskComment()
   const canCancelTask = task?.status === 'pending' || task?.status === 'in_progress'
+  const mentionCandidates = buildTaskMentionCandidates(task)
 
-  const handleSendComment = useCallback(() => {
-    const text = comment.trim()
-    if (!text || addComment.isPending) return
-    addComment.mutate({ taskId, content: text }, {
-      onSuccess: () => {
-        setComment('')
-        if (textareaRef.current) {
-          textareaRef.current.style.height = 'auto'
-        }
-      },
-    })
-  }, [comment, taskId, addComment])
+  const handleSubmitComment = async ({ content, mentionAgentIds }: TaskCommentSubmitInput) => {
+    try {
+      const response = await addComment.mutateAsync({ taskId, content, mentionAgentIds })
+      const failedDeliveries = response.data.mention_deliveries?.filter((item) => item.status !== 'sent') ?? []
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSendComment()
+      if (failedDeliveries.length === 1) {
+        toast.warning(`评论已发布，但 @${failedDeliveries[0].agent_name} 发送失败`)
+      } else if (failedDeliveries.length > 1) {
+        toast.warning(`评论已发布，但有 ${failedDeliveries.length} 个 Agent 未收到 mention`)
+      }
+
+      return true
+    } catch (error) {
+      const message = error instanceof ApiRequestError ? error.message : '发表评论失败'
+      toast.error(message)
+      return false
     }
-  }, [handleSendComment])
+  }
 
   if (!task) {
     return (
@@ -115,29 +149,11 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
 
       {/* Comment input */}
       <div className="border-t px-4 py-3 shrink-0">
-        <div className="flex items-end gap-2">
-          <textarea
-            ref={textareaRef}
-            className="flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[36px] max-h-[120px]"
-            placeholder="输入评论... (Enter 发送, Shift+Enter 换行)"
-            rows={1}
-            value={comment}
-            onChange={(e) => {
-              setComment(e.target.value)
-              e.target.style.height = 'auto'
-              e.target.style.height = e.target.scrollHeight + 'px'
-            }}
-            onKeyDown={handleKeyDown}
-          />
-          <Button
-            size="icon"
-            className="size-9 shrink-0"
-            disabled={!comment.trim() || addComment.isPending}
-            onClick={handleSendComment}
-          >
-            <Send className="size-4" />
-          </Button>
-        </div>
+        <TaskCommentComposer
+          candidates={mentionCandidates}
+          disabled={addComment.isPending}
+          onSubmit={handleSubmitComment}
+        />
       </div>
 
       <ConversationSheet

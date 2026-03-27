@@ -1,5 +1,6 @@
 import { api } from './client'
 import type {
+  AddTaskCommentResult,
   ApiResponse,
   ApiListResponse,
   TaskListItem,
@@ -50,12 +51,18 @@ export async function listTaskComments(taskId: string) {
   return api.get(`tasks/${taskId}/comments`).json<ApiListResponse<Comment>>()
 }
 
-export async function addTaskComment(taskId: string, content: string, todoId?: string) {
+export interface AddTaskCommentInput {
+  content: string
+  todo_id?: string
+  mentions?: Array<{ agent_id: string }>
+}
+
+export async function addTaskComment(taskId: string, input: AddTaskCommentInput) {
   return api
     .post(`tasks/${taskId}/comments`, {
-      json: { content, todo_id: todoId },
+      json: input,
     })
-    .json<ApiResponse<Comment>>()
+    .json<ApiResponse<AddTaskCommentResult>>()
 }
 
 export async function getTaskArtifactTransfer(taskId: string, artifactId: string) {
