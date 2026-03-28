@@ -309,6 +309,37 @@ func (c *Client) GetPendingTrustRequests(ctx context.Context) ([]TrustPendingIte
 	return incoming, nil
 }
 
+func (c *Client) AuthChallenge(ctx context.Context, targetNode string) error {
+	if c == nil {
+		return fmt.Errorf("clawsynapse client is disabled")
+	}
+	body, err := json.Marshal(map[string]string{"targetNode": targetNode})
+	if err != nil {
+		return fmt.Errorf("marshal auth challenge request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/auth/challenge", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("auth challenge request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var out trustActionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return fmt.Errorf("decode auth challenge response: %w", err)
+	}
+	if !out.OK {
+		return fmt.Errorf("auth challenge failed: %s — %s", out.Code, out.Message)
+	}
+	return nil
+}
+
 func (c *Client) ApproveTrustRequest(ctx context.Context, requestID, reason string) error {
 	return c.trustAction(ctx, "/v1/trust/approve", requestID, reason)
 }

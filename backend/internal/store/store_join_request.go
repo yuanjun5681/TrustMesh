@@ -11,6 +11,7 @@ import (
 
 type CreateJoinRequestInput struct {
 	TrustRequestID string
+	UserID         string
 	NodeID         string
 	Name           string
 	Description    string
@@ -70,8 +71,17 @@ func (s *Store) CreateJoinRequest(in CreateJoinRequestInput) (*model.JoinRequest
 		now = time.Now().UTC()
 	}
 
+	// Resolve user_id: use provided user_id if valid, otherwise fall back to all users
+	userID := strings.TrimSpace(in.UserID)
+	if userID != "" {
+		if _, exists := s.users[userID]; !exists {
+			userID = ""
+		}
+	}
+
 	jr := &model.JoinRequest{
 		ID:             newID(),
+		UserID:         userID,
 		TrustRequestID: in.TrustRequestID,
 		NodeID:         in.NodeID,
 		Name:           name,
@@ -87,18 +97,31 @@ func (s *Store) CreateJoinRequest(in CreateJoinRequestInput) (*model.JoinRequest
 	s.joinRequests[jr.ID] = jr
 	s.trustRequestIndex[in.TrustRequestID] = jr.ID
 
-	// Associate with all users (for now, all users can see join requests)
-	for _, u := range s.users {
-		s.userJoinRequests[u.ID] = append(s.userJoinRequests[u.ID], jr.ID)
+	if userID != "" {
+		// Associate with the specific user who generated the invite
+		s.userJoinRequests[userID] = append(s.userJoinRequests[userID], jr.ID)
+	} else {
+		// No valid user_id — associate with all users as fallback
+		for _, u := range s.users {
+			s.userJoinRequests[u.ID] = append(s.userJoinRequests[u.ID], jr.ID)
+		}
 	}
 
 
-	// Notify all users
-	for _, u := range s.users {
+	// Notify relevant users
+	notifyUsers := make([]string, 0)
+	if userID != "" {
+		notifyUsers = append(notifyUsers, userID)
+	} else {
+		for _, u := range s.users {
+			notifyUsers = append(notifyUsers, u.ID)
+		}
+	}
+	for _, uid := range notifyUsers {
 		content := "Agent「" + jr.Name + "」申请加入平台"
 		event := &model.Event{
 			ID:        newID(),
-			UserID:    u.ID,
+			UserID:    uid,
 			EventType: "join_request_received",
 			ActorType: "agent",
 			ActorID:   jr.NodeID,
@@ -108,7 +131,7 @@ func (s *Store) CreateJoinRequest(in CreateJoinRequestInput) (*model.JoinRequest
 			CreatedAt: now,
 		}
 		s.maybeCreateNotificationUnsafe(event)
-		s.publishUserEventUnsafe(u.ID, "join_request.created", map[string]any{
+		s.publishUserEventUnsafe(uid, "join_request.created", map[string]any{
 			"join_request": *jr,
 		}, now)
 	}

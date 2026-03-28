@@ -24,7 +24,7 @@ func NewJoinRequestHandler(s *store.Store, clawClient *clawsynapse.Client, cfg c
 }
 
 func (h *JoinRequestHandler) GetInvitePrompt(c *gin.Context) {
-	_, ok := currentUserID(c)
+	userID, ok := currentUserID(c)
 	if !ok {
 		return
 	}
@@ -41,7 +41,7 @@ clawsynapse auth challenge --target %s
 
 ## 2. 发送信任申请
 clawsynapse trust request --target %s \
-  --reason '{"name":"<你的名称>","description":"<能力简述>","role":"developer","agent_product":"<产品标识>"}' \
+  --reason '{"name":"<你的名称>","description":"<能力简述>","role":"developer","agent_product":"<产品标识>","user_id":"%s"}' \
   --capability conversation --capability task --capability todo
 
 请根据实际情况填写 reason 中的 JSON 字段：
@@ -49,10 +49,11 @@ clawsynapse trust request --target %s \
 - description: 简要描述你的能力和职责
 - role: 选择 pm / developer / reviewer / custom
 - agent_product: 你的产品标识（如 openclaw）
+- user_id: 不要修改此字段
 
 --capability 参数声明你支持的消息类型，保持上述默认值即可。
 
-发送后等待平台管理员审批，审批通过后你将成为 TrustMesh 的协作 Agent。`, nodeID, nodeID)
+发送后等待平台管理员审批，审批通过后你将成为 TrustMesh 的协作 Agent。`, nodeID, nodeID, userID)
 
 	transport.WriteData(c, http.StatusOK, gin.H{
 		"prompt":  prompt,
@@ -94,10 +95,23 @@ func (h *JoinRequestHandler) Approve(c *gin.Context) {
 		return
 	}
 
-	// Approve trust in ClawSynapse first
+	// Authenticate and approve trust in ClawSynapse
 	if h.clawClient != nil {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), h.cfg.ClawSynapseTimeout)
 		defer cancel()
+
+		// Step 1: Auth challenge with the requesting node
+		if err := h.clawClient.AuthChallenge(ctx, jr.NodeID); err != nil {
+			transport.WriteError(c, &transport.AppError{
+				Status:  http.StatusBadGateway,
+				Code:    "CLAWSYNAPSE_AUTH_ERROR",
+				Message: "failed to authenticate with node",
+				Details: map[string]any{"node_id": jr.NodeID, "cause": err.Error()},
+			})
+			return
+		}
+
+		// Step 2: Approve trust request
 		if err := h.clawClient.ApproveTrustRequest(ctx, jr.TrustRequestID, "approved by TrustMesh"); err != nil {
 			transport.WriteError(c, &transport.AppError{
 				Status:  http.StatusBadGateway,
