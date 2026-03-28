@@ -540,6 +540,37 @@ export interface UpdateAgentRequest {
   capabilities?: string[]
 }
 
+// ─── 加入请求 ───
+
+export type JoinRequestStatus = 'pending' | 'approved' | 'rejected'
+
+export interface JoinRequest {
+  id: string
+  trust_request_id: string
+  node_id: string
+  name: string
+  description: string
+  role: AgentRole
+  capabilities: string[]
+  agent_product: string
+  status: JoinRequestStatus
+  agent_id?: string
+  created_at: string
+  resolved_at?: string
+}
+
+export interface InvitePrompt {
+  prompt: string
+  node_id: string
+}
+
+export interface JoinRequestOverrides {
+  name?: string
+  role?: AgentRole
+  description?: string
+  capabilities?: string[]
+}
+
 // ─── 知识库 ───
 
 export type KnowledgeDocStatus = 'processing' | 'ready' | 'failed'

@@ -1,4 +1,4 @@
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import {
   FolderKanban,
   Plus,
@@ -10,6 +10,7 @@ import {
   Inbox,
   BookOpen,
   Loader2,
+  ClipboardCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -19,10 +20,12 @@ import { Separator } from '@/components/ui/separator'
 import { Avatar } from '@/components/ui/avatar'
 import { AgentStatusIcon, ProjectWorkStatusDot } from '@/components/shared/StatusBadge'
 import { TrustMeshLogo } from '@/components/shared/TrustMeshLogo'
-import { AgentConfigDialog } from '@/components/agent/AgentConfigDialog'
+import { AgentInviteDialog } from '@/components/agent/AgentInviteDialog'
+import { JoinRequestDialog } from '@/components/agent/JoinRequestDialog'
 import { useProjects } from '@/hooks/useProjects'
 import { useAgents } from '@/hooks/useAgents'
 import { useUnreadCount } from '@/hooks/useNotifications'
+import { useJoinRequests } from '@/hooks/useJoinRequests'
 import { useAuthStore } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
 import { useState, useEffect } from 'react'
@@ -67,17 +70,18 @@ function ProjectSidebarStatus({ status }: { status: ProjectWorkStatus }) {
 
 export function Sidebar({ onCreateProject }: SidebarProps) {
   const location = useLocation()
-  const navigate = useNavigate()
   const { projectId } = useParams()
   const { data: projects } = useProjects()
   const { data: agents } = useAgents()
   const { data: unreadCount } = useUnreadCount()
+  const { data: pendingRequests } = useJoinRequests('pending')
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
   const { setTheme, resolvedTheme } = useThemeStore()
   const isDark = resolvedTheme() === 'dark'
   const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 1280px)').matches)
-  const [addAgentOpen, setAddAgentOpen] = useState(false)
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [reviewOpen, setReviewOpen] = useState(false)
 
   useEffect(() => {
     const mql = window.matchMedia('(max-width: 1280px)')
@@ -249,16 +253,40 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
           ))}
 
           <button
-            onClick={() => setAddAgentOpen(true)}
+            onClick={() => setInviteOpen(true)}
             className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           >
             <Plus className="size-4 shrink-0" />
-            {!collapsed && <span>添加智能体</span>}
+            {!collapsed && <span>邀请智能体</span>}
           </button>
-          <AgentConfigDialog
-            open={addAgentOpen}
-            onOpenChange={setAddAgentOpen}
-            onCreated={(id) => navigate(`/agents/${id}`)}
+
+          {pendingRequests && pendingRequests.length > 0 && (
+            <button
+              onClick={() => setReviewOpen(true)}
+              className="relative flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            >
+              <ClipboardCheck className="size-4 shrink-0" />
+              {!collapsed && (
+                <>
+                  <span>审批请求</span>
+                  <span className="ml-auto text-xs bg-amber-500 text-white rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
+                    {pendingRequests.length}
+                  </span>
+                </>
+              )}
+              {collapsed && (
+                <span className="absolute right-1 top-0.5 size-2 rounded-full bg-amber-500" />
+              )}
+            </button>
+          )}
+
+          <AgentInviteDialog
+            open={inviteOpen}
+            onOpenChange={setInviteOpen}
+          />
+          <JoinRequestDialog
+            open={reviewOpen}
+            onOpenChange={setReviewOpen}
           />
         </div>
       </ScrollArea>

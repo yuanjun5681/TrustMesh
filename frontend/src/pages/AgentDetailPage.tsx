@@ -74,7 +74,7 @@ export function AgentDetailPage() {
       try {
         await deleteAgent.mutateAsync(agent.id)
         toast.success(`Agent "${agent.name}" 已删除`)
-        navigate('/agents')
+        navigate('/dashboard')
       } catch (err) {
         const message = err instanceof ApiRequestError ? err.message : '删除失败'
         toast.error(message)
@@ -119,10 +119,10 @@ export function AgentDetailPage() {
                 {agent.description && (
                   <p className="text-xs text-muted-foreground truncate">{agent.description}</p>
                 )}
-                {agent.description && agent.capabilities.length > 0 && (
+                {agent.description && agent.capabilities?.length > 0 && (
                   <span className="text-xs text-muted-foreground shrink-0">·</span>
                 )}
-                {agent.capabilities.length > 0 && (
+                {agent.capabilities?.length > 0 && (
                   <div className="flex items-center gap-1 shrink-0">
                     {agent.capabilities.map((cap) => (
                       <Badge key={cap} variant="secondary" className="text-[11px] px-1.5 py-0">
@@ -242,7 +242,7 @@ export function AgentDetailPage() {
         open={archiveOpen}
         onOpenChange={setArchiveOpen}
         agent={agent}
-        onArchived={() => navigate('/agents')}
+        onArchived={() => navigate('/dashboard')}
       />
     </PageContainer>
   )

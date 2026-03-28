@@ -36,7 +36,7 @@ export function AgentConfigDialog({ open, onOpenChange, agent, onCreated }: Prop
       setName(agent.name)
       setRole(agent.role)
       setDescription(agent.description)
-      setCapabilities([...agent.capabilities])
+      setCapabilities([...(agent.capabilities ?? [])])
     } else {
       setNodeId('')
       setName('')

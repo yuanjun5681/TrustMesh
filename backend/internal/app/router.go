@@ -18,9 +18,10 @@ import (
 )
 
 type App struct {
-	Engine     *gin.Engine
-	Store      *store.Store
-	PeerSyncer *clawsynapse.PeerSyncer
+	Engine              *gin.Engine
+	Store               *store.Store
+	PeerSyncer          *clawsynapse.PeerSyncer
+	TrustRequestSyncer  *clawsynapse.TrustRequestSyncer
 }
 
 func New(cfg config.Config, log *zap.Logger) (*App, error) {
@@ -41,6 +42,10 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	if peerSyncer != nil {
 		peerSyncer.Start()
 	}
+	trustRequestSyncer := clawsynapse.NewTrustRequestSyncer(clawClient, s, cfg.ClawSynapsePeerSync, log)
+	if trustRequestSyncer != nil {
+		trustRequestSyncer.Start()
+	}
 
 	authHandler := handler.NewAuthHandler(s, jwtManager)
 	agentHandler := handler.NewAgentHandler(s, clawClient)
@@ -50,6 +55,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	transferHandler := handler.NewTransferHandler(s, clawClient)
 	dashboardHandler := handler.NewDashboardHandler(s)
 	notificationHandler := handler.NewNotificationHandler(s)
+	joinRequestHandler := handler.NewJoinRequestHandler(s, clawClient, cfg)
 	realtimeHandler := handler.NewRealtimeHandler(s)
 
 	// Knowledge base components (optional - requires EMBEDDING_API_KEY)
@@ -83,6 +89,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	}
 
 	engine.GET("/healthz", handler.Health)
+	engine.GET("/webhook/clawsynapse", func(c *gin.Context) { c.Status(200) })
 	engine.POST("/webhook/clawsynapse", webhookHandler.HandleWebhook)
 
 	v1 := engine.Group("/api/v1")
@@ -95,6 +102,10 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 
 	authed.POST("/agents", agentHandler.Create)
 	authed.GET("/agents", agentHandler.List)
+	authed.GET("/agents/invite-prompt", joinRequestHandler.GetInvitePrompt)
+	authed.GET("/agents/join-requests", joinRequestHandler.List)
+	authed.POST("/agents/join-requests/:id/approve", joinRequestHandler.Approve)
+	authed.POST("/agents/join-requests/:id/reject", joinRequestHandler.Reject)
 	authed.GET("/agents/:id", agentHandler.Get)
 	authed.PATCH("/agents/:id", agentHandler.Update)
 	authed.DELETE("/agents/:id", agentHandler.Delete)
@@ -155,7 +166,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 		log.Info("assistant enabled", zap.String("model", cfg.AssistantModel))
 	}
 
-	return &App{Engine: engine, Store: s, PeerSyncer: peerSyncer}, nil
+	return &App{Engine: engine, Store: s, PeerSyncer: peerSyncer, TrustRequestSyncer: trustRequestSyncer}, nil
 }
 
 func (a *App) Close() error {
@@ -165,6 +176,9 @@ func (a *App) Close() error {
 	var errs []error
 	if a.PeerSyncer != nil {
 		a.PeerSyncer.Close()
+	}
+	if a.TrustRequestSyncer != nil {
+		a.TrustRequestSyncer.Close()
 	}
 	if a.Store != nil {
 		if err := a.Store.Close(); err != nil {

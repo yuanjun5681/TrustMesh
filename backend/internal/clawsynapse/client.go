@@ -59,6 +59,37 @@ type peersResponse struct {
 	TS int64 `json:"ts"`
 }
 
+type TrustPendingItem struct {
+	RequestID    string `json:"requestId"`
+	From         string `json:"from"`
+	To           string `json:"to"`
+	Direction    string `json:"direction"`
+	Reason       string `json:"reason"`
+	ReceivedAtMs int64  `json:"receivedAtMs"`
+}
+
+type trustPendingResponse struct {
+	OK      bool   `json:"ok"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Data    struct {
+		Items []TrustPendingItem `json:"items"`
+	} `json:"data"`
+	TS int64 `json:"ts"`
+}
+
+type trustActionRequest struct {
+	RequestID string `json:"requestId"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+type trustActionResponse struct {
+	OK      bool   `json:"ok"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	TS      int64  `json:"ts"`
+}
+
 type transfersResponse struct {
 	OK      bool   `json:"ok"`
 	Code    string `json:"code"`
@@ -239,4 +270,84 @@ func (c *Client) ListTransfers(ctx context.Context) ([]map[string]any, error) {
 		return []map[string]any{}, nil
 	}
 	return out.Data.Items, nil
+}
+
+func (c *Client) GetPendingTrustRequests(ctx context.Context) ([]TrustPendingItem, error) {
+	if c == nil {
+		return nil, fmt.Errorf("clawsynapse client is disabled")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/trust/pending", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("get trust pending request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("get trust pending returned status %d", resp.StatusCode)
+	}
+
+	var out trustPendingResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode trust pending response: %w", err)
+	}
+	if !out.OK {
+		return nil, fmt.Errorf("get trust pending rejected: %s", out.Code)
+	}
+
+	// Only return incoming requests
+	incoming := make([]TrustPendingItem, 0, len(out.Data.Items))
+	for _, item := range out.Data.Items {
+		if item.Direction == "inbound" {
+			incoming = append(incoming, item)
+		}
+	}
+	return incoming, nil
+}
+
+func (c *Client) ApproveTrustRequest(ctx context.Context, requestID, reason string) error {
+	return c.trustAction(ctx, "/v1/trust/approve", requestID, reason)
+}
+
+func (c *Client) RejectTrustRequest(ctx context.Context, requestID, reason string) error {
+	return c.trustAction(ctx, "/v1/trust/reject", requestID, reason)
+}
+
+func (c *Client) trustAction(ctx context.Context, path, requestID, reason string) error {
+	if c == nil {
+		return fmt.Errorf("clawsynapse client is disabled")
+	}
+	body, err := json.Marshal(trustActionRequest{RequestID: requestID, Reason: reason})
+	if err != nil {
+		return fmt.Errorf("marshal trust action request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("trust action request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("trust action returned status %d", resp.StatusCode)
+	}
+
+	var out trustActionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return fmt.Errorf("decode trust action response: %w", err)
+	}
+	if !out.OK {
+		return fmt.Errorf("trust action rejected: %s", out.Code)
+	}
+	return nil
 }

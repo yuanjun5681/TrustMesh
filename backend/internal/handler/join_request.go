@@ -1,0 +1,162 @@
+package handler
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+	"trustmesh/backend/internal/clawsynapse"
+	"trustmesh/backend/internal/config"
+	"trustmesh/backend/internal/store"
+	"trustmesh/backend/internal/transport"
+)
+
+type JoinRequestHandler struct {
+	store      *store.Store
+	clawClient *clawsynapse.Client
+	cfg        config.Config
+}
+
+func NewJoinRequestHandler(s *store.Store, clawClient *clawsynapse.Client, cfg config.Config) *JoinRequestHandler {
+	return &JoinRequestHandler{store: s, clawClient: clawClient, cfg: cfg}
+}
+
+func (h *JoinRequestHandler) GetInvitePrompt(c *gin.Context) {
+	_, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	nodeID := h.cfg.ClawSynapseNodeID
+	if nodeID == "" {
+		nodeID = "trustmesh-server"
+	}
+
+	prompt := fmt.Sprintf(`你被邀请加入 TrustMesh 工作平台协作网络。请按以下步骤操作：
+
+## 1. 身份认证
+clawsynapse auth challenge --target %s
+
+## 2. 发送信任申请
+clawsynapse trust request --target %s \
+  --reason '{"name":"<你的名称>","description":"<能力简述>","role":"developer","agent_product":"<产品标识>"}' \
+  --capability conversation --capability task --capability todo
+
+请根据实际情况填写 reason 中的 JSON 字段：
+- name: 你的显示名称
+- description: 简要描述你的能力和职责
+- role: 选择 pm / developer / reviewer / custom
+- agent_product: 你的产品标识（如 openclaw）
+
+--capability 参数声明你支持的消息类型，保持上述默认值即可。
+
+发送后等待平台管理员审批，审批通过后你将成为 TrustMesh 的协作 Agent。`, nodeID, nodeID)
+
+	transport.WriteData(c, http.StatusOK, gin.H{
+		"prompt":  prompt,
+		"node_id": nodeID,
+	})
+}
+
+func (h *JoinRequestHandler) List(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+	status := strings.TrimSpace(c.Query("status"))
+	items := h.store.ListJoinRequests(userID, status)
+	transport.WriteList(c, items, len(items))
+}
+
+type approveJoinRequestRequest struct {
+	Name         *string  `json:"name,omitempty"`
+	Role         *string  `json:"role,omitempty"`
+	Description  *string  `json:"description,omitempty"`
+	Capabilities []string `json:"capabilities,omitempty"`
+}
+
+func (h *JoinRequestHandler) Approve(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+	requestID := c.Param("id")
+
+	var req approveJoinRequestRequest
+	_ = c.ShouldBindJSON(&req)
+
+	// Get the join request to find trust request ID
+	jr, appErr := h.store.GetJoinRequest(userID, requestID)
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	// Approve trust in ClawSynapse first
+	if h.clawClient != nil {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), h.cfg.ClawSynapseTimeout)
+		defer cancel()
+		if err := h.clawClient.ApproveTrustRequest(ctx, jr.TrustRequestID, "approved by TrustMesh"); err != nil {
+			transport.WriteError(c, &transport.AppError{
+				Status:  http.StatusBadGateway,
+				Code:    "CLAWSYNAPSE_ERROR",
+				Message: "failed to approve trust request in ClawSynapse",
+				Details: map[string]any{"cause": err.Error()},
+			})
+			return
+		}
+	}
+
+	// Approve in store and create agent
+	agent, appErr := h.store.ApproveJoinRequest(userID, requestID, store.JoinRequestOverrides{
+		Name:         req.Name,
+		Role:         req.Role,
+		Description:  req.Description,
+		Capabilities: req.Capabilities,
+	})
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	transport.WriteData(c, http.StatusOK, agent)
+}
+
+func (h *JoinRequestHandler) Reject(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+	requestID := c.Param("id")
+
+	// Get the join request to find trust request ID
+	jr, appErr := h.store.GetJoinRequest(userID, requestID)
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	// Reject trust in ClawSynapse first
+	if h.clawClient != nil {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), h.cfg.ClawSynapseTimeout)
+		defer cancel()
+		if err := h.clawClient.RejectTrustRequest(ctx, jr.TrustRequestID, "rejected by TrustMesh"); err != nil {
+			transport.WriteError(c, &transport.AppError{
+				Status:  http.StatusBadGateway,
+				Code:    "CLAWSYNAPSE_ERROR",
+				Message: "failed to reject trust request in ClawSynapse",
+				Details: map[string]any{"cause": err.Error()},
+			})
+			return
+		}
+	}
+
+	if appErr := h.store.RejectJoinRequest(userID, requestID); appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}

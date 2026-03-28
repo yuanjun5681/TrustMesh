@@ -58,7 +58,9 @@
       "Bash(go get:*)",
       "Bash(find /Volumes/UWorks/Projects/TrustMesh/frontend -name tailwind.config.* -o -name tailwind.config.ts)",
       "Bash(find /Volumes/UWorks/Projects/TrustMesh/frontend -type f \\\\\\(-name *.svg -o -name *.png -o -name *.jpg \\\\\\))",
-      "Bash(ls -la /Volumes/UWorks/Projects/TrustMesh/backend/internal/store/mongo_*.go)"
+      "Bash(ls -la /Volumes/UWorks/Projects/TrustMesh/backend/internal/store/mongo_*.go)",
+      "Bash(find /Volumes/UWorks/Projects/TrustMesh -type f -name *clawsynapse* -o -name docker-compose.yml -o -name .env*)",
+      "Bash(find /Volumes/UWorks/Projects/TrustMesh -path *docs* -o -path *README*)"
     ]
   }
 }
