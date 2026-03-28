@@ -348,6 +348,37 @@ func (c *Client) RejectTrustRequest(ctx context.Context, requestID, reason strin
 	return c.trustAction(ctx, "/v1/trust/reject", requestID, reason)
 }
 
+func (c *Client) RevokeTrust(ctx context.Context, targetNode, reason string) error {
+	if c == nil {
+		return fmt.Errorf("clawsynapse client is disabled")
+	}
+	body, err := json.Marshal(map[string]string{"targetNode": targetNode, "reason": reason})
+	if err != nil {
+		return fmt.Errorf("marshal revoke trust request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/trust/revoke", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("revoke trust request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var out trustActionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return fmt.Errorf("decode revoke trust response: %w", err)
+	}
+	if !out.OK {
+		return fmt.Errorf("revoke trust failed: %s — %s", out.Code, out.Message)
+	}
+	return nil
+}
+
 func (c *Client) trustAction(ctx context.Context, path, requestID, reason string) error {
 	if c == nil {
 		return fmt.Errorf("clawsynapse client is disabled")

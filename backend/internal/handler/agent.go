@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"trustmesh/backend/internal/clawsynapse"
@@ -118,10 +119,27 @@ func (h *AgentHandler) Delete(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if appErr := h.store.DeleteAgent(userID, c.Param("id")); appErr != nil {
+	agentID := c.Param("id")
+
+	// Get agent info before deletion to obtain node_id
+	agent, appErr := h.store.GetAgent(userID, agentID)
+	if appErr != nil {
 		transport.WriteError(c, appErr)
 		return
 	}
+
+	if appErr := h.store.DeleteAgent(userID, agentID); appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	// Revoke trust in ClawSynapse (best-effort, don't block deletion)
+	if h.clawClient != nil && agent.NodeID != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = h.clawClient.RevokeTrust(ctx, agent.NodeID, "agent removed from TrustMesh")
+	}
+
 	c.Status(http.StatusNoContent)
 }
 
