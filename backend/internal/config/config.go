@@ -20,7 +20,6 @@ type Config struct {
 	MongoDatabase       string
 	MongoTimeout        time.Duration
 	ClawSynapseAPIURL   string
-	ClawSynapseNodeID   string
 	ClawSynapseTimeout  time.Duration
 	ClawSynapsePeerSync time.Duration
 
@@ -54,7 +53,6 @@ func Load() Config {
 		MongoDatabase:       getEnv("MONGO_DATABASE", "trustmesh"),
 		MongoTimeout:        getEnvDuration("MONGO_TIMEOUT", 5*time.Second),
 		ClawSynapseAPIURL:   getEnv("CLAWSYNAPSE_API_URL", "http://127.0.0.1:18080"),
-		ClawSynapseNodeID:   getEnv("CLAWSYNAPSE_NODE_ID", ""),
 		ClawSynapseTimeout:  getEnvDuration("CLAWSYNAPSE_TIMEOUT", 3*time.Second),
 		ClawSynapsePeerSync: getEnvDuration("CLAWSYNAPSE_PEER_SYNC_INTERVAL", 10*time.Second),
 

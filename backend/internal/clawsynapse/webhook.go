@@ -17,20 +17,18 @@ import (
 )
 
 type WebhookHandler struct {
-	store       *store.Store
-	client      *Client
-	localNodeID string
-	log         *zap.Logger
-	embedder    embedding.Client
-	qdrant      *knowledge.QdrantClient
+	store    *store.Store
+	client   *Client
+	log      *zap.Logger
+	embedder embedding.Client
+	qdrant   *knowledge.QdrantClient
 }
 
-func NewWebhookHandler(st *store.Store, client *Client, localNodeID string, log *zap.Logger) *WebhookHandler {
+func NewWebhookHandler(st *store.Store, client *Client, log *zap.Logger) *WebhookHandler {
 	return &WebhookHandler{
-		store:       st,
-		client:      client,
-		localNodeID: strings.TrimSpace(localNodeID),
-		log:         log,
+		store:  st,
+		client: client,
+		log:    log,
 	}
 }
 
@@ -47,9 +45,16 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 		return
 	}
 
-	if h.localNodeID != "" && payload.NodeID != "" && payload.NodeID != h.localNodeID {
-		transport.WriteError(c, transport.Validation("invalid webhook target node", map[string]any{"nodeId": "does not match local node"}))
-		return
+	if payload.NodeID != "" {
+		localNodeID, appErr := h.resolveLocalNodeID(c.Request.Context())
+		if appErr != nil {
+			transport.WriteError(c, appErr)
+			return
+		}
+		if payload.NodeID != localNodeID {
+			transport.WriteError(c, transport.Validation("invalid webhook target node", map[string]any{"nodeId": "does not match local node"}))
+			return
+		}
 	}
 
 	switch strings.TrimSpace(payload.Type) {
@@ -72,6 +77,29 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 	default:
 		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "unsupported webhook type"))
 	}
+}
+
+func (h *WebhookHandler) resolveLocalNodeID(ctx context.Context) (string, *transport.AppError) {
+	if h == nil || h.client == nil {
+		return "", &transport.AppError{
+			Status:  http.StatusServiceUnavailable,
+			Code:    "CLAWSYNAPSE_UNAVAILABLE",
+			Message: "暂时无法校验本地节点身份",
+			Details: map[string]any{},
+		}
+	}
+
+	nodeID, err := h.client.GetSelfNodeID(ctx)
+	if err != nil {
+		return "", &transport.AppError{
+			Status:  http.StatusServiceUnavailable,
+			Code:    "CLAWSYNAPSE_UNAVAILABLE",
+			Message: "暂时无法校验本地节点身份",
+			Details: map[string]any{"cause": err.Error()},
+		}
+	}
+
+	return nodeID, nil
 }
 
 func (h *WebhookHandler) handleConversationReply(c *gin.Context, webhook protocol.WebhookPayload) {

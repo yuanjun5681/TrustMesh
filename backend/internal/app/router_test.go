@@ -45,6 +45,37 @@ func clawsynapsePeersResponse(t *testing.T, nodeIDs ...string) string {
 	return string(body)
 }
 
+func clawsynapseHealthResponse(t *testing.T, nodeID string) string {
+	t.Helper()
+
+	body, err := json.Marshal(map[string]any{
+		"ok":      true,
+		"code":    "health.ok",
+		"message": "ok",
+		"data": map[string]any{
+			"self": map[string]any{
+				"nodeId": nodeID,
+			},
+			"peersCount": 0,
+			"adapter": map[string]any{
+				"name":    "webhook",
+				"healthy": true,
+			},
+			"nats": map[string]any{
+				"name":      "nats",
+				"serverUrl": "nats://127.0.0.1:4222",
+				"connected": true,
+				"status":    "CONNECTED",
+			},
+		},
+		"ts": 1,
+	})
+	if err != nil {
+		t.Fatalf("marshal health response: %v", err)
+	}
+	return string(body)
+}
+
 func TestHappyPathAuthToConversation(t *testing.T) {
 	log, err := logger.New("error")
 	if err != nil {
@@ -227,6 +258,73 @@ func TestCreateAgentRejectsOfflineNode(t *testing.T) {
 	}
 	if nestedString(body, "error", "details", "node_id") != "offline_or_not_found" {
 		t.Fatalf("unexpected error details: %#v", body)
+	}
+}
+
+func TestInvitePromptUsesNodeIDFromClawSynapseHealth(t *testing.T) {
+	log, err := logger.New("error")
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	defer func() { _ = log.Sync() }()
+
+	const localNodeID = "n1-2f4c6e8a0b1d3f557799aabbccddeeff"
+
+	clawServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/health":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(clawsynapseHealthResponse(t, localNodeID)))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer clawServer.Close()
+
+	application, err := New(config.Config{
+		Port:               "0",
+		JWTSecret:          "test-secret",
+		AccessTokenTTL:     time.Hour,
+		RefreshTokenTTL:    168 * time.Hour,
+		LogLevel:           "error",
+		AllowAllCORS:       true,
+		ReadTimeout:        3 * time.Second,
+		ShutdownGrace:      3 * time.Second,
+		ClawSynapseAPIURL:  clawServer.URL,
+		ClawSynapseTimeout: time.Second,
+	}, log)
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
+	defer func() {
+		if closeErr := application.Close(); closeErr != nil {
+			t.Fatalf("close app: %v", closeErr)
+		}
+	}()
+
+	testServer := httptest.NewServer(application.Engine)
+	defer testServer.Close()
+
+	registerResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/auth/register", "", map[string]any{
+		"email":    "invite@example.com",
+		"name":     "Invite User",
+		"password": "StrongPass123!",
+	})
+	token := nestedString(decodeBody(t, registerResp), "data", "access_token")
+
+	resp := doJSON(t, testServer.Client(), "GET", testServer.URL+"/api/v1/agents/invite-prompt", token, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("invite prompt status=%d", resp.StatusCode)
+	}
+
+	body := decodeBody(t, resp)
+	if nestedString(body, "data", "node_id") != localNodeID {
+		t.Fatalf("unexpected node_id: %#v", body)
+	}
+
+	prompt := nestedString(body, "data", "prompt")
+	if !strings.Contains(prompt, "--target "+localNodeID) {
+		t.Fatalf("invite prompt does not use local node id from health: %s", prompt)
 	}
 }
 

@@ -29,9 +29,28 @@ func (h *JoinRequestHandler) GetInvitePrompt(c *gin.Context) {
 		return
 	}
 
-	nodeID := h.cfg.ClawSynapseNodeID
-	if nodeID == "" {
-		nodeID = "trustmesh-server"
+	if h.clawClient == nil {
+		transport.WriteError(c, &transport.AppError{
+			Status:  http.StatusServiceUnavailable,
+			Code:    "CLAWSYNAPSE_UNAVAILABLE",
+			Message: "暂时无法获取当前节点身份",
+			Details: map[string]any{},
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), h.cfg.ClawSynapseTimeout)
+	defer cancel()
+
+	nodeID, err := h.clawClient.GetSelfNodeID(ctx)
+	if err != nil {
+		transport.WriteError(c, &transport.AppError{
+			Status:  http.StatusServiceUnavailable,
+			Code:    "CLAWSYNAPSE_UNAVAILABLE",
+			Message: "暂时无法获取当前节点身份",
+			Details: map[string]any{"cause": err.Error()},
+		})
+		return
 	}
 
 	prompt := fmt.Sprintf(`你被邀请加入 TrustMesh 工作平台协作网络。请按以下步骤操作：

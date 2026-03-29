@@ -18,10 +18,10 @@ import (
 )
 
 type App struct {
-	Engine              *gin.Engine
-	Store               *store.Store
-	PeerSyncer          *clawsynapse.PeerSyncer
-	TrustRequestSyncer  *clawsynapse.TrustRequestSyncer
+	Engine             *gin.Engine
+	Store              *store.Store
+	PeerSyncer         *clawsynapse.PeerSyncer
+	TrustRequestSyncer *clawsynapse.TrustRequestSyncer
 }
 
 func New(cfg config.Config, log *zap.Logger) (*App, error) {
@@ -37,7 +37,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	}
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 	clawClient := clawsynapse.NewClient(cfg.ClawSynapseAPIURL, cfg.ClawSynapseTimeout)
-	webhookHandler := clawsynapse.NewWebhookHandler(s, clawClient, cfg.ClawSynapseNodeID, log)
+	webhookHandler := clawsynapse.NewWebhookHandler(s, clawClient, log)
 	peerSyncer := clawsynapse.NewPeerSyncer(clawClient, s, cfg.ClawSynapsePeerSync, log)
 	if peerSyncer != nil {
 		peerSyncer.Start()
