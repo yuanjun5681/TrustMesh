@@ -44,6 +44,31 @@ func (s *Store) GetTask(userID, taskID string) (*model.TaskDetail, *transport.Ap
 	return copyTask(task), nil
 }
 
+// GetTaskByNodeID returns a task if the requesting agent (identified by nodeID)
+// is a participant: either the PM agent or a todo assignee.
+func (s *Store) GetTaskByNodeID(nodeID, taskID string) (*model.TaskDetail, *transport.AppError) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	agent, err := s.agentByNodeUnsafe(nodeID)
+	if err != nil {
+		return nil, err
+	}
+	task, ok := s.tasks[taskID]
+	if !ok || task.UserID != agent.UserID {
+		return nil, transport.NotFound("task not found")
+	}
+	if task.PMAgent.NodeID == nodeID {
+		return copyTask(task), nil
+	}
+	for i := range task.Todos {
+		if task.Todos[i].Assignee.NodeID == nodeID {
+			return copyTask(task), nil
+		}
+	}
+	return nil, transport.Forbidden("agent is not a participant of this task")
+}
+
 func (s *Store) ListTaskEvents(userID, taskID string) ([]model.Event, *transport.AppError) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
