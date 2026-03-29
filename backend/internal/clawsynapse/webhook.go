@@ -17,20 +17,18 @@ import (
 )
 
 type WebhookHandler struct {
-	store       *store.Store
-	client      *Client
-	localNodeID string
-	log         *zap.Logger
-	embedder    embedding.Client
-	qdrant      *knowledge.QdrantClient
+	store    *store.Store
+	client   *Client
+	log      *zap.Logger
+	embedder embedding.Client
+	qdrant   *knowledge.QdrantClient
 }
 
-func NewWebhookHandler(st *store.Store, client *Client, localNodeID string, log *zap.Logger) *WebhookHandler {
+func NewWebhookHandler(st *store.Store, client *Client, log *zap.Logger) *WebhookHandler {
 	return &WebhookHandler{
-		store:       st,
-		client:      client,
-		localNodeID: strings.TrimSpace(localNodeID),
-		log:         log,
+		store:  st,
+		client: client,
+		log:    log,
 	}
 }
 
@@ -47,9 +45,16 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 		return
 	}
 
-	if h.localNodeID != "" && payload.NodeID != "" && payload.NodeID != h.localNodeID {
-		transport.WriteError(c, transport.Validation("invalid webhook target node", map[string]any{"nodeId": "does not match local node"}))
-		return
+	if payload.NodeID != "" {
+		localNodeID, appErr := h.resolveLocalNodeID(c.Request.Context())
+		if appErr != nil {
+			transport.WriteError(c, appErr)
+			return
+		}
+		if payload.NodeID != localNodeID {
+			transport.WriteError(c, transport.Validation("invalid webhook target node", map[string]any{"nodeId": "does not match local node"}))
+			return
+		}
 	}
 
 	switch strings.TrimSpace(payload.Type) {
@@ -67,9 +72,34 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 		h.handleTaskComment(c, payload)
 	case "knowledge.query":
 		h.handleKnowledgeQuery(c, payload)
+	case "context.query":
+		h.handleContextQuery(c, payload)
 	default:
 		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "unsupported webhook type"))
 	}
+}
+
+func (h *WebhookHandler) resolveLocalNodeID(ctx context.Context) (string, *transport.AppError) {
+	if h == nil || h.client == nil {
+		return "", &transport.AppError{
+			Status:  http.StatusServiceUnavailable,
+			Code:    "CLAWSYNAPSE_UNAVAILABLE",
+			Message: "暂时无法校验本地节点身份",
+			Details: map[string]any{},
+		}
+	}
+
+	nodeID, err := h.client.GetSelfNodeID(ctx)
+	if err != nil {
+		return "", &transport.AppError{
+			Status:  http.StatusServiceUnavailable,
+			Code:    "CLAWSYNAPSE_UNAVAILABLE",
+			Message: "暂时无法校验本地节点身份",
+			Details: map[string]any{"cause": err.Error()},
+		}
+	}
+
+	return nodeID, nil
 }
 
 func (h *WebhookHandler) handleConversationReply(c *gin.Context, webhook protocol.WebhookPayload) {
@@ -206,6 +236,34 @@ func (h *WebhookHandler) handleTaskComment(c *gin.Context, webhook protocol.Webh
 	transport.WriteData(c, http.StatusOK, event)
 }
 
+func (h *WebhookHandler) handleContextQuery(c *gin.Context, webhook protocol.WebhookPayload) {
+	var payload protocol.ContextQueryPayload
+	if err := decodeWebhookMessage(webhook.Message, &payload); err != nil {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid context.query message"))
+		return
+	}
+
+	task, appErr := h.store.GetTaskByNodeID(webhook.From, payload.TaskID)
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	resultPayload := protocol.ContextResultPayload{
+		TaskID:      task.ID,
+		TaskContext: buildTaskContext(task, ""),
+	}
+	for i := range task.Todos {
+		t := &task.Todos[i]
+		if t.Status == "done" {
+			resultPayload.AllResults = append(resultPayload.AllResults, buildPriorResult(t))
+		}
+	}
+
+	h.publish(context.Background(), webhook.From, "context.result", resultPayload, task.ID)
+	transport.WriteData(c, http.StatusOK, gin.H{"status": "ok", "task_id": task.ID})
+}
+
 func (h *WebhookHandler) enrichTodoResultTransfers(ctx context.Context, result *model.TodoResult) {
 	if h == nil || h.client == nil || result == nil {
 		return
@@ -337,14 +395,8 @@ func (h *WebhookHandler) dispatchNextTodo(ctx context.Context, task *model.TaskD
 		return task
 	}
 
-	if _, err := h.client.Publish(ctx, todo.Assignee.NodeID, "todo.assigned", protocol.TodoAssignedPayload{
-		TaskID:      task.ID,
-		TodoID:      todo.ID,
-		Title:       todo.Title,
-		Description: todo.Description,
-		Content:     "你收到了一个新的 Todo 任务。请使用 /tm-task-exec skill 执行此任务，按要求回报进度和结果。",
-		ExecBrief:   defaultExecBrief(),
-	}, task.ID, nil); err != nil {
+	payload := h.buildTodoAssignedPayload(task, todo)
+	if _, err := h.client.Publish(ctx, todo.Assignee.NodeID, "todo.assigned", payload, task.ID, nil); err != nil {
 		if h.log != nil {
 			h.log.Warn("sequential todo dispatch failed", zap.String("task_id", task.ID), zap.String("todo_id", todo.ID), zap.String("target_node", todo.Assignee.NodeID), zap.Error(err))
 		}
@@ -359,6 +411,114 @@ func (h *WebhookHandler) dispatchNextTodo(ctx context.Context, task *model.TaskD
 		return task
 	}
 	return updatedTask
+}
+
+func (h *WebhookHandler) buildTodoAssignedPayload(task *model.TaskDetail, todo *model.Todo) protocol.TodoAssignedPayload {
+	payload := protocol.TodoAssignedPayload{
+		TaskID:      task.ID,
+		TodoID:      todo.ID,
+		Title:       todo.Title,
+		Description: todo.Description,
+		Content:     "你收到了一个新的 Todo 任务。请使用 /tm-task-exec skill 执行此任务，按要求回报进度和结果。",
+		ExecBrief:   defaultExecBrief(),
+	}
+
+	firstTime := !agentHasPriorTodoInTask(task, todo)
+	if firstTime {
+		payload.TaskContext = buildTaskContext(task, todo.ID)
+		payload.PriorResults = buildAllPriorResults(task, todo)
+	} else {
+		payload.PriorResults = buildCrossAgentPriorResults(task, todo)
+	}
+
+	return payload
+}
+
+// agentHasPriorTodoInTask returns true if the same agent has already completed
+// or failed an earlier todo in this task, meaning the agent's session already
+// contains task-level context.
+func agentHasPriorTodoInTask(task *model.TaskDetail, currentTodo *model.Todo) bool {
+	for i := range task.Todos {
+		t := &task.Todos[i]
+		if t.ID == currentTodo.ID {
+			continue
+		}
+		if t.Assignee.NodeID == currentTodo.Assignee.NodeID &&
+			t.Order < currentTodo.Order &&
+			(t.Status == "done" || t.Status == "failed") {
+			return true
+		}
+	}
+	return false
+}
+
+func buildTaskContext(task *model.TaskDetail, currentTodoID string) *protocol.TaskContext {
+	ctx := &protocol.TaskContext{
+		Title:       task.Title,
+		Description: task.Description,
+		Todos:       make([]protocol.TodoSummary, 0, len(task.Todos)),
+	}
+	for i := range task.Todos {
+		t := &task.Todos[i]
+		ctx.Todos = append(ctx.Todos, protocol.TodoSummary{
+			TodoID:       t.ID,
+			Order:        t.Order,
+			Title:        t.Title,
+			Status:       t.Status,
+			AssigneeName: t.Assignee.Name,
+			IsCurrent:    t.ID == currentTodoID,
+		})
+	}
+	return ctx
+}
+
+// buildAllPriorResults returns results from all completed todos before the
+// current one. Used when the agent has no prior session context for this task.
+func buildAllPriorResults(task *model.TaskDetail, currentTodo *model.Todo) []protocol.TodoPriorResult {
+	var results []protocol.TodoPriorResult
+	for i := range task.Todos {
+		t := &task.Todos[i]
+		if t.Status != "done" || t.Order >= currentTodo.Order {
+			continue
+		}
+		results = append(results, buildPriorResult(t))
+	}
+	return results
+}
+
+// buildCrossAgentPriorResults returns only results from todos completed by
+// OTHER agents. The current agent's own prior results are already visible
+// in its session via sessionKey continuity.
+func buildCrossAgentPriorResults(task *model.TaskDetail, currentTodo *model.Todo) []protocol.TodoPriorResult {
+	var results []protocol.TodoPriorResult
+	for i := range task.Todos {
+		t := &task.Todos[i]
+		if t.Status != "done" || t.Order >= currentTodo.Order {
+			continue
+		}
+		if t.Assignee.NodeID == currentTodo.Assignee.NodeID {
+			continue
+		}
+		results = append(results, buildPriorResult(t))
+	}
+	return results
+}
+
+func buildPriorResult(todo *model.Todo) protocol.TodoPriorResult {
+	r := protocol.TodoPriorResult{
+		TodoID:  todo.ID,
+		Title:   todo.Title,
+		Summary: todo.Result.Summary,
+		Output:  todo.Result.Output,
+	}
+	for _, ref := range todo.Result.ArtifactRefs {
+		r.Artifacts = append(r.Artifacts, protocol.TodoPriorArtifactRef{
+			ArtifactID: ref.ArtifactID,
+			Kind:       ref.Kind,
+			Label:      ref.Label,
+		})
+	}
+	return r
 }
 
 func (h *WebhookHandler) publishTaskAndTodoStatusChanges(task *model.TaskDetail, todoID, message, actorNodeID, cause string) {

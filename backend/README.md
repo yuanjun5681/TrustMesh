@@ -73,7 +73,7 @@ docker compose up -d --build
 
 - `MONGO_URI=mongodb://mongo:27017`
 - `CLAWSYNAPSE_API_URL=http://clawsynapse:18080`
-- `CLAWSYNAPSE_NODE_ID=trustmesh-server`
+- TrustMesh 本地节点身份通过 `GET /v1/health` 动态读取，不再单独配置 nodeId
 
 其中 `clawsynapse` 容器默认配置为：
 
@@ -127,7 +127,6 @@ docker compose up -d --build backend
 - `MONGO_DATABASE`，默认 `trustmesh`
 - `MONGO_TIMEOUT`，默认 `5s`
 - `CLAWSYNAPSE_API_URL`，默认 `http://127.0.0.1:18080`
-- `CLAWSYNAPSE_NODE_ID`，TrustMesh 节点的 ClawSynapse `nodeId`
 - `CLAWSYNAPSE_TIMEOUT`，默认 `3s`
 - `CLAWSYNAPSE_PEER_SYNC_INTERVAL`，默认 `10s`
 

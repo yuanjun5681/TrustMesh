@@ -1,0 +1,222 @@
+import { useState } from 'react'
+import { Copy, Check, X, Network, UserPlus, ClipboardCheck } from 'lucide-react'
+import { PageContainer } from '@/components/layout/PageContainer'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Avatar } from '@/components/ui/avatar'
+import { Input } from '@/components/ui/input'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { useInvitePrompt, useJoinRequests, useApproveJoinRequest, useRejectJoinRequest } from '@/hooks/useJoinRequests'
+import { ApiRequestError } from '@/api/client'
+import { toast } from 'sonner'
+import type { JoinRequest, AgentRole } from '@/types'
+
+const ROLE_LABELS: Record<string, string> = {
+  pm: 'PM',
+  developer: '开发者',
+  reviewer: '审核者',
+  custom: '自定义',
+}
+
+export function AgentInvitePage() {
+  const { data: invite, isLoading: promptLoading } = useInvitePrompt(true)
+  const { data: requests } = useJoinRequests('pending')
+  const approveRequest = useApproveJoinRequest()
+  const rejectRequest = useRejectJoinRequest()
+  const [copied, setCopied] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editRole, setEditRole] = useState<AgentRole>('developer')
+  const [editDescription, setEditDescription] = useState('')
+
+  const handleCopy = async () => {
+    if (!invite?.prompt) return
+    try {
+      await navigator.clipboard.writeText(invite.prompt)
+      setCopied(true)
+      toast.success('提示词已复制到剪贴板')
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      toast.error('复制失败，请手动选择复制')
+    }
+  }
+
+  const startEdit = (jr: JoinRequest) => {
+    setEditingId(jr.id)
+    setEditName(jr.name)
+    setEditRole(jr.role)
+    setEditDescription(jr.description)
+  }
+
+  const handleApprove = async (jr: JoinRequest) => {
+    try {
+      const overrides = editingId === jr.id
+        ? { name: editName, role: editRole, description: editDescription }
+        : undefined
+      await approveRequest.mutateAsync({ id: jr.id, overrides })
+      toast.success(`已批准 Agent「${overrides?.name || jr.name}」加入`)
+      setEditingId(null)
+    } catch (err) {
+      toast.error(err instanceof ApiRequestError ? err.message : '批准失败')
+    }
+  }
+
+  const handleReject = async (jr: JoinRequest) => {
+    try {
+      await rejectRequest.mutateAsync(jr.id)
+      toast.success(`已拒绝 Agent「${jr.name}」的申请`)
+    } catch (err) {
+      toast.error(err instanceof ApiRequestError ? err.message : '拒绝失败')
+    }
+  }
+
+  const pendingCount = requests?.length ?? 0
+
+  return (
+    <PageContainer className="h-full">
+      <div className="flex h-full gap-6">
+        {/* Left: Invite Prompt */}
+        <div className="flex flex-col w-1/2 min-w-0">
+          <div className="flex items-center gap-2 mb-4">
+            <UserPlus className="size-5 text-muted-foreground" />
+            <h2 className="text-lg font-semibold">邀请智能体</h2>
+          </div>
+          <p className="text-sm text-muted-foreground mb-3">
+            复制以下提示词并发送给 Agent，Agent 将自动发起加入申请。
+          </p>
+          {promptLoading ? (
+            <div className="flex-1 rounded-lg bg-muted animate-pulse" />
+          ) : (
+            <div className="relative flex-1 min-h-0">
+              <pre className="h-full rounded-lg bg-muted p-4 text-sm leading-relaxed overflow-auto whitespace-pre-wrap">
+                {invite?.prompt}
+              </pre>
+              <Button
+                size="sm"
+                variant="outline"
+                className="absolute top-2 right-2"
+                onClick={handleCopy}
+              >
+                {copied ? <Check className="size-4 mr-1" /> : <Copy className="size-4 mr-1" />}
+                {copied ? '已复制' : '复制'}
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* Right: Pending Requests */}
+        <div className="flex flex-col w-1/2 min-w-0">
+          <div className="flex items-center gap-2 mb-4">
+            <ClipboardCheck className="size-5 text-muted-foreground" />
+            <h2 className="text-lg font-semibold">审批请求</h2>
+            {pendingCount > 0 && (
+              <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                {pendingCount}
+              </Badge>
+            )}
+          </div>
+
+          {pendingCount === 0 ? (
+            <div className="flex-1 flex items-center justify-center rounded-lg border border-dashed">
+              <p className="text-sm text-muted-foreground">暂无待审批的请求</p>
+            </div>
+          ) : (
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-3">
+              {requests!.map((jr) => (
+                <div key={jr.id} className="rounded-lg border p-4 space-y-3">
+                  {editingId === jr.id ? (
+                    <div className="space-y-2">
+                      <Input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        placeholder="Agent 名称"
+                      />
+                      <Select value={editRole} onValueChange={(v) => setEditRole(v as AgentRole)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pm">PM</SelectItem>
+                          <SelectItem value="developer">开发者</SelectItem>
+                          <SelectItem value="reviewer">审核者</SelectItem>
+                          <SelectItem value="custom">自定义</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        value={editDescription}
+                        onChange={(e) => setEditDescription(e.target.value)}
+                        placeholder="描述"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex gap-3">
+                      <Avatar
+                        fallback={jr.name}
+                        seed={jr.node_id}
+                        kind="agent"
+                        role={jr.role}
+                        size="lg"
+                        className="shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-base">{jr.name}</span>
+                          <Badge variant="outline">{ROLE_LABELS[jr.role] ?? jr.role}</Badge>
+                          {jr.agent_product && (
+                            <Badge variant="secondary">{jr.agent_product}</Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1.5 line-clamp-2">
+                          {jr.description || '无描述'}
+                        </p>
+                        <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                          <span className="inline-flex items-center gap-1">
+                            <Network className="size-3" />
+                            {jr.node_id}
+                          </span>
+                          {jr.capabilities?.length > 0 && (
+                            <span>能力: {jr.capabilities.join(', ')}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-end gap-2 pt-1 border-t">
+                    {editingId === jr.id ? (
+                      <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
+                        取消
+                      </Button>
+                    ) : (
+                      <Button size="sm" variant="ghost" onClick={() => startEdit(jr)}>
+                        编辑
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-red-600 hover:text-red-700"
+                      onClick={() => handleReject(jr)}
+                      disabled={rejectRequest.isPending}
+                    >
+                      <X className="size-4 mr-1" />
+                      拒绝
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleApprove(jr)}
+                      disabled={approveRequest.isPending}
+                    >
+                      <Check className="size-4 mr-1" />
+                      批准
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </PageContainer>
+  )
+}

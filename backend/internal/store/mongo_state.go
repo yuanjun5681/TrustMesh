@@ -209,14 +209,15 @@ func (s *Store) loadMongoState() error {
 	if err != nil {
 		return err
 	}
-
 	usersByMail := make(map[string]string, len(users))
 	for id, user := range users {
 		usersByMail[user.Email] = id
 	}
 	agentByNode := make(map[string]string, len(agents))
 	for id, agent := range agents {
-		agentByNode[agent.NodeID] = id
+		if !agent.Archived {
+			agentByNode[agent.NodeID] = id
+		}
 	}
 
 	s.mu.Lock()
@@ -726,3 +727,4 @@ func (s *Store) persistKnowledgeChunksUnsafe(chunks []model.KnowledgeChunk) erro
 	_, err := s.mongoKnowledgeChunks.InsertMany(ctx, docs)
 	return err
 }
+

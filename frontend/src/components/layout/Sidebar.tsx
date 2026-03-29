@@ -1,4 +1,4 @@
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import {
   FolderKanban,
   Plus,
@@ -19,10 +19,10 @@ import { Separator } from '@/components/ui/separator'
 import { Avatar } from '@/components/ui/avatar'
 import { AgentStatusIcon, ProjectWorkStatusDot } from '@/components/shared/StatusBadge'
 import { TrustMeshLogo } from '@/components/shared/TrustMeshLogo'
-import { AgentConfigDialog } from '@/components/agent/AgentConfigDialog'
 import { useProjects } from '@/hooks/useProjects'
 import { useAgents } from '@/hooks/useAgents'
 import { useUnreadCount } from '@/hooks/useNotifications'
+import { useJoinRequests } from '@/hooks/useJoinRequests'
 import { useAuthStore } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
 import { useState, useEffect } from 'react'
@@ -67,17 +67,16 @@ function ProjectSidebarStatus({ status }: { status: ProjectWorkStatus }) {
 
 export function Sidebar({ onCreateProject }: SidebarProps) {
   const location = useLocation()
-  const navigate = useNavigate()
   const { projectId } = useParams()
   const { data: projects } = useProjects()
   const { data: agents } = useAgents()
   const { data: unreadCount } = useUnreadCount()
+  const { data: pendingRequests } = useJoinRequests('pending')
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
   const { setTheme, resolvedTheme } = useThemeStore()
   const isDark = resolvedTheme() === 'dark'
   const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 1280px)').matches)
-  const [addAgentOpen, setAddAgentOpen] = useState(false)
 
   useEffect(() => {
     const mql = window.matchMedia('(max-width: 1280px)')
@@ -248,18 +247,28 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
             </Link>
           ))}
 
-          <button
-            onClick={() => setAddAgentOpen(true)}
-            className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          <Link
+            to="/agent-invite"
+            className={cn(
+              'relative flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+              isActive('/agent-invite') && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+            )}
           >
             <Plus className="size-4 shrink-0" />
-            {!collapsed && <span>添加智能体</span>}
-          </button>
-          <AgentConfigDialog
-            open={addAgentOpen}
-            onOpenChange={setAddAgentOpen}
-            onCreated={(id) => navigate(`/agents/${id}`)}
-          />
+            {!collapsed && (
+              <>
+                <span>加入智能体</span>
+                {pendingRequests && pendingRequests.length > 0 && (
+                  <span className="ml-auto text-xs bg-amber-500 text-white rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
+                    {pendingRequests.length}
+                  </span>
+                )}
+              </>
+            )}
+            {collapsed && pendingRequests && pendingRequests.length > 0 && (
+              <span className="absolute right-1 top-0.5 size-2 rounded-full bg-amber-500" />
+            )}
+          </Link>
         </div>
       </ScrollArea>
 

@@ -69,6 +69,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           case 'conversation.updated':
             applyConversationUpdated(queryClient, event.payload)
             break
+          case 'join_request.created':
+            void queryClient.invalidateQueries({ queryKey: ['join-requests'] })
+            break
         }
       },
     })

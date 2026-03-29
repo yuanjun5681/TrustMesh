@@ -95,12 +95,50 @@ type TodoExecBrief struct {
 }
 
 type TodoAssignedPayload struct {
-	TaskID      string         `json:"task_id"`
-	TodoID      string         `json:"todo_id"`
-	Title       string         `json:"title"`
-	Description string         `json:"description"`
-	Content     string         `json:"content"`
-	ExecBrief   *TodoExecBrief `json:"exec_brief,omitempty"`
+	TaskID       string             `json:"task_id"`
+	TodoID       string             `json:"todo_id"`
+	Title        string             `json:"title"`
+	Description  string             `json:"description"`
+	Content      string             `json:"content"`
+	ExecBrief    *TodoExecBrief     `json:"exec_brief,omitempty"`
+	TaskContext  *TaskContext        `json:"task_context,omitempty"`
+	PriorResults []TodoPriorResult  `json:"prior_results,omitempty"`
+}
+
+// TaskContext provides task-level context for the assigned agent.
+// Included only on the agent's first todo in a task; omitted for subsequent
+// todos where the session already contains this information.
+type TaskContext struct {
+	Title       string        `json:"title"`
+	Description string        `json:"description"`
+	Todos       []TodoSummary `json:"todos"`
+}
+
+type TodoSummary struct {
+	TodoID       string `json:"todo_id"`
+	Order        int    `json:"order"`
+	Title        string `json:"title"`
+	Status       string `json:"status"`
+	AssigneeName string `json:"assignee_name"`
+	IsCurrent    bool   `json:"is_current,omitempty"`
+}
+
+// TodoPriorResult carries the result of a previously completed todo.
+// For first-time agents: all prior results are included.
+// For returning agents: only cross-agent results (work done by other agents
+// that this agent hasn't seen in the current session).
+type TodoPriorResult struct {
+	TodoID    string                      `json:"todo_id"`
+	Title     string                      `json:"title"`
+	Summary   string                      `json:"summary"`
+	Output    string                      `json:"output,omitempty"`
+	Artifacts []TodoPriorArtifactRef      `json:"artifacts,omitempty"`
+}
+
+type TodoPriorArtifactRef struct {
+	ArtifactID string `json:"artifact_id"`
+	Kind       string `json:"kind"`
+	Label      string `json:"label"`
 }
 
 type TodoStatusChangedPayload struct {
@@ -139,6 +177,18 @@ type KnowledgeResultItem struct {
 	Score         float64        `json:"score"`
 	ChunkIndex    int            `json:"chunk_index"`
 	Metadata      map[string]any `json:"metadata,omitempty"`
+}
+
+// context.query — Agent requests task context on demand
+type ContextQueryPayload struct {
+	TaskID string `json:"task_id"`
+}
+
+// context.result — TrustMesh responds with full task context snapshot
+type ContextResultPayload struct {
+	TaskID       string            `json:"task_id"`
+	TaskContext  *TaskContext       `json:"task_context"`
+	AllResults   []TodoPriorResult `json:"all_results,omitempty"`
 }
 
 type PMConversationProject struct {

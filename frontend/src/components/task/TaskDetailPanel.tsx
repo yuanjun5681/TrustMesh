@@ -1,7 +1,6 @@
-import { X, MessageSquare } from 'lucide-react'
+import { X, MessageSquare, PackageCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/StatusBadge'
 import { TaskFeed } from './TaskFeed'
 import { TaskResultView } from './TaskResult'
@@ -9,6 +8,7 @@ import { TaskDescription } from './TaskDescription'
 import { TaskCommentComposer, type TaskCommentSubmitInput, type TaskMentionCandidate } from './TaskCommentComposer'
 import { CancelTaskDialog } from './CancelTaskDialog'
 import { ConversationSheet } from '@/components/conversation/ConversationSheet'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useTask, useAddTaskComment } from '@/hooks/useTasks'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ApiRequestError } from '@/api/client'
@@ -54,8 +54,8 @@ function buildTaskMentionCandidates(task: TaskDetail | undefined): TaskMentionCa
 
 export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
   const { data: task } = useTask(taskId)
-  const [tab, setTab] = useState('feed')
   const [chatOpen, setChatOpen] = useState(false)
+  const [resultOpen, setResultOpen] = useState(false)
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   const addComment = useAddTaskComment()
   const canCancelTask = task?.status === 'pending' || task?.status === 'in_progress'
@@ -105,6 +105,9 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
           >
             终止任务
           </Button>
+          <Button variant="ghost" size="icon" className="size-7" onClick={() => setResultOpen(true)} title="查看交付成果">
+            <PackageCheck className="size-4" />
+          </Button>
           <Button variant="ghost" size="icon" className="size-7" onClick={() => setChatOpen(true)} title="查看关联对话">
             <MessageSquare className="size-4" />
           </Button>
@@ -127,25 +130,10 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
         )}
       </div>
 
-      {/* Tabs */}
-      <Tabs value={tab} onValueChange={setTab} className="flex flex-col flex-1 min-h-0">
-        <TabsList className="mx-5 mt-3 shrink-0">
-          <TabsTrigger value="feed">动态</TabsTrigger>
-          <TabsTrigger value="result">交付成果</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="feed" className="flex-1 min-h-0 mt-0">
-          <TaskFeed taskId={task.id} />
-        </TabsContent>
-
-        <TabsContent value="result" className="flex-1 min-h-0 mt-0">
-          <ScrollArea className="h-full">
-            <div className="px-5 py-3">
-              <TaskResultView taskId={task.id} result={task.result} artifacts={task.artifacts} />
-            </div>
-          </ScrollArea>
-        </TabsContent>
-      </Tabs>
+      {/* Feed */}
+      <div className="flex-1 min-h-0">
+        <TaskFeed taskId={task.id} />
+      </div>
 
       {/* Comment input */}
       <div className="border-t px-4 py-3 shrink-0">
@@ -156,6 +144,18 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
         />
       </div>
 
+      <Sheet open={resultOpen} onOpenChange={setResultOpen}>
+        <SheetContent className="w-full max-w-2xl! p-0">
+          <SheetHeader className="px-4 py-3 border-b">
+            <SheetTitle>交付成果</SheetTitle>
+          </SheetHeader>
+          <ScrollArea className="flex-1 min-h-0">
+            <div className="p-4">
+              <TaskResultView taskId={task.id} result={task.result} artifacts={task.artifacts} />
+            </div>
+          </ScrollArea>
+        </SheetContent>
+      </Sheet>
       <ConversationSheet
         projectId={task.project_id}
         initialConversationId={task.conversation_id}

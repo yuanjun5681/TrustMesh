@@ -42,6 +42,10 @@ type Store struct {
 	notifications     map[string]*model.Notification
 	userNotifications map[string][]string
 
+	joinRequests      map[string]*model.JoinRequest // joinRequestID → JoinRequest
+	userJoinRequests  map[string][]string           // userID → []joinRequestID
+	trustRequestIndex map[string]string             // trustRequestID → joinRequestID
+
 	knowledgeDocs     map[string]*model.KnowledgeDocument
 	userKnowledgeDocs map[string][]string // userID → []docID
 
@@ -93,6 +97,9 @@ func New() *Store {
 		taskComments:         make(map[string][]model.Comment),
 		notifications:        make(map[string]*model.Notification),
 		userNotifications:    make(map[string][]string),
+		joinRequests:         make(map[string]*model.JoinRequest),
+		userJoinRequests:     make(map[string][]string),
+		trustRequestIndex:    make(map[string]string),
 		knowledgeDocs:        make(map[string]*model.KnowledgeDocument),
 		userKnowledgeDocs:    make(map[string][]string),
 		userSubscribers:      make(map[string]map[chan model.UserStreamEvent]struct{}),

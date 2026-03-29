@@ -61,11 +61,52 @@ allowed-tools:
 ```json
 {
   "task_id": "task_123",
-  "todo_id": "todo_1",
+  "todo_id": "todo_2",
   "title": "实现后端登录接口",
-  "description": "完成邮箱密码登录 API"
+  "description": "完成邮箱密码登录 API",
+  "task_context": {
+    "title": "用户认证模块重构",
+    "description": "将现有 session 认证迁移到 JWT 方案",
+    "todos": [
+      { "todo_id": "todo_1", "order": 1, "title": "设计认证流程", "status": "done", "assignee_name": "Architect" },
+      { "todo_id": "todo_2", "order": 2, "title": "实现后端登录接口", "status": "pending", "assignee_name": "CodeAgent", "is_current": true },
+      { "todo_id": "todo_3", "order": 3, "title": "编写集成测试", "status": "pending", "assignee_name": "Tester" }
+    ]
+  },
+  "prior_results": [
+    {
+      "todo_id": "todo_1",
+      "title": "设计认证流程",
+      "summary": "采用 RS256 + refresh token，access token 15min 过期",
+      "output": "详细设计内容...",
+      "artifacts": [
+        { "artifact_id": "tf_abc", "kind": "file", "label": "认证设计文档" }
+      ]
+    }
+  ]
 }
 ```
+
+**字段说明：**
+- `task_context`：任务全局上下文。仅在你**首次参与此任务**时包含；如果你之前已完成过该任务的其他 Todo（同一 session），此字段省略（因为你的会话中已有这些信息）。
+- `prior_results`：前序 Todo 的执行结果。首次参与时包含所有前序结果；再次参与时仅包含**其他 Agent** 完成的结果（你自己做过的结果已在会话中）。
+- `prior_results[].artifacts`：前序 Todo 的交付物引用。如需下载文件，使用 `clawsynapse transfer get --id <artifact_id>`。
+
+### context.query（按需拉取任务上下文）
+
+如果执行过程中需要了解任务最新状态（如其他 Todo 的最新结果、新增的交付物），可以主动查询：
+
+```bash
+payload="$(jq -nc --arg task_id "$TASK_ID" '{task_id: $task_id}')"
+
+clawsynapse publish \
+  --target "$TARGET_NODE" \
+  --type context.query \
+  --session-key "$SESSION_KEY" \
+  --message "$payload"
+```
+
+TrustMesh 会回复 `context.result`，包含完整的任务快照（task_context + 所有已完成 Todo 的结果）。
 
 ### todo.status_changed payload（状态通知）
 
@@ -403,7 +444,7 @@ clawsynapse --json publish \
 ## 四、Guardrails
 
 - **永远不要用你自己的 node ID 作为 `--target`。** target 是 TrustMesh 节点（incoming `from`）。
-- **不要发送 `conversation.reply`、`task.create`。** 这些是 PM Agent 的消息类型，不是执行 Agent 的。你只能发送 `todo.progress`、`todo.complete`、`todo.fail`、`task.comment` 四种消息类型。
+- **不要发送 `conversation.reply`、`task.create`。** 这些是 PM Agent 的消息类型，不是执行 Agent 的。你只能发送 `todo.progress`、`todo.complete`、`todo.fail`、`task.comment`、`context.query` 五种消息类型。
 - **Todo 终态不可逆。** 已经 `done` 或 `failed` 的 Todo 不能再更新，服务端会拒绝（`TODO_ALREADY_DONE` / `TODO_ALREADY_FAILED`）。
 - **不要把 `task.comment` 当成可选项。** 对执行 Agent 来说，它是默认工作日志；长时间无 comment 视为过程缺失。
 - **不要等整理完再发 comment。** comment 可以是草稿、短句、阶段性判断；过度记录优于缺失记录。
@@ -436,5 +477,5 @@ clawsynapse --json peers
 ## 七、重要提示
 
 - 不要运行 `clawsynapsed`，它由系统管理。
-- 你只能发送 `todo.progress`、`todo.complete`、`todo.fail`、`task.comment` 四种消息类型。
+- 你只能发送 `todo.progress`、`todo.complete`、`todo.fail`、`task.comment`、`context.query` 五种消息类型。
 - 任务规划和对话回复由 PM Agent 负责，不需要你介入。

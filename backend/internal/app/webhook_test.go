@@ -27,6 +27,9 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 
 	clawServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/v1/health":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(clawsynapseHealthResponse(t, "n1-local-trustmesh")))
 		case "/v1/peers":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(clawsynapsePeersResponse(t, "node-pm-001", "node-dev-001")))
@@ -59,7 +62,6 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 		AllowAllCORS:       true,
 		ReadTimeout:        3 * time.Second,
 		ShutdownGrace:      3 * time.Second,
-		ClawSynapseNodeID:  "trustmesh-server",
 		ClawSynapseAPIURL:  clawServer.URL,
 		ClawSynapseTimeout: time.Second,
 	}, log)
@@ -148,7 +150,7 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 	}
 
 	webhookResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/webhook/clawsynapse", "", map[string]any{
-		"nodeId":  "trustmesh-server",
+		"nodeId":  "n1-local-trustmesh",
 		"type":    "task.create",
 		"from":    "node-pm-001",
 		"message": string(taskCreateMessage),
@@ -207,7 +209,7 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 	}
 
 	completeResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/webhook/clawsynapse", "", map[string]any{
-		"nodeId":  "trustmesh-server",
+		"nodeId":  "n1-local-trustmesh",
 		"type":    "todo.complete",
 		"from":    "node-dev-001",
 		"message": string(todoCompleteMessage),
@@ -290,5 +292,63 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 	}
 	if metadata["local_path"] != "/tmp/login-guide.md" {
 		t.Fatalf("expected local_path to be persisted, got %#v", metadata["local_path"])
+	}
+}
+
+func TestWebhookRejectsMismatchedLocalNodeID(t *testing.T) {
+	log, err := logger.New("error")
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	defer func() { _ = log.Sync() }()
+
+	clawServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/health":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(clawsynapseHealthResponse(t, "n1-actual-local-node")))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer clawServer.Close()
+
+	application, err := New(config.Config{
+		Port:               "0",
+		JWTSecret:          "test-secret",
+		AccessTokenTTL:     time.Hour,
+		RefreshTokenTTL:    168 * time.Hour,
+		LogLevel:           "error",
+		AllowAllCORS:       true,
+		ReadTimeout:        3 * time.Second,
+		ShutdownGrace:      3 * time.Second,
+		ClawSynapseAPIURL:  clawServer.URL,
+		ClawSynapseTimeout: time.Second,
+	}, log)
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
+	defer func() {
+		if closeErr := application.Close(); closeErr != nil {
+			t.Fatalf("close app: %v", closeErr)
+		}
+	}()
+
+	testServer := httptest.NewServer(application.Engine)
+	defer testServer.Close()
+
+	resp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/webhook/clawsynapse", "", map[string]any{
+		"nodeId":  "n1-stale-node-id",
+		"type":    "todo.progress",
+		"from":    "node-dev-001",
+		"message": `{"task_id":"task-1","todo_id":"todo-1","message":"working"}`,
+	})
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("webhook mismatch status=%d", resp.StatusCode)
+	}
+
+	body := decodeBody(t, resp)
+	if nestedString(body, "error", "details", "nodeId") != "does not match local node" {
+		t.Fatalf("unexpected mismatch error: %#v", body)
 	}
 }

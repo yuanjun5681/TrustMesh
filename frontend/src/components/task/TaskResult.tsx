@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Download, ExternalLink, FileBarChart, FileCode, FileText, Link as LinkIcon, Loader2, type LucideIcon } from 'lucide-react'
+import { Download, Eye, FileBarChart, FileCode, FileText, Link as LinkIcon, Loader2, type LucideIcon } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { toast } from 'sonner'
+import { FileViewer } from '@/components/task/FileViewer'
 import type { TaskResult, TaskArtifact, TransferDetail } from '@/types'
 
 const kindIcons: Record<string, LucideIcon> = {
@@ -53,19 +54,23 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
   const [loadingArtifactId, setLoadingArtifactId] = useState<string | null>(null)
   const [downloadingArtifactId, setDownloadingArtifactId] = useState<string | null>(null)
   const [transferErrors, setTransferErrors] = useState<Record<string, string>>({})
+  const [viewerBlob, setViewerBlob] = useState<Blob | null>(null)
+  const [viewerFileName, setViewerFileName] = useState('')
+  const [viewerOpen, setViewerOpen] = useState(false)
 
   if (!hasResult && !hasArtifacts) {
     return <p className="py-8 text-center text-sm text-muted-foreground">任务尚未产出结果</p>
   }
 
-  const handleOpenTransfer = async (artifact: TaskArtifact) => {
+  const handlePreview = async (artifact: TaskArtifact) => {
     setLoadingArtifactId(artifact.id)
     setTransferErrors((current) => ({ ...current, [artifact.id]: '' }))
     try {
       const fileBlob = await getTaskArtifactContent(taskId, artifact.id)
-      const objectURL = URL.createObjectURL(fileBlob)
-      window.open(objectURL, '_blank', 'noopener,noreferrer')
-      window.setTimeout(() => URL.revokeObjectURL(objectURL), 60_000)
+      const fileName = artifactFileName(artifact) || artifact.title || artifact.id
+      setViewerBlob(fileBlob)
+      setViewerFileName(fileName)
+      setViewerOpen(true)
     } catch (err) {
       const message = err instanceof ApiRequestError ? err.message : '打开文件失败'
       toast.error(message)
@@ -88,6 +93,12 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
       setTransferErrors((current) => ({ ...current, [artifact.id]: message }))
     } finally {
       setDownloadingArtifactId(null)
+    }
+  }
+
+  const handleViewerDownload = () => {
+    if (viewerBlob && viewerFileName) {
+      downloadBlob(viewerBlob, viewerFileName)
     }
   }
 
@@ -160,7 +171,7 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
                           variant="outline"
                           size="sm"
                           disabled={loadingArtifactId === artifact.id}
-                          onClick={() => void handleOpenTransfer(artifact)}
+                          onClick={() => void handlePreview(artifact)}
                         >
                           {loadingArtifactId === artifact.id ? (
                             <>
@@ -169,8 +180,8 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
                             </>
                           ) : (
                             <>
-                              <ExternalLink className="size-3.5" />
-                              打开文件
+                              <Eye className="size-3.5" />
+                              预览
                             </>
                           )}
                         </Button>
@@ -207,6 +218,14 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
           </div>
         </div>
       )}
+
+      <FileViewer
+        open={viewerOpen}
+        onOpenChange={setViewerOpen}
+        blob={viewerBlob}
+        fileName={viewerFileName}
+        onDownload={handleViewerDownload}
+      />
     </div>
   )
 }

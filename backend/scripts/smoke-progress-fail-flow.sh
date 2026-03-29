@@ -4,7 +4,7 @@ set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8080/api/v1}"
 WEBHOOK_URL="${WEBHOOK_URL:-http://127.0.0.1:8080/webhook/clawsynapse}"
-CLAWSYNAPSE_NODE_ID="${CLAWSYNAPSE_NODE_ID:-trustmesh-server}"
+CLAWSYNAPSE_API_URL="${CLAWSYNAPSE_API_URL:-http://127.0.0.1:18080}"
 SUFFIX="$(date +%s)"
 
 require() {
@@ -38,7 +38,7 @@ publish() {
   local msg_type="$domain.$action"
   local webhook_payload
   webhook_payload="$(jq -nc \
-    --arg nodeId "$CLAWSYNAPSE_NODE_ID" \
+    --arg nodeId "$LOCAL_NODE_ID" \
     --arg type "$msg_type" \
     --arg from "$node_id" \
     --arg message "$payload" \
@@ -61,9 +61,11 @@ assert_json() {
 require curl
 require jq
 
+LOCAL_NODE_ID="$(curl -sS "$CLAWSYNAPSE_API_URL/v1/health" | jq -er '.data.self.nodeId')"
+
 register_payload="$(jq -nc --arg email "smoke-progress-fail-$SUFFIX@example.com" '{email:$email,name:"Smoke User",password:"secret123"}')"
 register_resp="$(api POST /auth/register "" "$register_payload")"
-token="$(printf '%s' "$register_resp" | jq -r '.data.token')"
+token="$(printf '%s' "$register_resp" | jq -r '.data.access_token')"
 
 pm_node_id="node-pm-progress-fail-$SUFFIX"
 dev_node_id="node-dev-progress-fail-$SUFFIX"

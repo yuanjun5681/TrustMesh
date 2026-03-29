@@ -6,9 +6,9 @@ import { LoginPage } from '@/pages/LoginPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { ProjectListPage } from '@/pages/ProjectListPage'
 import { ProjectBoardPage } from '@/pages/ProjectBoardPage'
-import { AgentListPage } from '@/pages/AgentListPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { AgentDetailPage } from '@/pages/AgentDetailPage'
+import { AgentInvitePage } from '@/pages/AgentInvitePage'
 import { InboxPage } from '@/pages/InboxPage'
 import { KnowledgePage } from '@/pages/KnowledgePage'
 import { useAuthStore } from '@/stores/authStore'
@@ -88,7 +88,7 @@ export default function App() {
               <Route path="/inbox" element={<InboxPage />} />
               <Route path="/projects" element={<ProjectListPage />} />
               <Route path="/projects/:projectId" element={<ProjectBoardPage />} />
-              <Route path="/agents" element={<AgentListPage />} />
+              <Route path="/agent-invite" element={<AgentInvitePage />} />
               <Route path="/agents/:id" element={<AgentDetailPage />} />
               <Route path="/knowledge" element={<KnowledgePage />} />
             </Route>
