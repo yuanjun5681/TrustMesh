@@ -13,7 +13,7 @@ import { useAgentInsights } from '@/hooks/useAgentInsights'
 import { useAgentEvents } from '@/hooks/useDashboard'
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { ApiRequestError } from '@/api/client'
-import { formatRelativeTime } from '@/lib/utils'
+import { formatRelativeTime, truncateNodeId } from '@/lib/utils'
 import { useCallback, useRef, useState } from 'react'
 import {
   AgentMetricCards,
@@ -27,11 +27,6 @@ import { ArchiveAgentDialog } from '@/components/agent/ArchiveAgentDialog'
 import { CreateTaskDialog } from '@/components/task/CreateTaskDialog'
 import { Avatar } from '@/components/ui/avatar'
 import type { EventType } from '@/types'
-
-function truncateNodeId(str: string, front = 6, back = 4) {
-  if (str.length <= front + back + 3) return str
-  return str.slice(0, front) + '...' + str.slice(-back)
-}
 
 function CopyIcon({ value }: { value: string }) {
   const { copied, copy } = useCopyToClipboard()

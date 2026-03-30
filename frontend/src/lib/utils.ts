@@ -21,6 +21,11 @@ export function formatRelativeTime(dateStr: string): string {
   return date.toLocaleDateString('zh-CN')
 }
 
+export function truncateNodeId(str: string, front = 6, back = 4) {
+  if (str.length <= front + back + 3) return str
+  return str.slice(0, front) + '...' + str.slice(-back)
+}
+
 export function formatDateTime(dateStr: string): string {
   return new Date(dateStr).toLocaleString('zh-CN', {
     year: 'numeric',

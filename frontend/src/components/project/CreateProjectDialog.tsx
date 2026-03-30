@@ -4,6 +4,7 @@ import { useCreateProject } from '@/hooks/useProjects'
 import { useAgents } from '@/hooks/useAgents'
 import { ApiRequestError } from '@/api/client'
 import { toast } from 'sonner'
+import { truncateNodeId } from '@/lib/utils'
 import { ProjectDialog } from '@/components/project/ProjectDialog'
 
 interface Props {
@@ -64,16 +65,16 @@ export function CreateProjectDialog({ open, onOpenChange }: Props) {
         <label className="text-sm font-medium">PM Agent</label>
         <Select value={pmAgentId} onValueChange={(val) => setPmAgentId(val ?? '')}>
           <SelectTrigger className="w-full">
-            <span>
+            <span className="truncate">
               {selectedAgent
-                ? `${selectedAgent.name} (${selectedAgent.node_id}) - ${selectedAgent.status === 'online' ? '在线' : '离线'}`
+                ? `${selectedAgent.name} (${truncateNodeId(selectedAgent.node_id)}) - ${selectedAgent.status === 'online' ? '在线' : '离线'}`
                 : '选择 PM Agent...'}
             </span>
           </SelectTrigger>
           <SelectContent>
             {pmAgents.map((agent) => (
               <SelectItem key={agent.id} value={agent.id}>
-                {agent.name} ({agent.node_id}) - {agent.status === 'online' ? '在线' : '离线'}
+                {agent.name} ({truncateNodeId(agent.node_id)}) - {agent.status === 'online' ? '在线' : '离线'}
               </SelectItem>
             ))}
           </SelectContent>
