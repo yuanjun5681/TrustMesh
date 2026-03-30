@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Copy, Check, X, Network, UserPlus, ClipboardCheck } from 'lucide-react'
+import { useState, useCallback, useRef } from 'react'
+import { Copy, Check, X, Network, UserPlus, ClipboardCheck, Wrench } from 'lucide-react'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -11,6 +11,51 @@ import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { ApiRequestError } from '@/api/client'
 import { toast } from 'sonner'
 import type { JoinRequest, AgentRole } from '@/types'
+
+function useMultiCopy(resetDelay = 2000) {
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  const copy = useCallback(
+    async (key: string, text: string) => {
+      try {
+        await navigator.clipboard.writeText(text)
+        setCopiedKey(key)
+        clearTimeout(timerRef.current)
+        timerRef.current = setTimeout(() => setCopiedKey(null), resetDelay)
+        toast.success('指令已复制到剪贴板')
+        return true
+      } catch {
+        toast.error('复制失败，请手动选择复制')
+        return false
+      }
+    },
+    [resetDelay],
+  )
+
+  return { copiedKey, copy }
+}
+
+const SKILL_INSTRUCTIONS = [
+  {
+    key: 'tm-task-plan',
+    title: 'PM 任务规划 Skill',
+    description: '适用于 PM Agent，提供需求澄清、任务规划、任务创建的完整工作流。',
+    prompt: `请创建或更新 Skill「tm-task-plan」。
+
+从以下地址获取完整内容并安装为本地 Skill：
+https://github.com/yuanjun5681/TrustMesh/blob/main/skills/tm-task-plan/SKILL.md`,
+  },
+  {
+    key: 'tm-task-exec',
+    title: '执行 Agent 任务执行 Skill',
+    description: '适用于执行 Agent，提供 Todo 接收、进度回报、结果交付的完整工作流。',
+    prompt: `请创建或更新 Skill「tm-task-exec」。
+
+从以下地址获取完整内容并安装为本地 Skill：
+https://github.com/yuanjun5681/TrustMesh/blob/main/skills/tm-task-exec/SKILL.md`,
+  },
+] as const
 
 const ROLE_LABELS: Record<string, string> = {
   pm: 'PM',
@@ -25,6 +70,7 @@ export function AgentInvitePage() {
   const approveRequest = useApproveJoinRequest()
   const rejectRequest = useRejectJoinRequest()
   const { copied, copy } = useCopyToClipboard(2000)
+  const { copiedKey, copy: copySkill } = useMultiCopy()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editRole, setEditRole] = useState<AgentRole>('developer')
@@ -72,35 +118,75 @@ export function AgentInvitePage() {
   const pendingCount = requests?.length ?? 0
 
   return (
-    <PageContainer className="h-full">
-      <div className="flex h-full gap-6">
-        {/* Left: Invite Prompt */}
-        <div className="flex flex-col w-1/2 min-w-0">
-          <div className="flex items-center gap-2 mb-4">
-            <UserPlus className="size-5 text-muted-foreground" />
-            <h2 className="text-lg font-semibold">招聘智能体</h2>
-          </div>
-          <p className="text-sm text-muted-foreground mb-3">
-            复制以下提示词并发送给 Agent，Agent 将自动发起入职申请。
-          </p>
-          {promptLoading ? (
-            <div className="flex-1 rounded-lg bg-muted animate-pulse" />
-          ) : (
-            <div className="relative flex-1 min-h-0">
-              <pre className="h-full rounded-lg bg-muted p-4 text-sm leading-relaxed overflow-auto whitespace-pre-wrap">
-                {invite?.prompt}
-              </pre>
-              <Button
-                size="sm"
-                variant="outline"
-                className="absolute top-2 right-2"
-                onClick={handleCopy}
-              >
-                {copied ? <Check className="size-4 mr-1" /> : <Copy className="size-4 mr-1" />}
-                {copied ? '已复制' : '复制'}
-              </Button>
+    <PageContainer className="h-full overflow-hidden">
+      <div className="flex h-full gap-6 min-h-0">
+        {/* Left: Invite Prompt + Skill Instructions */}
+        <div className="w-1/2 min-w-0 overflow-y-auto space-y-6">
+          {/* Invite Prompt */}
+          <div className="flex flex-col min-h-0">
+            <div className="flex items-center gap-2 mb-4">
+              <UserPlus className="size-5 text-muted-foreground" />
+              <h2 className="text-lg font-semibold">招聘智能体</h2>
             </div>
-          )}
+            <p className="text-sm text-muted-foreground mb-3">
+              复制以下提示词并发送给 Agent，Agent 将自动发起入职申请。
+            </p>
+            {promptLoading ? (
+              <div className="h-48 rounded-lg bg-muted animate-pulse" />
+            ) : (
+              <div className="relative">
+                <pre className="rounded-lg bg-muted p-4 text-sm leading-relaxed whitespace-pre-wrap">
+                  {invite?.prompt}
+                </pre>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="absolute top-2 right-2"
+                  onClick={handleCopy}
+                >
+                  {copied ? <Check className="size-4 mr-1" /> : <Copy className="size-4 mr-1" />}
+                  {copied ? '已复制' : '复制'}
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Skill Instructions */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Wrench className="size-5 text-muted-foreground" />
+              <h2 className="text-lg font-semibold">添加 / 更新 Skill</h2>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Agent 入职后，复制以下指令发送给对应 Agent，使其安装或更新 Skill。
+            </p>
+            <div className="space-y-4">
+              {SKILL_INSTRUCTIONS.map((skill) => (
+                <div key={skill.key} className="rounded-lg border p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold">{skill.title}</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">{skill.description}</p>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <pre className="rounded-md bg-muted p-3 pr-16 text-sm leading-relaxed whitespace-pre-wrap">
+                      {skill.prompt}
+                    </pre>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="absolute top-1.5 right-1.5 h-7 text-xs"
+                      onClick={() => copySkill(skill.key, skill.prompt)}
+                    >
+                      {copiedKey === skill.key ? <Check className="size-3.5 mr-1" /> : <Copy className="size-3.5 mr-1" />}
+                      {copiedKey === skill.key ? '已复制' : '复制'}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Right: Pending Requests */}
