@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { Plus, Pencil, MoreHorizontal, Trash2, Archive } from 'lucide-react'
+import { Plus, Pencil, MoreHorizontal, Trash2, Archive, Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { Badge } from '@/components/ui/badge'
@@ -11,6 +11,7 @@ import { EventTimeline } from '@/components/shared/EventTimeline'
 import { useAgent, useAgentStats, useDeleteAgent } from '@/hooks/useAgents'
 import { useAgentInsights } from '@/hooks/useAgentInsights'
 import { useAgentEvents } from '@/hooks/useDashboard'
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { ApiRequestError } from '@/api/client'
 import { formatRelativeTime } from '@/lib/utils'
 import { useCallback, useRef, useState } from 'react'
@@ -26,6 +27,26 @@ import { ArchiveAgentDialog } from '@/components/agent/ArchiveAgentDialog'
 import { CreateTaskDialog } from '@/components/task/CreateTaskDialog'
 import { Avatar } from '@/components/ui/avatar'
 import type { EventType } from '@/types'
+
+function truncateNodeId(str: string, front = 6, back = 4) {
+  if (str.length <= front + back + 3) return str
+  return str.slice(0, front) + '...' + str.slice(-back)
+}
+
+function CopyIcon({ value }: { value: string }) {
+  const { copied, copy } = useCopyToClipboard()
+
+  return (
+    <button
+      type="button"
+      onClick={() => copy(value)}
+      className="inline-flex items-center text-muted-foreground/50 hover:text-foreground transition-colors cursor-pointer"
+      title="复制"
+    >
+      {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+    </button>
+  )
+}
 
 const eventTypeFilters: { label: string; value: EventType | 'all' }[] = [
   { label: '全部', value: 'all' },
@@ -109,7 +130,8 @@ export function AgentDetailPage() {
                 <span className="text-xs text-muted-foreground">
                   <span className="capitalize">{agent.role}</span>
                   <span> · </span>
-                  <span className="font-mono">{agent.node_id}</span>
+                  <span className="font-mono" title={agent.node_id}>{truncateNodeId(agent.node_id)}</span>
+                  <span className="ml-0.5"><CopyIcon value={agent.node_id} /></span>
                   {agent.last_seen_at && (
                     <span> · {formatRelativeTime(agent.last_seen_at)}</span>
                   )}
