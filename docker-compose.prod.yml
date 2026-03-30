@@ -1,0 +1,116 @@
+name: trustmesh
+
+services:
+  mongo:
+    image: mongodb/mongodb-community-server:8.2-ubuntu2204
+    container_name: trustmesh-mongo
+    restart: unless-stopped
+    command: ["--bind_ip_all"]
+    volumes:
+      - trustmesh-mongo-data:/data/db
+
+  backend:
+    image: trustmesh/backend:${TAG:-latest}
+    container_name: trustmesh-backend
+    restart: unless-stopped
+    depends_on:
+      - mongo
+      - qdrant
+    environment:
+      PORT: ${PORT:-8080}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      ALLOW_ALL_CORS: ${ALLOW_ALL_CORS:-false}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      TOKEN_TTL: ${TOKEN_TTL:-24h}
+      MONGO_ENABLED: ${MONGO_ENABLED:-true}
+      MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017}
+      MONGO_DATABASE: ${MONGO_DATABASE:-trustmesh}
+      MONGO_TIMEOUT: ${MONGO_TIMEOUT:-5s}
+      CLAWSYNAPSE_API_URL: ${CLAWSYNAPSE_API_URL:-http://clawsynapse:18080}
+      CLAWSYNAPSE_TIMEOUT: ${CLAWSYNAPSE_TIMEOUT:-3s}
+      CLAWSYNAPSE_PEER_SYNC_INTERVAL: ${CLAWSYNAPSE_PEER_SYNC_INTERVAL:-10s}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-openai}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_API_URL: ${EMBEDDING_API_URL:-https://api.openai.com/v1}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-1536}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      KNOWLEDGE_STORAGE_PATH: ${KNOWLEDGE_STORAGE_PATH:-/var/lib/trustmesh-knowledge}
+      ASSISTANT_API_URL: ${ASSISTANT_API_URL:-https://api.openai.com/v1}
+      ASSISTANT_API_KEY: ${ASSISTANT_API_KEY:-}
+      ASSISTANT_MODEL: ${ASSISTANT_MODEL:-gpt-4o-mini}
+    volumes:
+      - trustmesh-transfer-data:/var/lib/trustmesh-transfers:ro
+      - trustmesh-knowledge-data:/var/lib/trustmesh-knowledge
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+
+  clawsynapse:
+    image: trustmesh/clawsynapse:${TAG:-latest}
+    container_name: trustmesh-clawsynapse
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NODE_ID: ${CLAWSYNAPSE_NODE_ID:-trustmesh-server}
+      NATS_SERVERS: ${NATS_SERVERS:-nats://220.168.146.21:9414}
+      LOCAL_API_ADDR: ${CLAWSYNAPSE_LOCAL_API_ADDR:-0.0.0.0:18080}
+      TRUST_MODE: ${CLAWSYNAPSE_TRUST_MODE:-open}
+      AGENT_ADAPTER: ${CLAWSYNAPSE_AGENT_ADAPTER:-webhook}
+      WEBHOOK_URL: ${CLAWSYNAPSE_WEBHOOK_URL:-http://backend:8080/webhook/clawsynapse}
+      DATA_DIR: ${CLAWSYNAPSE_DATA_DIR:-/var/lib/clawsynapse}
+      IDENTITY_KEY_PATH: ${CLAWSYNAPSE_IDENTITY_KEY_PATH:-/var/lib/clawsynapse/identity.key}
+      IDENTITY_PUB_PATH: ${CLAWSYNAPSE_IDENTITY_PUB_PATH:-/var/lib/clawsynapse/identity.pub}
+      DELIVERABLE_PREFIXES: ${DELIVERABLE_PREFIXES:-chat,task,todo,conversation}
+      TRANSFER_DIR: ${TRANSFER_DIR:-/var/lib/trustmesh-transfers}
+      TRANSFER_TTL: ${TRANSFER_TTL:-24h}
+      LOG_LEVEL: ${CLAWSYNAPSE_LOG_LEVEL:-info}
+      LOG_FORMAT: ${CLAWSYNAPSE_LOG_FORMAT:-json}
+    volumes:
+      - trustmesh-clawsynapse-data:/var/lib/clawsynapse
+      - trustmesh-transfer-data:/var/lib/trustmesh-transfers
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:18080/v1/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: trustmesh-qdrant
+    restart: unless-stopped
+    volumes:
+      - trustmesh-qdrant-data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:6333/healthz >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+
+  frontend:
+    image: trustmesh/frontend:${TAG:-latest}
+    container_name: trustmesh-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+
+volumes:
+  trustmesh-mongo-data:
+  trustmesh-clawsynapse-data:
+  trustmesh-transfer-data:
+  trustmesh-qdrant-data:
+  trustmesh-knowledge-data:
