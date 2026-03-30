@@ -7,6 +7,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { Input } from '@/components/ui/input'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { useInvitePrompt, useJoinRequests, useApproveJoinRequest, useRejectJoinRequest } from '@/hooks/useJoinRequests'
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { ApiRequestError } from '@/api/client'
 import { toast } from 'sonner'
 import type { JoinRequest, AgentRole } from '@/types'
@@ -23,7 +24,7 @@ export function AgentInvitePage() {
   const { data: requests } = useJoinRequests('pending')
   const approveRequest = useApproveJoinRequest()
   const rejectRequest = useRejectJoinRequest()
-  const [copied, setCopied] = useState(false)
+  const { copied, copy } = useCopyToClipboard(2000)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editRole, setEditRole] = useState<AgentRole>('developer')
@@ -31,12 +32,10 @@ export function AgentInvitePage() {
 
   const handleCopy = async () => {
     if (!invite?.prompt) return
-    try {
-      await navigator.clipboard.writeText(invite.prompt)
-      setCopied(true)
+    const ok = await copy(invite.prompt)
+    if (ok) {
       toast.success('提示词已复制到剪贴板')
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
+    } else {
       toast.error('复制失败，请手动选择复制')
     }
   }

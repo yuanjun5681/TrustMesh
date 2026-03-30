@@ -1,6 +1,7 @@
 import { PageContainer } from '@/components/layout/PageContainer'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AgentStatusCard } from '@/components/dashboard/AgentStatusCard'
+import { NodeStatusIndicator } from '@/components/dashboard/NodeStatusIndicator'
 import { StatsCard } from '@/components/dashboard/StatsCard'
 import { RecentTasksList } from '@/components/dashboard/RecentTasksList'
 import { EventTimeline } from '@/components/shared/EventTimeline'
@@ -15,8 +16,9 @@ export function DashboardPage() {
 
   return (
     <PageContainer className="flex flex-col h-full gap-6">
-      <div className="shrink-0">
+      <div className="shrink-0 flex items-center justify-between">
         <h1 className="text-2xl font-bold">仪表盘</h1>
+        <NodeStatusIndicator />
       </div>
 
       {/* Agent 状态卡片 + 最近活动 */}
