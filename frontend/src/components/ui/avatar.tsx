@@ -119,9 +119,8 @@ export function Avatar({
       <div
         className={cn(
           'inline-flex items-center justify-center shrink-0 overflow-hidden font-semibold text-white select-none',
-          isPm ? 'rounded-lg' : 'rounded-full',
+          'rounded-full',
           sizeClasses[size],
-          isPm && 'ring-1 ring-amber-400/30',
           className
         )}
         style={avatarStyle}
