@@ -34,7 +34,7 @@ export function AgentStatusCard({ agent }: AgentStatusCardProps) {
             <AgentStatusIcon status={agent.status} />
           </div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
-            <span className="capitalize">{agent.role}</span>
+            <span>{({ pm: 'PM', developer: '开发者', reviewer: '审核者', custom: '自定义' })[agent.role] ?? agent.role}</span>
             {agent.status === 'offline' && agent.last_seen_at ? (
               <span>· {formatRelativeTime(agent.last_seen_at)}</span>
             ) : agent.status !== 'offline' ? (

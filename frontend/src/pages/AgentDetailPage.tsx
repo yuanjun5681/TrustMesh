@@ -123,7 +123,7 @@ export function AgentDetailPage() {
                   <Badge variant="secondary" className="text-xs">已离职</Badge>
                 )}
                 <span className="text-xs text-muted-foreground">
-                  <span className="capitalize">{agent.role}</span>
+                  <span>{({ pm: 'PM', developer: '开发者', reviewer: '审核者', custom: '自定义' })[agent.role] ?? agent.role}</span>
                   <span> · </span>
                   <span className="font-mono" title={agent.node_id}>{truncateNodeId(agent.node_id)}</span>
                   <span className="ml-0.5"><CopyIcon value={agent.node_id} /></span>
