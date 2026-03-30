@@ -548,7 +548,7 @@ export interface UpdateAgentRequest {
   capabilities?: string[]
 }
 
-// ─── 加入请求 ───
+// ─── 入职申请 ───
 
 export type JoinRequestStatus = 'pending' | 'approved' | 'rejected'
 

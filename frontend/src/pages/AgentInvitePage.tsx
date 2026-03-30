@@ -53,7 +53,7 @@ export function AgentInvitePage() {
         ? { name: editName, role: editRole, description: editDescription }
         : undefined
       await approveRequest.mutateAsync({ id: jr.id, overrides })
-      toast.success(`已批准 Agent「${overrides?.name || jr.name}」加入`)
+      toast.success(`已录用 Agent「${overrides?.name || jr.name}」`)
       setEditingId(null)
     } catch (err) {
       toast.error(err instanceof ApiRequestError ? err.message : '批准失败')
@@ -63,7 +63,7 @@ export function AgentInvitePage() {
   const handleReject = async (jr: JoinRequest) => {
     try {
       await rejectRequest.mutateAsync(jr.id)
-      toast.success(`已拒绝 Agent「${jr.name}」的申请`)
+      toast.success(`已拒绝 Agent「${jr.name}」的入职申请`)
     } catch (err) {
       toast.error(err instanceof ApiRequestError ? err.message : '拒绝失败')
     }
@@ -78,10 +78,10 @@ export function AgentInvitePage() {
         <div className="flex flex-col w-1/2 min-w-0">
           <div className="flex items-center gap-2 mb-4">
             <UserPlus className="size-5 text-muted-foreground" />
-            <h2 className="text-lg font-semibold">邀请智能体</h2>
+            <h2 className="text-lg font-semibold">招聘智能体</h2>
           </div>
           <p className="text-sm text-muted-foreground mb-3">
-            复制以下提示词并发送给 Agent，Agent 将自动发起加入申请。
+            复制以下提示词并发送给 Agent，Agent 将自动发起入职申请。
           </p>
           {promptLoading ? (
             <div className="flex-1 rounded-lg bg-muted animate-pulse" />
@@ -107,7 +107,7 @@ export function AgentInvitePage() {
         <div className="flex flex-col w-1/2 min-w-0">
           <div className="flex items-center gap-2 mb-4">
             <ClipboardCheck className="size-5 text-muted-foreground" />
-            <h2 className="text-lg font-semibold">审批请求</h2>
+            <h2 className="text-lg font-semibold">入职审批</h2>
             {pendingCount > 0 && (
               <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
                 {pendingCount}
@@ -117,7 +117,7 @@ export function AgentInvitePage() {
 
           {pendingCount === 0 ? (
             <div className="flex-1 flex items-center justify-center rounded-lg border border-dashed">
-              <p className="text-sm text-muted-foreground">暂无待审批的请求</p>
+              <p className="text-sm text-muted-foreground">暂无待审批的入职申请</p>
             </div>
           ) : (
             <div className="flex-1 min-h-0 overflow-y-auto space-y-3">

@@ -104,7 +104,7 @@ export function AgentDetailPage() {
                 <h1 className="text-lg font-bold truncate">{agent.name}</h1>
                 <AgentStatusBadge status={agent.status} />
                 {agent.archived && (
-                  <Badge variant="secondary" className="text-xs">已归档</Badge>
+                  <Badge variant="secondary" className="text-xs">已离职</Badge>
                 )}
                 <span className="text-xs text-muted-foreground">
                   <span className="capitalize">{agent.role}</span>
@@ -160,7 +160,7 @@ export function AgentDetailPage() {
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleDelete} className="text-destructive">
                       {agent.usage.in_use ? (
-                        <><Archive className="size-3.5 mr-2" />归档</>
+                        <><Archive className="size-3.5 mr-2" />离职</>
                       ) : (
                         <><Trash2 className="size-3.5 mr-2" />删除</>
                       )}
@@ -176,7 +176,7 @@ export function AgentDetailPage() {
           <div className="mx-6 mt-4 flex items-center gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
             <Archive className="size-4 text-amber-600 shrink-0" />
             <p className="text-sm text-amber-700 dark:text-amber-400">
-              该 Agent 已归档，不再接收新任务
+              该 Agent 已离职，不再接收新任务
             </p>
           </div>
         )}

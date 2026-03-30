@@ -257,7 +257,7 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
             <Plus className="size-4 shrink-0" />
             {!collapsed && (
               <>
-                <span>加入智能体</span>
+                <span>招聘智能体</span>
                 {pendingRequests && pendingRequests.length > 0 && (
                   <span className="ml-auto text-xs bg-amber-500 text-white rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
                     {pendingRequests.length}

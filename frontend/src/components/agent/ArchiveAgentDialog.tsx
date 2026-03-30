@@ -41,11 +41,11 @@ export function ArchiveAgentDialog({ open, onOpenChange, agent, onArchived }: Pr
     setError('')
     try {
       await deleteAgent.mutateAsync(agent.id)
-      toast.success(`Agent "${agent.name}" 已归档`)
+      toast.success(`Agent "${agent.name}" 已离职`)
       handleOpenChange(false)
       onArchived?.()
     } catch (err) {
-      const message = err instanceof ApiRequestError ? err.message : '归档失败'
+      const message = err instanceof ApiRequestError ? err.message : '离职处理失败'
       toast.error(message)
       setError(message)
     }
@@ -57,11 +57,11 @@ export function ArchiveAgentDialog({ open, onOpenChange, agent, onArchived }: Pr
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>归档 Agent</DialogTitle>
+          <DialogTitle>Agent 离职</DialogTitle>
           <DialogDescription>
             {alreadyArchived
-              ? '这个 Agent 已经归档，无需重复操作。'
-              : '归档后 Agent 会从列表中隐藏，且不能被分配到新的项目或任务。'}
+              ? '这个 Agent 已经离职，无需重复操作。'
+              : '离职后 Agent 会从列表中隐藏，且不能被分配到新的项目或任务。'}
           </DialogDescription>
         </DialogHeader>
 
@@ -74,10 +74,10 @@ export function ArchiveAgentDialog({ open, onOpenChange, agent, onArchived }: Pr
               <p className="text-sm font-medium">{agent?.name ?? '当前 Agent'}</p>
               <p className="text-sm text-muted-foreground">
                 {alreadyArchived
-                  ? 'Agent 状态已经是已归档。'
+                  ? 'Agent 已经处于离职状态。'
                   : agent?.usage.in_use
-                    ? `当前被 ${formatUsage(agent)} 引用。归档不会影响已关联的历史任务和数据，但该 Agent 的节点 ID 将被释放。`
-                    : '归档不会影响已关联的历史任务和数据，但该 Agent 的节点 ID 将被释放。'}
+                    ? `当前被 ${formatUsage(agent)} 引用。离职不会影响已关联的历史任务和数据，但该 Agent 的节点 ID 将被释放。`
+                    : '离职不会影响已关联的历史任务和数据，但该 Agent 的节点 ID 将被释放。'}
               </p>
             </div>
           </div>
@@ -95,7 +95,7 @@ export function ArchiveAgentDialog({ open, onOpenChange, agent, onArchived }: Pr
             disabled={!agent || alreadyArchived || deleteAgent.isPending}
             onClick={handleArchive}
           >
-            {deleteAgent.isPending ? '归档中...' : '确认归档'}
+            {deleteAgent.isPending ? '处理中...' : '确认离职'}
           </Button>
         </DialogFooter>
       </DialogContent>
