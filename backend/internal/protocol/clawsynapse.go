@@ -179,12 +179,12 @@ type KnowledgeResultItem struct {
 	Metadata      map[string]any `json:"metadata,omitempty"`
 }
 
-// context.query — Agent requests task context on demand
+// task.context.query — Agent requests task context on demand
 type ContextQueryPayload struct {
 	TaskID string `json:"task_id"`
 }
 
-// context.result — TrustMesh responds with full task context snapshot
+// task.context.result — TrustMesh responds with full task context snapshot
 type ContextResultPayload struct {
 	TaskID       string            `json:"task_id"`
 	TaskContext  *TaskContext       `json:"task_context"`
