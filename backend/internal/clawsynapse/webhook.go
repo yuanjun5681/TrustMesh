@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -72,6 +73,8 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 		h.handleTaskComment(c, payload)
 	case "knowledge.query":
 		h.handleKnowledgeQuery(c, payload)
+	case "transfer.received":
+		h.handleTransferReceived(c, payload)
 	case "task.context.query":
 		h.handleContextQuery(c, payload)
 	default:
@@ -179,8 +182,6 @@ func (h *WebhookHandler) handleTodoComplete(c *gin.Context, webhook protocol.Web
 		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid todo.complete message"))
 		return
 	}
-	h.enrichTodoResultTransfers(c.Request.Context(), &payload.Result)
-
 	task, appErr := h.store.CompleteTodoByNodeWithMessageID(webhook.From, messageIDFromMetadata(webhook.Metadata), store.TodoCompleteInput{
 		TaskID: payload.TaskID,
 		TodoID: payload.TodoID,
@@ -262,109 +263,6 @@ func (h *WebhookHandler) handleContextQuery(c *gin.Context, webhook protocol.Web
 
 	h.publish(context.Background(), webhook.From, "task.context.result", resultPayload, task.ID)
 	transport.WriteData(c, http.StatusOK, gin.H{"status": "ok", "task_id": task.ID})
-}
-
-func (h *WebhookHandler) enrichTodoResultTransfers(ctx context.Context, result *model.TodoResult) {
-	if h == nil || h.client == nil || result == nil {
-		return
-	}
-
-	transfersByID, orderedIDs := normalizeTransfers(result.Metadata)
-	for _, ref := range result.ArtifactRefs {
-		if strings.TrimSpace(ref.Kind) != "file" {
-			continue
-		}
-		transferID := strings.TrimSpace(ref.ArtifactID)
-		if transferID == "" {
-			continue
-		}
-		if _, ok := transfersByID[transferID]; !ok {
-			transfersByID[transferID] = map[string]any{"transfer_id": transferID}
-			orderedIDs = append(orderedIDs, transferID)
-		}
-	}
-
-	if len(transfersByID) == 0 {
-		return
-	}
-
-	for _, transferID := range orderedIDs {
-		transfer, ok := transfersByID[transferID]
-		if !ok {
-			continue
-		}
-		detail, err := h.client.GetTransfer(ctx, transferID)
-		if err != nil {
-			if h.log != nil {
-				h.log.Warn("failed to enrich transfer details", zap.String("transfer_id", transferID), zap.Error(err))
-			}
-			continue
-		}
-		for key, value := range detail {
-			transfer[key] = value
-		}
-		if _, ok := transfer["transfer_id"]; !ok {
-			transfer["transfer_id"] = transferID
-		}
-	}
-
-	if result.Metadata == nil {
-		result.Metadata = map[string]any{}
-	}
-	items := make([]any, 0, len(orderedIDs))
-	for _, transferID := range orderedIDs {
-		if transfer, ok := transfersByID[transferID]; ok {
-			items = append(items, transfer)
-		}
-	}
-	result.Metadata["transfers"] = items
-}
-
-func normalizeTransfers(metadata map[string]any) (map[string]map[string]any, []string) {
-	out := make(map[string]map[string]any)
-	orderedIDs := make([]string, 0)
-	if len(metadata) == 0 {
-		return out, orderedIDs
-	}
-
-	rawTransfers, ok := metadata["transfers"]
-	if !ok {
-		return out, orderedIDs
-	}
-	items, ok := rawTransfers.([]any)
-	if !ok {
-		return out, orderedIDs
-	}
-	for _, item := range items {
-		transfer, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		transferID := strings.TrimSpace(transferIDFromMap(transfer))
-		if transferID == "" {
-			continue
-		}
-		copyTransfer := make(map[string]any, len(transfer))
-		for key, value := range transfer {
-			copyTransfer[key] = value
-		}
-		out[transferID] = copyTransfer
-		orderedIDs = append(orderedIDs, transferID)
-	}
-	return out, orderedIDs
-}
-
-func transferIDFromMap(transfer map[string]any) string {
-	if transfer == nil {
-		return ""
-	}
-	if v, ok := transfer["transfer_id"].(string); ok && strings.TrimSpace(v) != "" {
-		return strings.TrimSpace(v)
-	}
-	if v, ok := transfer["transferId"].(string); ok && strings.TrimSpace(v) != "" {
-		return strings.TrimSpace(v)
-	}
-	return ""
 }
 
 func (h *WebhookHandler) publishTaskCreated(task *model.TaskDetail) {
@@ -505,20 +403,12 @@ func buildCrossAgentPriorResults(task *model.TaskDetail, currentTodo *model.Todo
 }
 
 func buildPriorResult(todo *model.Todo) protocol.TodoPriorResult {
-	r := protocol.TodoPriorResult{
+	return protocol.TodoPriorResult{
 		TodoID:  todo.ID,
 		Title:   todo.Title,
 		Summary: todo.Result.Summary,
 		Output:  todo.Result.Output,
 	}
-	for _, ref := range todo.Result.ArtifactRefs {
-		r.Artifacts = append(r.Artifacts, protocol.TodoPriorArtifactRef{
-			ArtifactID: ref.ArtifactID,
-			Kind:       ref.Kind,
-			Label:      ref.Label,
-		})
-	}
-	return r
 }
 
 func (h *WebhookHandler) publishTaskAndTodoStatusChanges(task *model.TaskDetail, todoID, message, actorNodeID, cause string) {
@@ -593,6 +483,49 @@ func findTodo(task *model.TaskDetail, todoID string) *model.Todo {
 		}
 	}
 	return nil
+}
+
+func (h *WebhookHandler) handleTransferReceived(c *gin.Context, webhook protocol.WebhookPayload) {
+	var msg struct {
+		TransferID string `json:"transferId"`
+		FileName   string `json:"fileName"`
+		FileSize   int64  `json:"fileSize"`
+		LocalPath  string `json:"localPath"`
+		MimeType   string `json:"mimeType"`
+	}
+	if err := decodeWebhookMessage(webhook.Message, &msg); err != nil || msg.TransferID == "" {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid transfer.received message"))
+		return
+	}
+
+	taskID, _ := webhook.Metadata["taskId"].(string)
+	if taskID == "" {
+		transport.WriteError(c, transport.Validation("missing metadata", map[string]any{"taskId": "required"}))
+		return
+	}
+	todoID, _ := webhook.Metadata["todoId"].(string)
+
+	artifact := model.TaskArtifact{
+		TransferID: msg.TransferID,
+		TaskID:     taskID,
+		TodoID:     todoID,
+		FileName:   msg.FileName,
+		FileSize:   msg.FileSize,
+		LocalPath:  msg.LocalPath,
+		MimeType:   msg.MimeType,
+		FromNodeID: webhook.From,
+		CreatedAt:  time.Now().UTC(),
+	}
+
+	if appErr := h.store.SaveArtifact(artifact); appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	transport.WriteData(c, http.StatusOK, gin.H{
+		"transfer_id": msg.TransferID,
+		"task_id":     taskID,
+	})
 }
 
 func (h *WebhookHandler) handleKnowledgeQuery(c *gin.Context, webhook protocol.WebhookPayload) {

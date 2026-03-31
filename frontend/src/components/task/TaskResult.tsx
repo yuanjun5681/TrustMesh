@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { Download, Eye, FileBarChart, FileCode, FileText, Link as LinkIcon, Loader2, type LucideIcon } from 'lucide-react'
+import { Download, Eye, FileText, Loader2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ApiRequestError } from '@/api/client'
 import { getTaskArtifactContent } from '@/api/tasks'
@@ -10,22 +9,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { toast } from 'sonner'
 import { FileViewer } from '@/components/task/FileViewer'
-import type { TaskResult, TaskArtifact, TransferDetail } from '@/types'
-
-const kindIcons: Record<string, LucideIcon> = {
-  file: FileText,
-  link: LinkIcon,
-  log: FileCode,
-  report: FileBarChart,
-}
-
-function normalizeArtifactKind(kind: string | null | undefined) {
-  const normalizedKind = kind?.trim().toLowerCase()
-  if (!normalizedKind) {
-    return 'unknown'
-  }
-  return normalizedKind
-}
+import type { TaskResult, TaskArtifact } from '@/types'
 
 function normalizeResultText(value: string | null | undefined) {
   if (!value) {
@@ -63,34 +47,32 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
   }
 
   const handlePreview = async (artifact: TaskArtifact) => {
-    setLoadingArtifactId(artifact.id)
-    setTransferErrors((current) => ({ ...current, [artifact.id]: '' }))
+    setLoadingArtifactId(artifact.transfer_id)
+    setTransferErrors((current) => ({ ...current, [artifact.transfer_id]: '' }))
     try {
-      const fileBlob = await getTaskArtifactContent(taskId, artifact.id)
-      const fileName = artifactFileName(artifact) || artifact.title || artifact.id
+      const fileBlob = await getTaskArtifactContent(taskId, artifact.transfer_id)
       setViewerBlob(fileBlob)
-      setViewerFileName(fileName)
+      setViewerFileName(artifact.file_name)
       setViewerOpen(true)
     } catch (err) {
       const message = err instanceof ApiRequestError ? err.message : '打开文件失败'
       toast.error(message)
-      setTransferErrors((current) => ({ ...current, [artifact.id]: message }))
+      setTransferErrors((current) => ({ ...current, [artifact.transfer_id]: message }))
     } finally {
       setLoadingArtifactId(null)
     }
   }
 
   const handleDownloadArtifact = async (artifact: TaskArtifact) => {
-    setDownloadingArtifactId(artifact.id)
-    setTransferErrors((current) => ({ ...current, [artifact.id]: '' }))
+    setDownloadingArtifactId(artifact.transfer_id)
+    setTransferErrors((current) => ({ ...current, [artifact.transfer_id]: '' }))
     try {
-      const fileBlob = await getTaskArtifactContent(taskId, artifact.id)
-      const fileName = artifactFileName(artifact) || `${artifact.title || artifact.id}`
-      downloadBlob(fileBlob, fileName)
+      const fileBlob = await getTaskArtifactContent(taskId, artifact.transfer_id)
+      downloadBlob(fileBlob, artifact.file_name)
     } catch (err) {
       const message = err instanceof ApiRequestError ? err.message : '下载文件失败'
       toast.error(message)
-      setTransferErrors((current) => ({ ...current, [artifact.id]: message }))
+      setTransferErrors((current) => ({ ...current, [artifact.transfer_id]: message }))
     } finally {
       setDownloadingArtifactId(null)
     }
@@ -142,71 +124,64 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
           <h4 className="text-sm font-medium mb-2">交付物</h4>
           <div className="flex flex-col gap-2">
             {safeArtifacts.map((artifact) => {
-              const normalizedKind = normalizeArtifactKind(artifact.kind)
-              const Icon = kindIcons[normalizedKind] ?? FileText
-              const transferId = transferIdFromArtifact(artifact)
-              const transferError = transferErrors[artifact.id]
-              const fileName = artifactFileName(artifact)
+              const transferError = transferErrors[artifact.transfer_id]
+              const sizeLabel = formatFileSize(artifact.file_size)
 
               return (
-                <Card key={artifact.id}>
+                <Card key={artifact.transfer_id}>
                   <CardContent className="flex flex-col gap-3 p-3">
                     <div className="flex items-center gap-3">
                       <div className="flex size-8 items-center justify-center rounded-lg bg-muted">
-                        <Icon className="size-4 text-muted-foreground" />
+                        <FileText className="size-4 text-muted-foreground" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{artifact.title}</p>
-                        <p className="text-xs text-muted-foreground truncate">{fileName || artifact.uri || transferId || '无直接 URI'}</p>
+                        <p className="text-sm font-medium truncate">{artifact.file_name}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {artifact.mime_type}{sizeLabel ? ` · ${sizeLabel}` : ''}
+                        </p>
                       </div>
-                      <Badge variant="secondary" className="text-xs shrink-0">
-                        {normalizedKind}
-                      </Badge>
                     </div>
 
-                    {transferId && (
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={loadingArtifactId === artifact.id}
-                          onClick={() => void handlePreview(artifact)}
-                        >
-                          {loadingArtifactId === artifact.id ? (
-                            <>
-                              <Loader2 className="size-3.5 animate-spin" />
-                              加载中
-                            </>
-                          ) : (
-                            <>
-                              <Eye className="size-3.5" />
-                              预览
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={downloadingArtifactId === artifact.id}
-                          onClick={() => void handleDownloadArtifact(artifact)}
-                        >
-                          {downloadingArtifactId === artifact.id ? (
-                            <>
-                              <Loader2 className="size-3.5 animate-spin" />
-                              下载中
-                            </>
-                          ) : (
-                            <>
-                              <Download className="size-3.5" />
-                              下载
-                            </>
-                          )}
-                        </Button>
-                        <span className="text-xs text-muted-foreground">transfer: {transferId}</span>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={loadingArtifactId === artifact.transfer_id}
+                        onClick={() => void handlePreview(artifact)}
+                      >
+                        {loadingArtifactId === artifact.transfer_id ? (
+                          <>
+                            <Loader2 className="size-3.5 animate-spin" />
+                            加载中
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="size-3.5" />
+                            预览
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={downloadingArtifactId === artifact.transfer_id}
+                        onClick={() => void handleDownloadArtifact(artifact)}
+                      >
+                        {downloadingArtifactId === artifact.transfer_id ? (
+                          <>
+                            <Loader2 className="size-3.5 animate-spin" />
+                            下载中
+                          </>
+                        ) : (
+                          <>
+                            <Download className="size-3.5" />
+                            下载
+                          </>
+                        )}
+                      </Button>
+                    </div>
 
                     {transferError && (
                       <p className="text-xs text-destructive">{transferError}</p>
@@ -230,41 +205,11 @@ export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProp
   )
 }
 
-function transferIdFromArtifact(artifact: TaskArtifact) {
-  const directTransferID = firstString(artifact.metadata as TransferDetail, ['transfer_id'])
-  if (directTransferID) {
-    return directTransferID
-  }
-  const nestedTransfer = artifact.metadata?.transfer
-  if (nestedTransfer && typeof nestedTransfer === 'object' && nestedTransfer !== null) {
-    return firstString(nestedTransfer as TransferDetail, ['transfer_id', 'transferId'])
-  }
-  if (artifact.uri.startsWith('transfer://')) {
-    return artifact.uri.replace('transfer://', '')
-  }
-  return ''
-}
-
-function artifactFileName(artifact: TaskArtifact, transferDetail?: TransferDetail) {
-  return (
-    firstString(artifact.metadata as TransferDetail, ['file_name']) ||
-    firstString(artifact.metadata?.transfer as TransferDetail | undefined, ['fileName', 'file_name']) ||
-    firstString(transferDetail, ['fileName', 'file_name'])
-  )
-}
-
-function firstString(obj: TransferDetail | undefined, keys: string[]) {
-  if (!obj) return ''
-  for (const key of keys) {
-    const value = obj[key]
-    if (typeof value === 'string' && value.trim()) {
-      return value.trim()
-    }
-    if (typeof value === 'number') {
-      return String(value)
-    }
-  }
-  return ''
+function formatFileSize(bytes: number) {
+  if (!bytes || bytes <= 0) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function downloadBlob(blob: Blob, fileName: string) {

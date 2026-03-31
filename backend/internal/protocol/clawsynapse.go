@@ -128,17 +128,10 @@ type TodoSummary struct {
 // For returning agents: only cross-agent results (work done by other agents
 // that this agent hasn't seen in the current session).
 type TodoPriorResult struct {
-	TodoID    string                      `json:"todo_id"`
-	Title     string                      `json:"title"`
-	Summary   string                      `json:"summary"`
-	Output    string                      `json:"output,omitempty"`
-	Artifacts []TodoPriorArtifactRef      `json:"artifacts,omitempty"`
-}
-
-type TodoPriorArtifactRef struct {
-	ArtifactID string `json:"artifact_id"`
-	Kind       string `json:"kind"`
-	Label      string `json:"label"`
+	TodoID  string `json:"todo_id"`
+	Title   string `json:"title"`
+	Summary string `json:"summary"`
+	Output  string `json:"output,omitempty"`
 }
 
 type TodoStatusChangedPayload struct {

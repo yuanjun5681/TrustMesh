@@ -58,7 +58,7 @@ function TodoItem({
 }) {
   const [expanded, setExpanded] = useState(false)
   const Icon = statusIcons[todo.status]
-  const relatedArtifacts = (artifacts ?? []).filter((a) => a.source_todo_id === todo.id)
+  const relatedArtifacts = (artifacts ?? []).filter((a) => a.todo_id === todo.id)
   const hasDetails = todo.description || todo.error || relatedArtifacts.length > 0
   const isCard = variant === 'card'
 
@@ -118,8 +118,8 @@ function TodoItem({
           {relatedArtifacts.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {relatedArtifacts.map((a) => (
-                <Badge key={a.id} variant={isCard ? 'secondary' : 'outline'} className="text-xs">
-                  {a.title}
+                <Badge key={a.transfer_id} variant={isCard ? 'secondary' : 'outline'} className="text-xs">
+                  {a.file_name}
                 </Badge>
               ))}
             </div>

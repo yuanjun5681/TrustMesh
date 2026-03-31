@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"trustmesh/backend/internal/model"
-	"trustmesh/backend/internal/protocol"
 )
 
 func makeTodo(id string, order int, status, nodeID, name string, result model.TodoResult) model.Todo {
@@ -132,9 +131,6 @@ func TestBuildAllPriorResults(t *testing.T) {
 		makeTodo("t1", 1, "done", "node-A", "AgentA", model.TodoResult{
 			Summary: "Result 1",
 			Output:  "Output 1",
-			ArtifactRefs: []model.TodoResultArtifactRef{
-				{ArtifactID: "art-1", Kind: "file", Label: "File 1"},
-			},
 		}),
 		makeTodo("t2", 2, "done", "node-B", "AgentB", model.TodoResult{
 			Summary: "Result 2",
@@ -151,9 +147,6 @@ func TestBuildAllPriorResults(t *testing.T) {
 	}
 	if results[0].TodoID != "t1" || results[0].Summary != "Result 1" {
 		t.Errorf("results[0] = %+v", results[0])
-	}
-	if len(results[0].Artifacts) != 1 || results[0].Artifacts[0].ArtifactID != "art-1" {
-		t.Errorf("results[0].Artifacts = %+v", results[0].Artifacts)
 	}
 	if results[1].TodoID != "t2" || results[1].Summary != "Result 2" {
 		t.Errorf("results[1] = %+v", results[1])
@@ -247,8 +240,7 @@ func TestBuildTodoAssignedPayload_NoPriorResults(t *testing.T) {
 	}
 }
 
-// Verify that buildPriorResult correctly converts artifacts.
-func TestBuildPriorResult_Artifacts(t *testing.T) {
+func TestBuildPriorResult(t *testing.T) {
 	todo := &model.Todo{
 		ID:     "t1",
 		Title:  "Design API",
@@ -256,10 +248,6 @@ func TestBuildPriorResult_Artifacts(t *testing.T) {
 		Result: model.TodoResult{
 			Summary: "API designed",
 			Output:  "Detailed design doc",
-			ArtifactRefs: []model.TodoResultArtifactRef{
-				{ArtifactID: "tf-1", Kind: "file", Label: "API Design PDF"},
-				{ArtifactID: "tf-2", Kind: "report", Label: "Review Notes"},
-			},
 		},
 	}
 
@@ -268,16 +256,7 @@ func TestBuildPriorResult_Artifacts(t *testing.T) {
 	if r.Summary != "API designed" || r.Output != "Detailed design doc" {
 		t.Errorf("unexpected result: %+v", r)
 	}
-	if len(r.Artifacts) != 2 {
-		t.Fatalf("expected 2 artifacts, got %d", len(r.Artifacts))
-	}
-	want := []protocol.TodoPriorArtifactRef{
-		{ArtifactID: "tf-1", Kind: "file", Label: "API Design PDF"},
-		{ArtifactID: "tf-2", Kind: "report", Label: "Review Notes"},
-	}
-	for i, a := range r.Artifacts {
-		if a != want[i] {
-			t.Errorf("artifact[%d] = %+v, want %+v", i, a, want[i])
-		}
+	if r.TodoID != "t1" || r.Title != "Design API" {
+		t.Errorf("unexpected identity: %+v", r)
 	}
 }

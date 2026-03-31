@@ -122,7 +122,7 @@ func (s *Store) RecordTodoDispatch(userID, taskID, todoID string) (*model.TaskDe
 		return nil, mongoWriteError(err)
 	}
 	s.publishTaskUnsafe(task.ID)
-	return copyTask(task), nil
+	return s.copyTaskWithArtifactsUnsafe(task), nil
 }
 
 func (s *Store) RecordSequentialTodoDispatch(taskID, todoID string) (*model.TaskDetail, *transport.AppError) {
@@ -183,7 +183,7 @@ func (s *Store) RecordSequentialTodoDispatch(taskID, todoID string) (*model.Task
 		return nil, mongoWriteError(err)
 	}
 	s.publishTaskUnsafe(task.ID)
-	return copyTask(task), nil
+	return s.copyTaskWithArtifactsUnsafe(task), nil
 }
 
 func (s *Store) CreateTaskByPMNode(nodeID string, in TaskCreateInput) (*model.TaskDetail, *transport.AppError) {
@@ -296,10 +296,9 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 			Error:        nil,
 			CancelReason: nil,
 			Result: model.TodoResult{
-				Summary:      "",
-				Output:       "",
-				ArtifactRefs: []model.TodoResultArtifactRef{},
-				Metadata:     map[string]any{},
+				Summary:  "",
+				Output:   "",
+				Metadata: map[string]any{},
 			},
 			CreatedAt: now,
 		})
@@ -317,7 +316,7 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 		PMAgentID:      pmAgent.ID,
 		PMAgent:        toPMSummary(pmAgent),
 		Todos:          todos,
-		Artifacts:      []model.TaskArtifact{},
+
 		Result: model.TaskResult{
 			Summary:     "",
 			FinalOutput: "",
@@ -357,7 +356,7 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 	s.publishConversationUnsafe(conv.ID)
 	s.publishTaskUnsafe(task.ID)
 
-	return copyTask(task), nil
+	return s.copyTaskWithArtifactsUnsafe(task), nil
 }
 
 type UserTaskCreateInput struct {
@@ -423,10 +422,9 @@ func (s *Store) CreateTaskByUser(userID string, in UserTaskCreateInput) (*model.
 			NodeID:  assignee.NodeID,
 		},
 		Result: model.TodoResult{
-			Summary:      "",
-			Output:       "",
-			ArtifactRefs: []model.TodoResultArtifactRef{},
-			Metadata:     map[string]any{},
+			Summary:  "",
+			Output:   "",
+			Metadata: map[string]any{},
 		},
 		CreatedAt: now,
 	}
@@ -443,7 +441,7 @@ func (s *Store) CreateTaskByUser(userID string, in UserTaskCreateInput) (*model.
 		PMAgentID:      "",
 		PMAgent:        model.PMAgentSummary{},
 		Todos:          []model.Todo{todo},
-		Artifacts:      []model.TaskArtifact{},
+
 		Result: model.TaskResult{
 			Summary:     "",
 			FinalOutput: "",
@@ -468,7 +466,7 @@ func (s *Store) CreateTaskByUser(userID string, in UserTaskCreateInput) (*model.
 	}
 	s.publishTaskUnsafe(task.ID)
 
-	return copyTask(task), nil
+	return s.copyTaskWithArtifactsUnsafe(task), nil
 }
 
 func (s *Store) recordTodoDispatchUnsafe(task *model.TaskDetail, todo *model.Todo, actorType, actorID, actorName string, message *string, metadata map[string]any, now time.Time) {
@@ -583,7 +581,7 @@ func (s *Store) UpdateTodoProgressByNode(nodeID string, in TodoProgressInput) (*
 		return nil, mongoWriteError(err)
 	}
 	s.publishTaskUnsafe(task.ID)
-	return copyTask(task), nil
+	return s.copyTaskWithArtifactsUnsafe(task), nil
 }
 
 func (s *Store) CompleteTodoByNode(nodeID string, in TodoCompleteInput) (*model.TaskDetail, *transport.AppError) {
@@ -651,10 +649,9 @@ func (s *Store) CompleteTodoByNodeWithMessageID(nodeID, messageID string, in Tod
 	todo.Error = nil
 	todo.CancelReason = nil
 	todo.Result = model.TodoResult{
-		Summary:      strings.TrimSpace(in.Result.Summary),
-		Output:       strings.TrimSpace(in.Result.Output),
-		ArtifactRefs: append([]model.TodoResultArtifactRef(nil), in.Result.ArtifactRefs...),
-		Metadata:     copyMap(in.Result.Metadata),
+		Summary:  strings.TrimSpace(in.Result.Summary),
+		Output:   strings.TrimSpace(in.Result.Output),
+		Metadata: copyMap(in.Result.Metadata),
 	}
 	completed := fmt.Sprintf("todo completed: %s", todo.Title)
 	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_completed", &completed, map[string]any{"todo_id": todo.ID, "task_title": task.Title, "todo_title": todo.Title}, now)
@@ -672,7 +669,7 @@ func (s *Store) CompleteTodoByNodeWithMessageID(nodeID, messageID string, in Tod
 		return nil, mongoWriteError(err)
 	}
 	s.publishTaskUnsafe(task.ID)
-	return copyTask(task), nil
+	return s.copyTaskWithArtifactsUnsafe(task), nil
 }
 
 func (s *Store) FailTodoByNode(nodeID string, in TodoFailInput) (*model.TaskDetail, *transport.AppError) {
@@ -757,7 +754,7 @@ func (s *Store) FailTodoByNodeWithMessageID(nodeID, messageID string, in TodoFai
 		return nil, mongoWriteError(err)
 	}
 	s.publishTaskUnsafe(task.ID)
-	return copyTask(task), nil
+	return s.copyTaskWithArtifactsUnsafe(task), nil
 }
 
 func (s *Store) AddTaskCommentByNode(nodeID string, in TaskCommentInput) (*model.Comment, *transport.AppError) {
@@ -841,7 +838,7 @@ func (s *Store) CancelTask(userID string, in TaskCancelInput) (*model.TaskDetail
 		}
 	}
 	s.publishTaskUnsafe(task.ID)
-	return copyTask(task), nil
+	return s.copyTaskWithArtifactsUnsafe(task), nil
 }
 
 func (s *Store) AddTaskComment(userID, taskID string, in TaskCommentInput) (*model.Comment, *transport.AppError) {
@@ -1001,18 +998,15 @@ func (s *Store) taskCommentMentionTargetsUnsafe(task *model.TaskDetail) map[stri
 
 func (s *Store) updateTaskStatusUnsafe(task *model.TaskDetail, now time.Time) {
 	if task.Status == "canceled" {
-		task.Artifacts = aggregateTaskArtifacts(task.Todos)
-		task.Result = aggregateTaskResult(task.Todos, task.Status, task.Artifacts)
+		task.Result = aggregateTaskResult(task.Todos, task.Status)
 		task.UpdatedAt = now
 		task.Version++
 		return
 	}
 	prev := task.Status
 	next := aggregateTaskStatus(*task)
-	artifacts := aggregateTaskArtifacts(task.Todos)
-	result := aggregateTaskResult(task.Todos, next, artifacts)
+	result := aggregateTaskResult(task.Todos, next)
 	task.Status = next
-	task.Artifacts = artifacts
 	task.Result = result
 	task.UpdatedAt = now
 	task.Version++
@@ -1052,66 +1046,7 @@ func aggregateTaskStatus(task model.TaskDetail) string {
 	return "pending"
 }
 
-func aggregateTaskArtifacts(todos []model.Todo) []model.TaskArtifact {
-	artifacts := make([]model.TaskArtifact, 0)
-	usedIDs := make(map[string]int)
-	for _, todo := range todos {
-		if todo.Status != "done" {
-			continue
-		}
-		transfersByID := indexTodoTransfers(todo.Result.Metadata)
-		for i, ref := range todo.Result.ArtifactRefs {
-			baseID := strings.TrimSpace(ref.ArtifactID)
-			if baseID == "" {
-				baseID = fmt.Sprintf("%s-artifact-%d", todo.ID, i+1)
-			}
-			artifactID := uniqueTaskArtifactID(baseID, usedIDs)
-			sourceTodoID := todo.ID
-			metadata := map[string]any{
-				"source": "todo_result_ref",
-			}
-			uri := ""
-			var mimeType *string
-			if transfer, ok := transfersByID[baseID]; ok {
-				metadata["transfer"] = transfer
-				metadata["transfer_id"] = baseID
-				metadata["ref_only"] = false
-				uri = "transfer://" + baseID
-				if v := stringValue(transfer["fileName"]); v != "" {
-					metadata["file_name"] = v
-				} else if v := stringValue(transfer["file_name"]); v != "" {
-					metadata["file_name"] = v
-				}
-				if v := stringValue(transfer["localPath"]); v != "" {
-					metadata["local_path"] = v
-				} else if v := stringValue(transfer["local_path"]); v != "" {
-					metadata["local_path"] = v
-				}
-				if v := stringValue(transfer["mime_type"]); v != "" {
-					mime := v
-					mimeType = &mime
-				} else if v := stringValue(transfer["mimeType"]); v != "" {
-					mime := v
-					mimeType = &mime
-				}
-			} else {
-				metadata["ref_only"] = true
-			}
-			artifacts = append(artifacts, model.TaskArtifact{
-				ID:           artifactID,
-				SourceTodoID: &sourceTodoID,
-				Kind:         strings.TrimSpace(ref.Kind),
-				Title:        strings.TrimSpace(ref.Label),
-				URI:          uri,
-				MimeType:     mimeType,
-				Metadata:     metadata,
-			})
-		}
-	}
-	return artifacts
-}
-
-func aggregateTaskResult(todos []model.Todo, status string, artifacts []model.TaskArtifact) model.TaskResult {
+func aggregateTaskResult(todos []model.Todo, status string) model.TaskResult {
 	total := len(todos)
 	doneCount := 0
 	failedCount := 0
@@ -1196,7 +1131,6 @@ func aggregateTaskResult(todos []model.Todo, status string, artifacts []model.Ta
 			"in_progress_todo_count": inProgressCount,
 			"pending_todo_count":     pendingCount,
 			"canceled_todo_count":    canceledCount,
-			"artifact_count":         len(artifacts),
 		},
 	}
 }
@@ -1242,8 +1176,7 @@ func (s *Store) cancelTaskUnsafe(task *model.TaskDetail, actorType, actorID, act
 		ActorName: actorName,
 	}
 	task.CancelReason = reasonPtr
-	task.Artifacts = aggregateTaskArtifacts(task.Todos)
-	task.Result = aggregateTaskResult(task.Todos, task.Status, task.Artifacts)
+	task.Result = aggregateTaskResult(task.Todos, task.Status)
 	task.UpdatedAt = now
 	task.Version++
 
@@ -1272,50 +1205,6 @@ func (s *Store) cancelTodoUnsafe(todo *model.Todo, reason string, now time.Time)
 	}
 	reasonCopy := reason
 	todo.CancelReason = &reasonCopy
-}
-
-func uniqueTaskArtifactID(baseID string, usedIDs map[string]int) string {
-	count := usedIDs[baseID]
-	usedIDs[baseID] = count + 1
-	if count == 0 {
-		return baseID
-	}
-	return fmt.Sprintf("%s-%d", baseID, count+1)
-}
-
-func indexTodoTransfers(metadata map[string]any) map[string]map[string]any {
-	out := make(map[string]map[string]any)
-	if len(metadata) == 0 {
-		return out
-	}
-	rawTransfers, ok := metadata["transfers"]
-	if !ok {
-		return out
-	}
-	items, ok := rawTransfers.([]any)
-	if !ok {
-		return out
-	}
-	for _, item := range items {
-		transfer, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		transferID := strings.TrimSpace(stringValue(transfer["transfer_id"]))
-		if transferID == "" {
-			transferID = strings.TrimSpace(stringValue(transfer["transferId"]))
-		}
-		if transferID == "" {
-			continue
-		}
-		out[transferID] = copyMap(transfer)
-	}
-	return out
-}
-
-func stringValue(v any) string {
-	s, _ := v.(string)
-	return s
 }
 
 func findTodoIndex(task *model.TaskDetail, todoID string) int {

@@ -19,17 +19,10 @@ type TodoAssignee struct {
 	NodeID  string `json:"node_id" bson:"node_id"`
 }
 
-type TodoResultArtifactRef struct {
-	ArtifactID string `json:"artifact_id" bson:"artifact_id"`
-	Kind       string `json:"kind" bson:"kind"`
-	Label      string `json:"label" bson:"label"`
-}
-
 type TodoResult struct {
-	Summary      string                  `json:"summary" bson:"summary"`
-	Output       string                  `json:"output" bson:"output"`
-	ArtifactRefs []TodoResultArtifactRef `json:"artifact_refs" bson:"artifact_refs"`
-	Metadata     map[string]any          `json:"metadata" bson:"metadata"`
+	Summary  string         `json:"summary" bson:"summary"`
+	Output   string         `json:"output" bson:"output"`
+	Metadata map[string]any `json:"metadata" bson:"metadata"`
 }
 
 type Todo struct {
@@ -56,13 +49,17 @@ type ActorRef struct {
 }
 
 type TaskArtifact struct {
-	ID           string         `json:"id" bson:"id"`
-	SourceTodoID *string        `json:"source_todo_id" bson:"source_todo_id"`
-	Kind         string         `json:"kind" bson:"kind"`
-	Title        string         `json:"title" bson:"title"`
-	URI          string         `json:"uri" bson:"uri"`
-	MimeType     *string        `json:"mime_type" bson:"mime_type"`
-	Metadata     map[string]any `json:"metadata" bson:"metadata"`
+	TransferID    string    `json:"transfer_id" bson:"_id"`
+	TaskID        string    `json:"task_id" bson:"task_id"`
+	TodoID        string    `json:"todo_id,omitempty" bson:"todo_id,omitempty"`
+	FileName      string    `json:"file_name" bson:"file_name"`
+	FileSize      int64     `json:"file_size" bson:"file_size"`
+	LocalPath     string    `json:"-" bson:"local_path"`
+	MimeType      string    `json:"mime_type" bson:"mime_type"`
+	FromNodeID    string    `json:"from_node_id" bson:"from_node_id"`
+	FromAgentID   string    `json:"from_agent_id" bson:"from_agent_id"`
+	FromAgentName string    `json:"from_agent_name" bson:"from_agent_name"`
+	CreatedAt     time.Time `json:"created_at" bson:"created_at"`
 }
 
 type TaskResult struct {
@@ -99,7 +96,7 @@ type TaskDetail struct {
 	PMAgentID      string         `json:"-" bson:"pm_agent_id"`
 	PMAgent        PMAgentSummary `json:"pm_agent" bson:"pm_agent"`
 	Todos          []Todo         `json:"todos" bson:"todos"`
-	Artifacts      []TaskArtifact `json:"artifacts" bson:"artifacts"`
+	Artifacts      []TaskArtifact `json:"artifacts" bson:"-"`
 	Result         TaskResult     `json:"result" bson:"result"`
 	Version        int            `json:"version" bson:"version"`
 	CanceledAt     *time.Time     `json:"canceled_at" bson:"canceled_at"`

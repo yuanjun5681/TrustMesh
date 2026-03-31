@@ -12,6 +12,11 @@ import {
   Radio,
   ArrowRight,
   ArrowDown,
+  FileText,
+  Download,
+  Eye,
+  Loader2,
+  Paperclip,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -19,6 +24,10 @@ import { Avatar } from '@/components/ui/avatar'
 import { cn, formatRelativeTime } from '@/lib/utils'
 import { TrustMeshLogo } from '@/components/shared/TrustMeshLogo'
 import { useTaskEvents } from '@/hooks/useTasks'
+import { getTaskArtifactContent } from '@/api/tasks'
+import { ApiRequestError } from '@/api/client'
+import { FileViewer } from '@/components/task/FileViewer'
+import { toast } from 'sonner'
 import type { Event, EventType } from '@/types'
 
 // ─── 配置 ───
@@ -34,6 +43,7 @@ const eventConfig: Record<EventType, { icon: typeof Circle; color: string; label
   task_comment: { icon: MessageSquare, color: 'text-muted-foreground', label: '评论' },
   conversation_reply: { icon: MessageSquare, color: 'text-info', label: '回复了对话' },
   agent_status_changed: { icon: Radio, color: 'text-warning', label: '状态变更' },
+  artifact_received: { icon: Paperclip, color: 'text-info', label: '上传了文件' },
 }
 
 const actorRoleBadge: Record<string, { label: string; className: string } | null> = {
@@ -285,7 +295,105 @@ function EventContent({ event }: { event: Event }) {
     )
   }
 
+  if (event.event_type === 'artifact_received') {
+    const fileName = event.metadata.file_name as string | undefined
+    const fileSize = event.metadata.file_size as number | undefined
+    const mimeType = event.metadata.mime_type as string | undefined
+    const transferId = event.metadata.transfer_id as string | undefined
+    const sizeLabel = formatFileSize(fileSize)
+
+    return (
+      <div>
+        <p className="text-sm">{config.label}</p>
+        <QuoteBlock color="border-info/30">
+          <div className="flex items-center gap-2.5">
+            <div className="flex size-7 shrink-0 items-center justify-center rounded bg-muted">
+              <FileText className="size-3.5 text-muted-foreground" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium truncate">{fileName || '未知文件'}</p>
+              <p className="text-[11px] text-muted-foreground">
+                {mimeType}{sizeLabel ? ` · ${sizeLabel}` : ''}
+              </p>
+            </div>
+            {transferId && event.task_id && (
+              <ArtifactActions taskId={event.task_id} transferId={transferId} fileName={fileName || 'file'} />
+            )}
+          </div>
+        </QuoteBlock>
+      </div>
+    )
+  }
+
   return <p className="text-sm">{config.label}</p>
+}
+
+// ─── 文件操作组件 ───
+
+function ArtifactActions({ taskId, transferId, fileName }: { taskId: string; transferId: string; fileName: string }) {
+  const [loading, setLoading] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+  const [viewerBlob, setViewerBlob] = useState<Blob | null>(null)
+  const [viewerOpen, setViewerOpen] = useState(false)
+
+  const handlePreview = async () => {
+    setLoading(true)
+    try {
+      const blob = await getTaskArtifactContent(taskId, transferId)
+      setViewerBlob(blob)
+      setViewerOpen(true)
+    } catch (err) {
+      toast.error(err instanceof ApiRequestError ? err.message : '打开文件失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDownload = async () => {
+    setDownloading(true)
+    try {
+      const blob = await getTaskArtifactContent(taskId, transferId)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err) {
+      toast.error(err instanceof ApiRequestError ? err.message : '下载文件失败')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="flex items-center gap-1 shrink-0">
+        <Button type="button" variant="ghost" size="icon" className="size-6" disabled={loading} onClick={() => void handlePreview()}>
+          {loading ? <Loader2 className="size-3 animate-spin" /> : <Eye className="size-3" />}
+        </Button>
+        <Button type="button" variant="ghost" size="icon" className="size-6" disabled={downloading} onClick={() => void handleDownload()}>
+          {downloading ? <Loader2 className="size-3 animate-spin" /> : <Download className="size-3" />}
+        </Button>
+      </div>
+      <FileViewer
+        open={viewerOpen}
+        onOpenChange={setViewerOpen}
+        blob={viewerBlob}
+        fileName={fileName}
+        onDownload={() => void handleDownload()}
+      />
+    </>
+  )
+}
+
+function formatFileSize(bytes: number | undefined) {
+  if (!bytes || bytes <= 0) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 // ─── 消息组件 ───

@@ -44,6 +44,7 @@ func (s *Store) enableMongo(cfg config.Config, log *zap.Logger) error {
 	s.mongoComments = db.Collection("comments")
 	s.mongoProcessedMessages = db.Collection("processed_messages")
 	s.mongoNotifications = db.Collection("notifications")
+	s.mongoArtifacts = db.Collection("artifacts")
 	s.mongoKnowledgeDocs = db.Collection("knowledge_documents")
 	s.mongoKnowledgeChunks = db.Collection("knowledge_chunks")
 	s.mongoTimeout = cfg.MongoTimeout
@@ -90,6 +91,7 @@ func (s *Store) clearMongoCollections() {
 	s.mongoComments = nil
 	s.mongoProcessedMessages = nil
 	s.mongoNotifications = nil
+	s.mongoArtifacts = nil
 	s.mongoKnowledgeDocs = nil
 	s.mongoKnowledgeChunks = nil
 }
@@ -134,6 +136,10 @@ func (s *Store) ensureMongoIndexes() error {
 		},
 		s.mongoConversations: {
 			{Keys: bson.D{{Key: "project_id", Value: 1}, {Key: "user_id", Value: 1}}},
+		},
+		s.mongoArtifacts: {
+			{Keys: bson.D{{Key: "task_id", Value: 1}}},
+			{Keys: bson.D{{Key: "todo_id", Value: 1}}},
 		},
 		s.mongoKnowledgeDocs: {
 			{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "status", Value: 1}}},
@@ -197,6 +203,10 @@ func (s *Store) loadMongoState() error {
 	if err != nil {
 		return err
 	}
+	taskArtifacts, err := s.loadArtifacts()
+	if err != nil {
+		return err
+	}
 	processedMessages, err := s.loadProcessedMessages()
 	if err != nil {
 		return err
@@ -236,6 +246,7 @@ func (s *Store) loadMongoState() error {
 	s.userEvents = userEvents
 	s.agentEvents = agentEvents
 	s.taskComments = taskComments
+	s.taskArtifacts = taskArtifacts
 	s.processedMessages = processedMessages
 	s.notifications = notifications
 	s.userNotifications = userNotifications
@@ -725,6 +736,39 @@ func (s *Store) persistKnowledgeChunksUnsafe(chunks []model.KnowledgeChunk) erro
 		docs[i] = chunks[i]
 	}
 	_, err := s.mongoKnowledgeChunks.InsertMany(ctx, docs)
+	return err
+}
+
+func (s *Store) loadArtifacts() (map[string][]model.TaskArtifact, error) {
+	taskArtifacts := make(map[string][]model.TaskArtifact)
+	if s.mongoArtifacts == nil {
+		return taskArtifacts, nil
+	}
+	ctx, cancel := s.mongoContext()
+	defer cancel()
+	cursor, err := s.mongoArtifacts.Find(ctx, bson.D{}, options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}}))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var artifacts []model.TaskArtifact
+	if err := cursor.All(ctx, &artifacts); err != nil {
+		return nil, err
+	}
+	for _, a := range artifacts {
+		taskArtifacts[a.TaskID] = append(taskArtifacts[a.TaskID], a)
+	}
+	return taskArtifacts, nil
+}
+
+func (s *Store) persistArtifactUnsafe(artifact *model.TaskArtifact) error {
+	if !s.mongoEnabled || s.mongoArtifacts == nil || artifact == nil {
+		return nil
+	}
+	ctx, cancel := s.mongoContext()
+	defer cancel()
+	_, err := s.mongoArtifacts.ReplaceOne(ctx, bson.M{"_id": artifact.TransferID}, artifact, options.Replace().SetUpsert(true))
 	return err
 }
 
