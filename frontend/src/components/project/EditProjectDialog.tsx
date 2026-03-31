@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Select, SelectTrigger, SelectContent, SelectItem } from '@/components/ui/select'
 import { ApiRequestError } from '@/api/client'
+import { truncateNodeId } from '@/lib/utils'
 import { ProjectDialog } from '@/components/project/ProjectDialog'
 import { useUpdateProject } from '@/hooks/useProjects'
 import { useAgents } from '@/hooks/useAgents'
@@ -22,9 +23,9 @@ export function EditProjectDialog({ open, onOpenChange, project }: Props) {
   const pmAgents = agents?.filter((a) => a.role === 'pm') ?? []
   const selectedAgent = pmAgents.find((a) => a.id === pmAgentId)
   const displayLabel = selectedAgent
-    ? `${selectedAgent.name} (${selectedAgent.node_id}) - ${selectedAgent.status === 'online' ? '在线' : '离线'}`
+    ? `${selectedAgent.name} (${truncateNodeId(selectedAgent.node_id)}) - ${selectedAgent.status === 'online' ? '在线' : '离线'}`
     : project?.pm_agent
-      ? `${project.pm_agent.name} (${project.pm_agent.node_id})`
+      ? `${project.pm_agent.name} (${truncateNodeId(project.pm_agent.node_id)})`
       : '选择 PM Agent...'
 
   const initialValues = useMemo(
@@ -86,12 +87,12 @@ export function EditProjectDialog({ open, onOpenChange, project }: Props) {
         <label className="text-sm font-medium">PM Agent</label>
         <Select value={pmAgentId} onValueChange={(val) => setPmAgentId(val ?? '')}>
           <SelectTrigger className="w-full">
-            <span>{displayLabel}</span>
+            <span className="truncate">{displayLabel}</span>
           </SelectTrigger>
           <SelectContent>
             {pmAgents.map((agent) => (
               <SelectItem key={agent.id} value={agent.id}>
-                {agent.name} ({agent.node_id}) - {agent.status === 'online' ? '在线' : '离线'}
+                {agent.name} ({truncateNodeId(agent.node_id)}) - {agent.status === 'online' ? '在线' : '离线'}
               </SelectItem>
             ))}
           </SelectContent>

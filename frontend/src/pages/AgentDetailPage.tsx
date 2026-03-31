@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { Plus, Pencil, MoreHorizontal, Trash2, Archive } from 'lucide-react'
+import { Plus, Pencil, MoreHorizontal, Trash2, Archive, Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { Badge } from '@/components/ui/badge'
@@ -11,8 +11,9 @@ import { EventTimeline } from '@/components/shared/EventTimeline'
 import { useAgent, useAgentStats, useDeleteAgent } from '@/hooks/useAgents'
 import { useAgentInsights } from '@/hooks/useAgentInsights'
 import { useAgentEvents } from '@/hooks/useDashboard'
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { ApiRequestError } from '@/api/client'
-import { formatRelativeTime } from '@/lib/utils'
+import { formatRelativeTime, truncateNodeId } from '@/lib/utils'
 import { useCallback, useRef, useState } from 'react'
 import {
   AgentMetricCards,
@@ -26,6 +27,21 @@ import { ArchiveAgentDialog } from '@/components/agent/ArchiveAgentDialog'
 import { CreateTaskDialog } from '@/components/task/CreateTaskDialog'
 import { Avatar } from '@/components/ui/avatar'
 import type { EventType } from '@/types'
+
+function CopyIcon({ value }: { value: string }) {
+  const { copied, copy } = useCopyToClipboard()
+
+  return (
+    <button
+      type="button"
+      onClick={() => copy(value)}
+      className="inline-flex items-center text-muted-foreground/50 hover:text-foreground transition-colors cursor-pointer"
+      title="复制"
+    >
+      {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+    </button>
+  )
+}
 
 const eventTypeFilters: { label: string; value: EventType | 'all' }[] = [
   { label: '全部', value: 'all' },
@@ -104,12 +120,13 @@ export function AgentDetailPage() {
                 <h1 className="text-lg font-bold truncate">{agent.name}</h1>
                 <AgentStatusBadge status={agent.status} />
                 {agent.archived && (
-                  <Badge variant="secondary" className="text-xs">已归档</Badge>
+                  <Badge variant="secondary" className="text-xs">已离职</Badge>
                 )}
                 <span className="text-xs text-muted-foreground">
-                  <span className="capitalize">{agent.role}</span>
+                  <span>{({ pm: 'PM', developer: '开发者', reviewer: '审核者', custom: '自定义' })[agent.role] ?? agent.role}</span>
                   <span> · </span>
-                  <span className="font-mono">{agent.node_id}</span>
+                  <span className="font-mono" title={agent.node_id}>{truncateNodeId(agent.node_id)}</span>
+                  <span className="ml-0.5"><CopyIcon value={agent.node_id} /></span>
                   {agent.last_seen_at && (
                     <span> · {formatRelativeTime(agent.last_seen_at)}</span>
                   )}
@@ -160,7 +177,7 @@ export function AgentDetailPage() {
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleDelete} className="text-destructive">
                       {agent.usage.in_use ? (
-                        <><Archive className="size-3.5 mr-2" />归档</>
+                        <><Archive className="size-3.5 mr-2" />离职</>
                       ) : (
                         <><Trash2 className="size-3.5 mr-2" />删除</>
                       )}
@@ -176,7 +193,7 @@ export function AgentDetailPage() {
           <div className="mx-6 mt-4 flex items-center gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
             <Archive className="size-4 text-amber-600 shrink-0" />
             <p className="text-sm text-amber-700 dark:text-amber-400">
-              该 Agent 已归档，不再接收新任务
+              该 Agent 已离职，不再接收新任务
             </p>
           </div>
         )}

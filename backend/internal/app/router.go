@@ -54,6 +54,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	taskHandler := handler.NewTaskHandler(s, clawClient, log)
 	transferHandler := handler.NewTransferHandler(s, clawClient)
 	dashboardHandler := handler.NewDashboardHandler(s)
+	clawSynapseHandler := handler.NewClawSynapseHandler(clawClient)
 	notificationHandler := handler.NewNotificationHandler(s)
 	joinRequestHandler := handler.NewJoinRequestHandler(s, clawClient, cfg)
 	realtimeHandler := handler.NewRealtimeHandler(s)
@@ -139,6 +140,8 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	authed.GET("/dashboard/events", dashboardHandler.RecentEvents)
 	authed.GET("/dashboard/tasks", dashboardHandler.RecentTasks)
 	authed.GET("/agents/:id/events", dashboardHandler.AgentEvents)
+
+	authed.GET("/clawsynapse/health", clawSynapseHandler.Health)
 
 	authed.GET("/notifications", notificationHandler.List)
 	authed.GET("/notifications/unread-count", notificationHandler.UnreadCount)

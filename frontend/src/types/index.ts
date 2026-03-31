@@ -463,6 +463,14 @@ export interface AgentTaskItem {
   updated_at: string
 }
 
+export interface ClawSynapseHealth {
+  online: boolean
+  node_id?: string
+  did?: string
+  trust_mode?: string
+  error?: string
+}
+
 export interface DashboardStats {
   agents_online: number
   agents_total: number
@@ -540,7 +548,7 @@ export interface UpdateAgentRequest {
   capabilities?: string[]
 }
 
-// ─── 加入请求 ───
+// ─── 入职申请 ───
 
 export type JoinRequestStatus = 'pending' | 'approved' | 'rejected'
 

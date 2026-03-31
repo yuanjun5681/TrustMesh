@@ -72,7 +72,7 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 		h.handleTaskComment(c, payload)
 	case "knowledge.query":
 		h.handleKnowledgeQuery(c, payload)
-	case "context.query":
+	case "task.context.query":
 		h.handleContextQuery(c, payload)
 	default:
 		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "unsupported webhook type"))
@@ -239,7 +239,7 @@ func (h *WebhookHandler) handleTaskComment(c *gin.Context, webhook protocol.Webh
 func (h *WebhookHandler) handleContextQuery(c *gin.Context, webhook protocol.WebhookPayload) {
 	var payload protocol.ContextQueryPayload
 	if err := decodeWebhookMessage(webhook.Message, &payload); err != nil {
-		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid context.query message"))
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid task.context.query message"))
 		return
 	}
 
@@ -260,7 +260,7 @@ func (h *WebhookHandler) handleContextQuery(c *gin.Context, webhook protocol.Web
 		}
 	}
 
-	h.publish(context.Background(), webhook.From, "context.result", resultPayload, task.ID)
+	h.publish(context.Background(), webhook.From, "task.context.result", resultPayload, task.ID)
 	transport.WriteData(c, http.StatusOK, gin.H{"status": "ok", "task_id": task.ID})
 }
 
