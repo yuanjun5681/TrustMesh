@@ -36,6 +36,9 @@ export function NodeStatusIndicator() {
   }
 
   const online = data?.online ?? false
+  const nodeId = data?.node_id
+  const did = data?.did
+  const trustMode = data?.trust_mode
 
   return (
     <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -50,19 +53,35 @@ export function NodeStatusIndicator() {
 
       {online && data ? (
         <>
-          <span className="font-mono" title={data.node_id}>
-            {truncateMiddle(data.node_id, 20)}
-          </span>
-          <CopyIcon value={data.node_id} />
-          <span className="text-border">|</span>
-          <span className="font-mono hidden sm:inline" title={data.did}>
-            {truncateMiddle(data.did, 24)}
-          </span>
-          <span className="hidden sm:inline">
-            <CopyIcon value={data.did} />
-          </span>
-          <span className="text-border hidden sm:inline">|</span>
-          <span className="font-medium uppercase">{data.trust_mode}</span>
+          {nodeId ? (
+            <>
+              <span className="font-mono" title={nodeId}>
+                {truncateMiddle(nodeId, 20)}
+              </span>
+              <CopyIcon value={nodeId} />
+            </>
+          ) : (
+            <span className="font-medium">节点在线</span>
+          )}
+
+          {did && (
+            <>
+              <span className="text-border">|</span>
+              <span className="font-mono hidden sm:inline" title={did}>
+                {truncateMiddle(did, 24)}
+              </span>
+              <span className="hidden sm:inline">
+                <CopyIcon value={did} />
+              </span>
+            </>
+          )}
+
+          {trustMode && (
+            <>
+              <span className="text-border hidden sm:inline">|</span>
+              <span className="font-medium uppercase">{trustMode}</span>
+            </>
+          )}
         </>
       ) : (
         <span className="text-destructive">节点离线</span>
