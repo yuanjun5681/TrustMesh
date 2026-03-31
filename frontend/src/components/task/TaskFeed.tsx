@@ -3,20 +3,13 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
   CheckCircle2,
-  Circle,
   AlertCircle,
-  PlayCircle,
-  UserCircle,
-  Cog,
-  MessageSquare,
-  Radio,
   ArrowRight,
   ArrowDown,
   FileText,
   Download,
   Eye,
   Loader2,
-  Paperclip,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -28,22 +21,22 @@ import { getTaskArtifactContent } from '@/api/tasks'
 import { ApiRequestError } from '@/api/client'
 import { FileViewer } from '@/components/task/FileViewer'
 import { toast } from 'sonner'
-import type { Event, EventType } from '@/types'
+import type { Event } from '@/types'
 
 // ─── 配置 ───
 
-const eventConfig: Record<EventType, { icon: typeof Circle; color: string; label: string }> = {
-  task_created: { icon: Circle, color: 'text-info', label: '创建了任务' },
-  task_status_changed: { icon: Cog, color: 'text-warning', label: '更新了任务状态' },
-  todo_assigned: { icon: UserCircle, color: 'text-info', label: '分配了 Todo' },
-  todo_started: { icon: PlayCircle, color: 'text-info', label: '开始执行 Todo' },
-  todo_progress: { icon: Cog, color: 'text-muted-foreground', label: '执行进度更新' },
-  todo_completed: { icon: CheckCircle2, color: 'text-success', label: '完成了 Todo' },
-  todo_failed: { icon: AlertCircle, color: 'text-destructive', label: 'Todo 执行失败' },
-  task_comment: { icon: MessageSquare, color: 'text-muted-foreground', label: '评论' },
-  conversation_reply: { icon: MessageSquare, color: 'text-info', label: '回复了对话' },
-  agent_status_changed: { icon: Radio, color: 'text-warning', label: '状态变更' },
-  artifact_received: { icon: Paperclip, color: 'text-info', label: '上传了文件' },
+const eventLabel: Record<string, string> = {
+  task_created: '创建任务',
+  task_status_changed: '更新状态',
+  todo_assigned: '分配任务',
+  todo_started: '开始执行',
+  todo_progress: '进度更新',
+  todo_completed: '完成 Todo',
+  todo_failed: '执行失败',
+  task_comment: '',
+  conversation_reply: '回复对话',
+  agent_status_changed: '状态变更',
+  artifact_received: '上传文件',
 }
 
 const actorRoleBadge: Record<string, { label: string; className: string } | null> = {
@@ -124,11 +117,22 @@ function AgentStatusTransition({ from, to }: { from: string; to: string }) {
   )
 }
 
+// ─── Markdown prose 样式 ───
+
+const proseSmall = cn(
+  'text-xs text-muted-foreground',
+  'prose prose-xs dark:prose-invert max-w-none',
+  'prose-p:my-0.5 prose-headings:my-1 prose-headings:text-xs prose-headings:text-muted-foreground',
+  'prose-pre:my-1 prose-pre:bg-zinc-200/70 prose-pre:text-[11px] prose-pre:text-zinc-800 dark:prose-pre:bg-zinc-800 dark:prose-pre:text-zinc-200',
+  'prose-code:text-[11px] prose-code:bg-zinc-200/70 prose-code:text-zinc-800 dark:prose-code:bg-zinc-800 dark:prose-code:text-zinc-200 prose-code:px-1 prose-code:py-0.5 prose-code:rounded',
+  '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
+)
+
 // ─── 事件内容渲染 ───
 
 function EventContent({ event }: { event: Event }) {
-  const config = eventConfig[event.event_type] ?? { label: event.event_type }
   const todoTitle = event.metadata.todo_title as string | undefined
+  const taskTitle = event.metadata.task_title as string | undefined
 
   if (event.event_type === 'task_comment') {
     return (
@@ -149,38 +153,23 @@ function EventContent({ event }: { event: Event }) {
   }
 
   if (event.event_type === 'task_created') {
-    const taskTitle = event.metadata.task_title as string | undefined
-    return (
-      <div>
-        <p className="text-sm">{config.label}</p>
-        {taskTitle && (
-          <QuoteBlock>
-            <p className="text-xs text-muted-foreground">{taskTitle}</p>
-          </QuoteBlock>
-        )}
-      </div>
-    )
+    return taskTitle
+      ? <p className="text-sm text-muted-foreground">{taskTitle}</p>
+      : <p className="text-sm text-muted-foreground">创建了新任务</p>
   }
 
   if (event.event_type === 'task_status_changed') {
     const from = event.metadata.from as string | undefined
     const to = event.metadata.to as string | undefined
-    return (
-      <div>
-        <p className="text-sm">{config.label}</p>
-        {from && to && (
-          <QuoteBlock color="border-warning/30">
-            <StatusTransition from={from} to={to} />
-          </QuoteBlock>
-        )}
-      </div>
-    )
+    return from && to
+      ? <StatusTransition from={from} to={to} />
+      : <p className="text-sm text-muted-foreground">任务状态已更新</p>
   }
 
   if (event.event_type === 'todo_assigned') {
     return (
       <div>
-        <p className="text-sm">{config.label}</p>
+        <p className="text-sm">{event.content || '分配了 Todo'}</p>
         {todoTitle && (
           <QuoteBlock color="border-info/30">
             <p className="text-xs text-muted-foreground">{todoTitle}</p>
@@ -191,54 +180,32 @@ function EventContent({ event }: { event: Event }) {
   }
 
   if (event.event_type === 'todo_started') {
-    return (
-      <div>
-        <p className="text-sm">{config.label}</p>
-        {todoTitle && (
-          <QuoteBlock color="border-info/30">
-            <p className="text-xs text-muted-foreground">{todoTitle}</p>
-          </QuoteBlock>
-        )}
-      </div>
-    )
+    return todoTitle
+      ? <p className="text-sm text-muted-foreground">{todoTitle}</p>
+      : <p className="text-sm text-muted-foreground">开始执行</p>
   }
 
   if (event.event_type === 'todo_progress') {
     return (
       <div>
-        <p className="text-sm">{config.label}</p>
-        {(event.content || todoTitle) && (
-          <QuoteBlock>
-            {todoTitle && <p className="text-xs font-medium text-muted-foreground">{todoTitle}</p>}
-            {event.content && (
-              <div className={cn(
-                'text-xs text-muted-foreground mt-0.5',
-                'prose prose-xs dark:prose-invert max-w-none',
-                'prose-p:my-0.5 prose-headings:my-1 prose-headings:text-xs prose-headings:text-muted-foreground',
-                'prose-pre:my-1 prose-pre:bg-zinc-200/70 prose-pre:text-[11px] prose-pre:text-zinc-800 dark:prose-pre:bg-zinc-800 dark:prose-pre:text-zinc-200',
-                'prose-code:text-[11px] prose-code:bg-zinc-200/70 prose-code:text-zinc-800 dark:prose-code:bg-zinc-800 dark:prose-code:text-zinc-200 prose-code:px-1 prose-code:py-0.5 prose-code:rounded',
-                '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
-              )}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {event.content}
-                </ReactMarkdown>
-              </div>
-            )}
-          </QuoteBlock>
+        {todoTitle && <p className="text-xs font-medium text-muted-foreground">{todoTitle}</p>}
+        {event.content && (
+          <div className={cn(proseSmall, todoTitle ? 'mt-0.5' : '')}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {event.content}
+            </ReactMarkdown>
+          </div>
         )}
+        {!event.content && !todoTitle && <p className="text-sm text-muted-foreground">进度已更新</p>}
       </div>
     )
   }
 
   if (event.event_type === 'todo_completed') {
     return (
-      <div>
-        <p className="text-sm">{config.label}</p>
-        {todoTitle && (
-          <QuoteBlock color="border-success/30">
-            <p className="text-xs text-muted-foreground">{todoTitle}</p>
-          </QuoteBlock>
-        )}
+      <div className="flex items-center gap-1.5">
+        <CheckCircle2 className="size-3.5 text-success shrink-0" />
+        <span className="text-sm text-muted-foreground line-through decoration-success/40">{todoTitle || '已完成'}</span>
       </div>
     )
   }
@@ -246,53 +213,34 @@ function EventContent({ event }: { event: Event }) {
   if (event.event_type === 'todo_failed') {
     const error = event.metadata.error as string | undefined
     return (
-      <div>
-        <p className="text-sm">{config.label}</p>
-        <QuoteBlock color="border-destructive/30">
-          {todoTitle && <p className="text-xs font-medium text-muted-foreground">{todoTitle}</p>}
+      <div className="flex items-start gap-1.5">
+        <AlertCircle className="size-3.5 text-destructive shrink-0 mt-0.5" />
+        <div className="min-w-0">
+          {todoTitle && <p className="text-sm text-muted-foreground">{todoTitle}</p>}
           {error && <p className="text-xs text-destructive mt-0.5">{error}</p>}
-        </QuoteBlock>
+        </div>
       </div>
     )
   }
 
   if (event.event_type === 'conversation_reply') {
-    return (
-      <div>
-        <p className="text-sm">{config.label}</p>
-        {event.content && (
-          <QuoteBlock color="border-info/30">
-            <div className={cn(
-              'text-xs text-muted-foreground',
-              'prose prose-xs dark:prose-invert max-w-none',
-              'prose-p:my-0.5 prose-headings:my-1 prose-headings:text-xs prose-headings:text-muted-foreground',
-              'prose-pre:my-1 prose-pre:bg-muted prose-pre:text-[11px]',
-              'prose-code:text-[11px] prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded',
-              '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
-            )}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {event.content}
-              </ReactMarkdown>
-            </div>
-          </QuoteBlock>
-        )}
-      </div>
-    )
+    return event.content ? (
+      <QuoteBlock color="border-info/30">
+        <div className={proseSmall}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {event.content}
+          </ReactMarkdown>
+        </div>
+      </QuoteBlock>
+    ) : <p className="text-sm text-muted-foreground">回复了对话</p>
   }
 
   if (event.event_type === 'agent_status_changed') {
     const from = event.metadata.prev_status as string | undefined
     const to = event.metadata.new_status as string | undefined
-    return (
-      <div>
-        <p className="text-sm">{config.label}</p>
-        {from && to && (
-          <QuoteBlock color="border-warning/30">
-            <AgentStatusTransition from={from} to={to} />
-          </QuoteBlock>
-        )}
-      </div>
-    )
+    return from && to
+      ? <AgentStatusTransition from={from} to={to} />
+      : <p className="text-sm text-muted-foreground">状态已变更</p>
   }
 
   if (event.event_type === 'artifact_received') {
@@ -303,29 +251,24 @@ function EventContent({ event }: { event: Event }) {
     const sizeLabel = formatFileSize(fileSize)
 
     return (
-      <div>
-        <p className="text-sm">{config.label}</p>
-        <QuoteBlock color="border-info/30">
-          <div className="flex items-center gap-2.5">
-            <div className="flex size-7 shrink-0 items-center justify-center rounded bg-muted">
-              <FileText className="size-3.5 text-muted-foreground" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium truncate">{fileName || '未知文件'}</p>
-              <p className="text-[11px] text-muted-foreground">
-                {mimeType}{sizeLabel ? ` · ${sizeLabel}` : ''}
-              </p>
-            </div>
-            {transferId && event.task_id && (
-              <ArtifactActions taskId={event.task_id} transferId={transferId} fileName={fileName || 'file'} />
-            )}
-          </div>
-        </QuoteBlock>
+      <div className="mt-1 flex items-center gap-2.5 rounded-md border border-border/60 bg-muted/30 px-3 py-2">
+        <div className="flex size-7 shrink-0 items-center justify-center rounded bg-muted">
+          <FileText className="size-3.5 text-muted-foreground" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium truncate">{fileName || '未知文件'}</p>
+          <p className="text-[11px] text-muted-foreground">
+            {mimeType}{sizeLabel ? ` · ${sizeLabel}` : ''}
+          </p>
+        </div>
+        {transferId && event.task_id && (
+          <ArtifactActions taskId={event.task_id} transferId={transferId} fileName={fileName || 'file'} />
+        )}
       </div>
     )
   }
 
-  return <p className="text-sm">{config.label}</p>
+  return <p className="text-sm text-muted-foreground">{event.event_type}</p>
 }
 
 // ─── 文件操作组件 ───
@@ -417,6 +360,7 @@ function FeedActorAvatar({ event }: { event: Event }) {
 function FeedMessage({ event, showHeader }: { event: Event; showHeader: boolean }) {
   const roleBadge = actorRoleBadge[event.actor_type]
   const isSystem = event.actor_type === 'system'
+  const label = eventLabel[event.event_type] || ''
 
   if (!showHeader) {
     return (
@@ -439,6 +383,7 @@ function FeedMessage({ event, showHeader }: { event: Event; showHeader: boolean 
               {roleBadge.label}
             </span>
           )}
+          {label && <span className="text-xs text-muted-foreground">{label}</span>}
           <span className="text-xs text-muted-foreground ml-auto shrink-0">
             {formatRelativeTime(event.created_at)}
           </span>
