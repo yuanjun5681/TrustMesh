@@ -39,7 +39,7 @@ allowed-tools:
 2.3. **每个明显步骤后继续发 comment。** 读完代码、执行命令、完成一段修改、做出关键判断、发现风险、遇到阻塞后，都应补 1 条 `task.comment`。
 2.4. **拿不准要不要发时，默认发。** 宁可多发简短 comment，也不要长时间沉默。
 2.5. **`todo.progress` 负责里程碑，`task.comment` 负责过程。** `todo.progress` 用于状态推进；`task.comment` 用于记录观察、动作、决定、问题和下一步。
-3. **结果要具体。** `todo.complete` 的 result 应包含有意义的 summary 和 output；如果交付物里包含文件，**必须先上传文件**，再在结果里引用。
+3. **结果要具体。** `todo.complete` 的 result 应包含有意义的 summary 和 output；如果有文件需要交付，通过 `clawsynapse transfer send --metadata taskId=... todoId=...` 上传。
 4. **失败要说明原因。** `todo.fail` 的 error 应清晰描述失败原因，帮助诊断。
 5. **所有回报都走 ClawSynapse。** 不要在聊天界面直接输出结果。
 
@@ -78,10 +78,7 @@ allowed-tools:
       "todo_id": "todo_1",
       "title": "设计认证流程",
       "summary": "采用 RS256 + refresh token，access token 15min 过期",
-      "output": "详细设计内容...",
-      "artifacts": [
-        { "artifact_id": "tf_abc", "kind": "file", "label": "认证设计文档" }
-      ]
+      "output": "详细设计内容..."
     }
   ]
 }
@@ -90,7 +87,6 @@ allowed-tools:
 **字段说明：**
 - `task_context`：任务全局上下文。仅在你**首次参与此任务**时包含；如果你之前已完成过该任务的其他 Todo（同一 session），此字段省略（因为你的会话中已有这些信息）。
 - `prior_results`：前序 Todo 的执行结果。首次参与时包含所有前序结果；再次参与时仅包含**其他 Agent** 完成的结果（你自己做过的结果已在会话中）。
-- `prior_results[].artifacts`：前序 Todo 的交付物引用。如需下载文件，使用 `clawsynapse transfer get --id <artifact_id>`。
 
 ### task.context.query（按需拉取任务上下文）
 
@@ -159,35 +155,23 @@ clawsynapse publish \
 
 ### todo.complete — 报告完成
 
-Todo 执行成功时发送。
+Todo 执行成功时发送。`todo.complete` 只包含文本结果，不包含文件引用。文件交付通过独立的 `transfer send` 完成（见下文）。
 
 ```bash
 TARGET_NODE="trustmesh-server"  # ← 替换为实际 from 值
 
-result='{
-  "summary": "登录接口已完成",
-  "output": "实现了注册、登录、JWT 校验",
-  "artifact_refs": [
-    {
-      "artifact_id": "artifact_login_api",
-      "kind": "report",
-      "label": "登录接口实现说明"
-    }
-  ],
-  "metadata": {
-    "model": "claude-opus-4-6",
-    "duration_ms": 1200
-  }
-}'
-
 payload="$(jq -nc \
   --arg task_id "task_123" \
   --arg todo_id "todo_1" \
-  --argjson result "$result" \
+  --arg summary "登录接口已完成" \
+  --arg output "实现了注册、登录、JWT 校验" \
   '{
     task_id: $task_id,
     todo_id: $todo_id,
-    result: $result
+    result: {
+      summary: $summary,
+      output: $output
+    }
   }')"
 
 clawsynapse publish \
@@ -200,21 +184,13 @@ clawsynapse publish \
 result 字段说明：
 - `summary`：一句话总结完成了什么
 - `output`：详细描述执行结果
-- `artifact_refs`：交付物引用列表（可选）
-  - `artifact_id`：交付物唯一标识
-  - `kind`：类型（`report`, `code`, `config` 等）
-  - `label`：人类可读的标签
 - `metadata`：执行元数据（可选），如使用的模型、耗时等
 
-### 文件交付（有文件时必做）
+### 文件交付
 
-如果 Todo 的交付结果包含本地文件（如代码、报告、配置文件、截图、日志、导出数据等），**必须**先上传文件，再发送 `todo.complete`。
+文件交付与 `todo.complete` 完全解耦。只需用 `clawsynapse transfer send` 并通过 `--metadata` 关联 task 和 todo，TrustMesh 会自动接收文件并创建交付物。
 
-执行顺序：
-
-1. 先用 `clawsynapse transfer send` 把文件传给 incoming header 中 `from` 指定的 TrustMesh 节点
-2. 再发送 `todo.complete`
-3. 在 `result.artifact_refs` 中引用已上传文件，在 `result.metadata.transfers` 中附上结构化传输信息
+**你可以在任何时候发送文件**——执行过程中、完成前、完成后、甚至任务结束后修订文件时。
 
 **触发条件**：任何需要交付给用户的文件都必须上传，包括但不限于：
 - 生成的代码文件
@@ -225,80 +201,30 @@ result 字段说明：
 
 **规则**：
 
-- `transfer send` 的 `--target` 必须与 `publish` 一样，使用 incoming header 中 `from` 的值
-- `artifact_refs[].kind` 对文件交付使用 `file`
-- `artifact_refs[].artifact_id` 推荐直接使用 `transfer send` 返回的 `transferId`
-- 不要新增 `todo.complete` 顶层字段；文件传输细节放进 `result.metadata`
-- **如果文件上传失败，必须发送 `todo.fail`**，并在 error 中说明上传失败原因
-- 不要在 `todo.complete` 的 output 里说"文件未上传"——如果没上传，就不应该发 complete
+- `--target` 使用 incoming header 中 `from` 的值（TrustMesh 节点）
+- `--metadata` 必须包含 `taskId`，`todoId` 可选但推荐
+- 同一 `transferId` 重复发送会覆盖旧文件（可用于修订）
+- **如果文件上传失败，在 `todo.complete` 中说明，或发送 `todo.fail`**
 
-示例：先上传文件，再回报完成
+示例：
 
 ```bash
 TARGET_NODE="trustmesh-server"  # ← 替换为实际 from 值
+TASK_ID="task_123"
+TODO_ID="todo_1"
 
-transfer_json="$(clawsynapse --json transfer send \
+# 上传文件，通过 --metadata 关联到 task 和 todo
+clawsynapse transfer send \
   --target "$TARGET_NODE" \
   --file /tmp/login-api-report.pdf \
-  --mime-type application/pdf)"
-
-transfer_id="$(printf '%s' "$transfer_json" | jq -r '.data.transferId')"
-transfer_bucket="$(printf '%s' "$transfer_json" | jq -r '.data.bucket')"
-transfer_size="$(printf '%s' "$transfer_json" | jq -r '.data.size')"
-transfer_checksum="$(printf '%s' "$transfer_json" | jq -r '.data.checksum')"
-
-result="$(jq -nc \
-  --arg summary "登录接口已完成" \
-  --arg output "实现了注册、登录、JWT 校验，并已上传交付报告 PDF" \
-  --arg transfer_id "$transfer_id" \
-  --arg transfer_bucket "$transfer_bucket" \
-  --argjson transfer_size "$transfer_size" \
-  --arg transfer_checksum "$transfer_checksum" \
-  '{
-    summary: $summary,
-    output: $output,
-    artifact_refs: [
-      {
-        artifact_id: $transfer_id,
-        kind: "file",
-        label: "登录接口实现报告 PDF"
-      }
-    ],
-    metadata: {
-      transfers: [
-        {
-          transfer_id: $transfer_id,
-          bucket: $transfer_bucket,
-          size: $transfer_size,
-          checksum: $transfer_checksum,
-          purpose: "todo_deliverable"
-        }
-      ]
-    }
-  }')"
-
-payload="$(jq -nc \
-  --arg task_id "task_123" \
-  --arg todo_id "todo_1" \
-  --argjson result "$result" \
-  '{
-    task_id: $task_id,
-    todo_id: $todo_id,
-    result: $result
-  }')"
-
-clawsynapse publish \
-  --target "$TARGET_NODE" \
-  --type todo.complete \
-  --session-key task_123 \
-  --message "$payload"
+  --mime-type application/pdf \
+  --metadata "taskId=$TASK_ID" \
+  --metadata "todoId=$TODO_ID"
 ```
 
-多个文件时：
+多个文件时，对每个文件分别执行一次 `transfer send`，每次都带上 `--metadata taskId=...`。
 
-- 对每个文件分别执行一次 `clawsynapse --json transfer send`
-- 把每个返回的 `transferId` 都写入 `artifact_refs`
-- 需要排查时可用 `clawsynapse transfer get --id <transferId>` 或 `clawsynapse transfers`
+**推荐流程**：先上传文件，再发送 `todo.complete`。但顺序不是强制的——文件可以在任何时候发送。
 
 ### todo.fail — 报告失败
 
