@@ -792,6 +792,7 @@ func (s *Store) AddTaskCommentByNode(nodeID string, in TaskCommentInput) (*model
 	if err := s.persistCommentUnsafe(comment); err != nil {
 		return nil, mongoWriteError(err)
 	}
+	_ = s.persistTaskEventsUnsafe(task.ID)
 	s.publishTaskUnsafe(task.ID)
 	return comment, nil
 }
@@ -875,6 +876,7 @@ func (s *Store) AddTaskComment(userID, taskID string, in TaskCommentInput) (*mod
 	if err := s.persistCommentUnsafe(comment); err != nil {
 		return nil, mongoWriteError(err)
 	}
+	_ = s.persistTaskEventsUnsafe(task.ID)
 	s.publishTaskUnsafe(task.ID)
 	return comment, nil
 }

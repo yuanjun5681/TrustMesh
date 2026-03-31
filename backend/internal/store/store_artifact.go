@@ -74,6 +74,12 @@ func (s *Store) SaveArtifact(artifact model.TaskArtifact) *transport.AppError {
 				"mime_type":   artifact.MimeType,
 				"task_title":  task.Title,
 			}, now)
+
+		if err := s.persistTaskEventsUnsafe(artifact.TaskID); err != nil {
+			if s.log != nil {
+				s.log.Warn("failed to persist artifact event", zap.String("task_id", artifact.TaskID), zap.Error(err))
+			}
+		}
 	}
 
 	s.publishTaskUnsafe(artifact.TaskID)
