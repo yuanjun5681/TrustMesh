@@ -89,6 +89,7 @@ docker build --platform linux/amd64 -t "trustmesh/backend:${TAG}"     "${PROJECT
 docker build --platform linux/amd64 -t "trustmesh/frontend:${TAG}"    "${PROJECT_ROOT}/frontend"
 docker build --platform linux/amd64 -t "trustmesh/clawsynapse:${TAG}" \
   --build-arg CLAWSYNAPSE_REF="${CLAWSYNAPSE_REF:-main}" \
+  --build-arg CACHE_BUST="$(date +%s)" \
   "${PROJECT_ROOT}/deploy/clawsynapse"
 
 echo "==> 导出镜像到 ${IMAGES_FILE}"
