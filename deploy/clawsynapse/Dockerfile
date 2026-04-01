@@ -7,6 +7,7 @@ RUN apk add --no-cache git ca-certificates
 
 WORKDIR /src
 
+ARG CACHE_BUST
 RUN git clone --depth 1 --branch "${CLAWSYNAPSE_REF}" "${CLAWSYNAPSE_REPO}" .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/clawsynapsed ./cmd/clawsynapsed
 
