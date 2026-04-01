@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState } from 'react'
 import { Copy, Check, X, Network, UserPlus, ClipboardCheck, Wrench } from 'lucide-react'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { Button } from '@/components/ui/button'
@@ -11,30 +11,6 @@ import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { ApiRequestError } from '@/api/client'
 import { toast } from 'sonner'
 import type { JoinRequest, AgentRole } from '@/types'
-
-function useMultiCopy(resetDelay = 2000) {
-  const [copiedKey, setCopiedKey] = useState<string | null>(null)
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
-
-  const copy = useCallback(
-    async (key: string, text: string) => {
-      try {
-        await navigator.clipboard.writeText(text)
-        setCopiedKey(key)
-        clearTimeout(timerRef.current)
-        timerRef.current = setTimeout(() => setCopiedKey(null), resetDelay)
-        toast.success('指令已复制到剪贴板')
-        return true
-      } catch {
-        toast.error('复制失败，请手动选择复制')
-        return false
-      }
-    },
-    [resetDelay],
-  )
-
-  return { copiedKey, copy }
-}
 
 const SKILL_INSTRUCTIONS = [
   {
@@ -64,13 +40,14 @@ const ROLE_LABELS: Record<string, string> = {
   custom: '自定义',
 }
 
+const INVITE_PROMPT_KEY = 'invite-prompt'
+
 export function AgentInvitePage() {
   const { data: invite, isLoading: promptLoading } = useInvitePrompt(true)
   const { data: requests } = useJoinRequests('pending')
   const approveRequest = useApproveJoinRequest()
   const rejectRequest = useRejectJoinRequest()
-  const { copied, copy } = useCopyToClipboard(2000)
-  const { copiedKey, copy: copySkill } = useMultiCopy()
+  const { copiedKey, copy } = useCopyToClipboard(2000)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editRole, setEditRole] = useState<AgentRole>('developer')
@@ -78,9 +55,18 @@ export function AgentInvitePage() {
 
   const handleCopy = async () => {
     if (!invite?.prompt) return
-    const ok = await copy(invite.prompt)
+    const ok = await copy(invite.prompt, INVITE_PROMPT_KEY)
     if (ok) {
       toast.success('提示词已复制到剪贴板')
+    } else {
+      toast.error('复制失败，请手动选择复制')
+    }
+  }
+
+  const handleSkillCopy = async (key: string, prompt: string) => {
+    const ok = await copy(prompt, key)
+    if (ok) {
+      toast.success('指令已复制到剪贴板')
     } else {
       toast.error('复制失败，请手动选择复制')
     }
@@ -144,8 +130,8 @@ export function AgentInvitePage() {
                   className="absolute top-2 right-2"
                   onClick={handleCopy}
                 >
-                  {copied ? <Check className="size-4 mr-1" /> : <Copy className="size-4 mr-1" />}
-                  {copied ? '已复制' : '复制'}
+                  {copiedKey === INVITE_PROMPT_KEY ? <Check className="size-4 mr-1" /> : <Copy className="size-4 mr-1" />}
+                  {copiedKey === INVITE_PROMPT_KEY ? '已复制' : '复制'}
                 </Button>
               </div>
             )}
@@ -177,7 +163,7 @@ export function AgentInvitePage() {
                       size="sm"
                       variant="outline"
                       className="absolute top-1.5 right-1.5 h-7 text-xs"
-                      onClick={() => copySkill(skill.key, skill.prompt)}
+                      onClick={() => handleSkillCopy(skill.key, skill.prompt)}
                     >
                       {copiedKey === skill.key ? <Check className="size-3.5 mr-1" /> : <Copy className="size-3.5 mr-1" />}
                       {copiedKey === skill.key ? '已复制' : '复制'}

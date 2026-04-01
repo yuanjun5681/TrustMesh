@@ -2,10 +2,11 @@ import { useState, useCallback, useRef } from 'react'
 
 export function useCopyToClipboard(resetDelay = 1500) {
   const [copied, setCopied] = useState(false)
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const copy = useCallback(
-    async (text: string) => {
+    async (text: string, key?: string) => {
       try {
         if (navigator.clipboard && window.isSecureContext) {
           await navigator.clipboard.writeText(text)
@@ -20,18 +21,23 @@ export function useCopyToClipboard(resetDelay = 1500) {
           document.body.removeChild(textarea)
         }
         setCopied(true)
+        setCopiedKey(key ?? null)
         if (timerRef.current !== null) {
           clearTimeout(timerRef.current)
         }
-        timerRef.current = setTimeout(() => setCopied(false), resetDelay)
+        timerRef.current = setTimeout(() => {
+          setCopied(false)
+          setCopiedKey(null)
+        }, resetDelay)
         return true
       } catch {
         setCopied(false)
+        setCopiedKey(null)
         return false
       }
     },
     [resetDelay],
   )
 
-  return { copied, copy }
+  return { copied, copiedKey, copy }
 }
