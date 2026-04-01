@@ -10,6 +10,7 @@ import {
   Radio,
   ArrowRight,
   FileText,
+  Paperclip,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
@@ -28,6 +29,7 @@ const eventConfig: Record<EventType, { icon: typeof Circle; color: string; label
   task_comment: { icon: MessageSquare, color: 'text-muted-foreground', label: '评论' },
   conversation_reply: { icon: MessageSquare, color: 'text-info', label: 'PM 回复' },
   agent_status_changed: { icon: Radio, color: 'text-warning', label: 'Agent 状态' },
+  artifact_received: { icon: Paperclip, color: 'text-info', label: '上传了文件' },
 }
 
 const taskStatusBadge: Record<string, { label: string; variant: 'secondary' | 'info' | 'success' | 'destructive' }> = {

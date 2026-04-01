@@ -236,8 +236,7 @@ func (s *Store) resetArchivedProjectTasksUnsafe(project *model.Project, now time
 			continue
 		}
 
-		task.Artifacts = aggregateTaskArtifacts(task.Todos)
-		task.Result = aggregateTaskResult(task.Todos, task.Status, task.Artifacts)
+		task.Result = aggregateTaskResult(task.Todos, task.Status)
 		task.UpdatedAt = now
 		task.Version++
 

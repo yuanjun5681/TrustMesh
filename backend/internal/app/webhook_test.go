@@ -275,23 +275,67 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 	if nestedString(taskData, "data", "status") != "in_progress" {
 		t.Fatalf("unexpected task status: %s", nestedString(taskData, "data", "status"))
 	}
-	artifacts, ok := nestedMap(taskData, "data")["artifacts"].([]any)
-	if !ok || len(artifacts) != 1 {
-		t.Fatalf("unexpected artifacts: %#v", nestedMap(taskData, "data")["artifacts"])
+	// Artifacts are now created via transfer.received, not todo.complete.
+	// After todo.complete without a prior transfer.received, artifacts should be empty.
+	artifacts, _ := nestedMap(taskData, "data")["artifacts"].([]any)
+	if len(artifacts) != 0 {
+		t.Fatalf("expected 0 artifacts (no transfer.received sent), got %d", len(artifacts))
 	}
-	artifact, ok := artifacts[0].(map[string]any)
-	if !ok {
-		t.Fatalf("artifact is not object: %#v", artifacts[0])
+
+	// --- transfer.received creates artifact ---
+	transferResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/webhook/clawsynapse", "", map[string]any{
+		"nodeId":  "n1-local-trustmesh",
+		"type":    "transfer.received",
+		"from":    "node-dev-001",
+		"message": `{"transferId":"tf_login_guide","fileName":"login-guide.md","fileSize":321,"localPath":"/tmp/login-guide.md","mimeType":"text/markdown"}`,
+		"metadata": map[string]any{
+			"taskId": taskID,
+			"todoId": "todo-1",
+		},
+	})
+	if transferResp.StatusCode != http.StatusOK {
+		t.Fatalf("transfer.received webhook status=%d", transferResp.StatusCode)
 	}
-	metadata, ok := artifact["metadata"].(map[string]any)
-	if !ok {
-		t.Fatalf("artifact metadata is not object: %#v", artifact["metadata"])
+	transferBody := decodeBody(t, transferResp)
+	if nestedString(transferBody, "data", "transfer_id") != "tf_login_guide" {
+		t.Fatalf("unexpected transfer.received response: %#v", transferBody)
 	}
-	if metadata["file_name"] != "login-guide.md" {
-		t.Fatalf("expected file_name to be persisted, got %#v", metadata["file_name"])
+
+	// Verify artifact appears on task query
+	taskResp2 := doJSON(t, testServer.Client(), "GET", testServer.URL+"/api/v1/tasks/"+taskID, token, nil)
+	taskData2 := decodeBody(t, taskResp2)
+	artifacts2, _ := nestedMap(taskData2, "data")["artifacts"].([]any)
+	if len(artifacts2) != 1 {
+		t.Fatalf("expected 1 artifact after transfer.received, got %d", len(artifacts2))
 	}
-	if metadata["local_path"] != "/tmp/login-guide.md" {
-		t.Fatalf("expected local_path to be persisted, got %#v", metadata["local_path"])
+	firstArtifact, _ := artifacts2[0].(map[string]any)
+	if firstArtifact["transfer_id"] != "tf_login_guide" || firstArtifact["file_name"] != "login-guide.md" {
+		t.Fatalf("unexpected artifact data: %#v", firstArtifact)
+	}
+
+	// Duplicate transfer.received should overwrite (idempotent)
+	dupeResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/webhook/clawsynapse", "", map[string]any{
+		"nodeId":  "n1-local-trustmesh",
+		"type":    "transfer.received",
+		"from":    "node-dev-001",
+		"message": `{"transferId":"tf_login_guide","fileName":"login-guide-v2.md","fileSize":500,"localPath":"/tmp/login-guide-v2.md","mimeType":"text/markdown"}`,
+		"metadata": map[string]any{
+			"taskId": taskID,
+			"todoId": "todo-1",
+		},
+	})
+	if dupeResp.StatusCode != http.StatusOK {
+		t.Fatalf("duplicate transfer.received status=%d", dupeResp.StatusCode)
+	}
+	taskResp3 := doJSON(t, testServer.Client(), "GET", testServer.URL+"/api/v1/tasks/"+taskID, token, nil)
+	taskData3 := decodeBody(t, taskResp3)
+	artifacts3, _ := nestedMap(taskData3, "data")["artifacts"].([]any)
+	if len(artifacts3) != 1 {
+		t.Fatalf("expected 1 artifact after duplicate transfer (dedup), got %d", len(artifacts3))
+	}
+	updatedArtifact, _ := artifacts3[0].(map[string]any)
+	if updatedArtifact["file_name"] != "login-guide-v2.md" {
+		t.Fatalf("expected overwritten file_name, got %s", updatedArtifact["file_name"])
 	}
 }
 

@@ -37,6 +37,8 @@ type Store struct {
 	agentEvents       map[string][]*model.Event
 	processedMessages map[string]processedMessage
 
+	taskArtifacts map[string][]model.TaskArtifact // taskID → []TaskArtifact
+
 	taskComments map[string][]model.Comment
 
 	notifications     map[string]*model.Notification
@@ -60,6 +62,7 @@ type Store struct {
 	mongoComments          *mongo.Collection
 	mongoProcessedMessages *mongo.Collection
 	mongoNotifications     *mongo.Collection
+	mongoArtifacts         *mongo.Collection
 	mongoKnowledgeDocs     *mongo.Collection
 	mongoKnowledgeChunks   *mongo.Collection
 	mongoTimeout           time.Duration
@@ -94,6 +97,7 @@ func New() *Store {
 		userEvents:           make(map[string][]*model.Event),
 		agentEvents:          make(map[string][]*model.Event),
 		processedMessages:    make(map[string]processedMessage),
+		taskArtifacts:        make(map[string][]model.TaskArtifact),
 		taskComments:         make(map[string][]model.Comment),
 		notifications:        make(map[string]*model.Notification),
 		userNotifications:    make(map[string][]string),
@@ -187,10 +191,6 @@ func copyTask(t *model.TaskDetail) *model.TaskDetail {
 			clone.Todos[i].CancelReason = &reason
 		}
 		clone.Todos[i].Result.Metadata = copyMap(clone.Todos[i].Result.Metadata)
-		clone.Todos[i].Result.ArtifactRefs = append([]model.TodoResultArtifactRef{}, clone.Todos[i].Result.ArtifactRefs...)
-	}
-	for i := range clone.Artifacts {
-		clone.Artifacts[i].Metadata = copyMap(clone.Artifacts[i].Metadata)
 	}
 	return &clone
 }

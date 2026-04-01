@@ -5,7 +5,7 @@ import (
 )
 
 func (s *Store) publishTaskUnsafe(taskID string) {
-	task := copyTask(s.tasks[taskID])
+	task := s.copyTaskWithArtifactsUnsafe(s.tasks[taskID])
 	s.publishUserEventUnsafe(task.UserID, "task.updated", map[string]any{
 		"task": *task,
 	}, task.UpdatedAt)

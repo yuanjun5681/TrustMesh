@@ -215,15 +215,8 @@ func TestTodoCompleteIdempotencyByMessageID(t *testing.T) {
 	}
 
 	result := model.TodoResult{
-		Summary: "done",
-		Output:  "implemented",
-		ArtifactRefs: []model.TodoResultArtifactRef{
-			{
-				ArtifactID: "artifact-login-api",
-				Kind:       "report",
-				Label:      "Login API report",
-			},
-		},
+		Summary:  "done",
+		Output:   "implemented",
 		Metadata: map[string]any{"duration_ms": 100},
 	}
 	task1, appErr := s.CompleteTodoByNodeWithMessageID(developer.NodeID, "msg-todo-complete-1", TodoCompleteInput{
@@ -245,13 +238,6 @@ func TestTodoCompleteIdempotencyByMessageID(t *testing.T) {
 	if task2.Status != "done" || task1.ID != task2.ID {
 		t.Fatalf("unexpected duplicate todo.complete result: task1=%s task2=%s status=%s", task1.ID, task2.ID, task2.Status)
 	}
-	if len(task2.Artifacts) != 1 {
-		t.Fatalf("expected a single aggregated artifact, got %d", len(task2.Artifacts))
-	}
-	if task2.Result.Metadata["artifact_count"] != 1 {
-		t.Fatalf("expected artifact_count=1, got %#v", task2.Result.Metadata["artifact_count"])
-	}
-
 	events, appErr := s.ListTaskEvents(task1.UserID, task.ID)
 	if appErr != nil {
 		t.Fatalf("list task events: %v", appErr)
@@ -298,15 +284,8 @@ func TestTaskResultAggregationFromCompletedTodos(t *testing.T) {
 		TaskID: task.ID,
 		TodoID: "todo-1",
 		Result: model.TodoResult{
-			Summary: "API ready",
-			Output:  "Added register/login endpoints",
-			ArtifactRefs: []model.TodoResultArtifactRef{
-				{
-					ArtifactID: "artifact-login-api",
-					Kind:       "report",
-					Label:      "Login API report",
-				},
-			},
+			Summary:  "API ready",
+			Output:   "Added register/login endpoints",
 			Metadata: map[string]any{"duration_ms": 1200},
 		},
 	})
@@ -316,9 +295,6 @@ func TestTaskResultAggregationFromCompletedTodos(t *testing.T) {
 
 	if task.Status != "in_progress" {
 		t.Fatalf("expected in_progress after first completion, got %s", task.Status)
-	}
-	if len(task.Artifacts) != 1 {
-		t.Fatalf("expected 1 artifact after first completion, got %d", len(task.Artifacts))
 	}
 	if task.Result.Metadata["completed_todo_count"] != 1 {
 		t.Fatalf("expected completed_todo_count=1, got %#v", task.Result.Metadata["completed_todo_count"])
@@ -331,15 +307,8 @@ func TestTaskResultAggregationFromCompletedTodos(t *testing.T) {
 		TaskID: task.ID,
 		TodoID: "todo-2",
 		Result: model.TodoResult{
-			Summary: "Docs ready",
-			Output:  "Added rollout checklist",
-			ArtifactRefs: []model.TodoResultArtifactRef{
-				{
-					ArtifactID: "artifact-rollout-notes",
-					Kind:       "report",
-					Label:      "Rollout notes",
-				},
-			},
+			Summary:  "Docs ready",
+			Output:   "Added rollout checklist",
 			Metadata: map[string]any{"duration_ms": 400},
 		},
 	})
@@ -350,24 +319,15 @@ func TestTaskResultAggregationFromCompletedTodos(t *testing.T) {
 	if task.Status != "done" {
 		t.Fatalf("expected done after all todos complete, got %s", task.Status)
 	}
-	if len(task.Artifacts) != 2 {
-		t.Fatalf("expected 2 artifacts, got %d", len(task.Artifacts))
-	}
-	if task.Artifacts[0].ID != "artifact-login-api" || task.Artifacts[1].ID != "artifact-rollout-notes" {
-		t.Fatalf("unexpected artifact ids: %+v", task.Artifacts)
-	}
 	if task.Result.Summary == "" || task.Result.FinalOutput == "" {
 		t.Fatalf("expected aggregated task result, got %+v", task.Result)
-	}
-	if task.Result.Metadata["artifact_count"] != 2 {
-		t.Fatalf("expected artifact_count=2, got %#v", task.Result.Metadata["artifact_count"])
 	}
 	if task.Result.Metadata["completed_todo_count"] != 2 {
 		t.Fatalf("expected completed_todo_count=2, got %#v", task.Result.Metadata["completed_todo_count"])
 	}
 }
 
-func TestTaskArtifactAggregationIncludesTransferMetadata(t *testing.T) {
+func TestSaveArtifactAndFillOnTaskQuery(t *testing.T) {
 	s, _, pm, developer, project, conversation := seedWorkflowState(t)
 
 	task, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
@@ -388,63 +348,52 @@ func TestTaskArtifactAggregationIncludesTransferMetadata(t *testing.T) {
 		t.Fatalf("create task: %v", appErr)
 	}
 
-	task, appErr = s.CompleteTodoByNode(developer.NodeID, TodoCompleteInput{
-		TaskID: task.ID,
-		TodoID: "todo-1",
-		Result: model.TodoResult{
-			Summary: "Report uploaded",
-			Output:  "Uploaded the final PDF report",
-			ArtifactRefs: []model.TodoResultArtifactRef{
-				{
-					ArtifactID: "tf_report_123",
-					Kind:       "file",
-					Label:      "Final report PDF",
-				},
-			},
-			Metadata: map[string]any{
-				"transfers": []any{
-					map[string]any{
-						"transfer_id": "tf_report_123",
-						"bucket":      "deliverables",
-						"size":        2048,
-						"checksum":    "sha256:abc123",
-						"mime_type":   "application/pdf",
-						"fileName":    "report.pdf",
-						"localPath":   "/tmp/report.pdf",
-					},
-				},
-			},
-		},
-	})
-	if appErr != nil {
-		t.Fatalf("complete todo: %v", appErr)
+	// Save an artifact via transfer.received path.
+	artifact := model.TaskArtifact{
+		TransferID: "tf_report_123",
+		TaskID:     task.ID,
+		TodoID:     "todo-1",
+		FileName:   "report.pdf",
+		FileSize:   2048,
+		LocalPath:  "/tmp/report.pdf",
+		MimeType:   "application/pdf",
+		FromNodeID: developer.NodeID,
+		CreatedAt:  time.Now(),
+	}
+	if appErr := s.SaveArtifact(artifact); appErr != nil {
+		t.Fatalf("save artifact: %v", appErr)
 	}
 
-	if len(task.Artifacts) != 1 {
-		t.Fatalf("expected 1 artifact, got %d", len(task.Artifacts))
+	// Query task should include the artifact.
+	fetched, appErr := s.GetTask(task.UserID, task.ID)
+	if appErr != nil {
+		t.Fatalf("get task: %v", appErr)
 	}
-	artifact := task.Artifacts[0]
-	if artifact.URI != "transfer://tf_report_123" {
-		t.Fatalf("unexpected artifact uri: %s", artifact.URI)
+	if len(fetched.Artifacts) != 1 {
+		t.Fatalf("expected 1 artifact, got %d", len(fetched.Artifacts))
 	}
-	if artifact.MimeType == nil || *artifact.MimeType != "application/pdf" {
-		t.Fatalf("unexpected mime type: %#v", artifact.MimeType)
+	a := fetched.Artifacts[0]
+	if a.TransferID != "tf_report_123" {
+		t.Fatalf("unexpected transfer_id: %s", a.TransferID)
 	}
-	if artifact.Metadata["transfer_id"] != "tf_report_123" {
-		t.Fatalf("unexpected transfer_id metadata: %#v", artifact.Metadata["transfer_id"])
+	if a.FileName != "report.pdf" {
+		t.Fatalf("unexpected file_name: %s", a.FileName)
 	}
-	if artifact.Metadata["file_name"] != "report.pdf" {
-		t.Fatalf("unexpected file_name metadata: %#v", artifact.Metadata["file_name"])
+	if a.MimeType != "application/pdf" {
+		t.Fatalf("unexpected mime_type: %s", a.MimeType)
 	}
-	if artifact.Metadata["local_path"] != "/tmp/report.pdf" {
-		t.Fatalf("unexpected local_path metadata: %#v", artifact.Metadata["local_path"])
+
+	// Duplicate save should overwrite, not duplicate.
+	artifact.FileSize = 4096
+	if appErr := s.SaveArtifact(artifact); appErr != nil {
+		t.Fatalf("save duplicate artifact: %v", appErr)
 	}
-	transfer, ok := artifact.Metadata["transfer"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected transfer metadata map, got %#v", artifact.Metadata["transfer"])
+	fetched2, _ := s.GetTask(task.UserID, task.ID)
+	if len(fetched2.Artifacts) != 1 {
+		t.Fatalf("expected 1 artifact after dedup, got %d", len(fetched2.Artifacts))
 	}
-	if transfer["bucket"] != "deliverables" {
-		t.Fatalf("unexpected transfer metadata: %#v", transfer)
+	if fetched2.Artifacts[0].FileSize != 4096 {
+		t.Fatalf("expected updated file_size=4096, got %d", fetched2.Artifacts[0].FileSize)
 	}
 }
 

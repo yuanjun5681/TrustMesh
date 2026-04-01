@@ -173,16 +173,9 @@ export interface TodoAssignee {
   node_id: string
 }
 
-export interface TodoResultArtifactRef {
-  artifact_id: string
-  kind: string
-  label: string
-}
-
 export interface TodoResult {
   summary: string
   output: string
-  artifact_refs: TodoResultArtifactRef[]
   metadata: Record<string, unknown>
 }
 
@@ -212,17 +205,16 @@ export interface Todo {
 }
 
 export interface TaskArtifact {
-  id: string
-  source_todo_id: string | null
-  kind: string
-  title: string
-  uri: string
-  mime_type: string | null
-  metadata: Record<string, unknown>
-}
-
-export interface TransferDetail {
-  [key: string]: unknown
+  transfer_id: string
+  task_id: string
+  todo_id?: string
+  file_name: string
+  file_size: number
+  mime_type: string
+  from_node_id: string
+  from_agent_id: string
+  from_agent_name: string
+  created_at: string
 }
 
 export interface TaskResult {
@@ -278,6 +270,7 @@ export type EventType =
   | 'task_comment'
   | 'conversation_reply'
   | 'agent_status_changed'
+  | 'artifact_received'
 
 export interface Event {
   id: string

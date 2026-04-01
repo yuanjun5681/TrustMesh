@@ -8,7 +8,6 @@ import type {
   TaskPriority,
   Event,
   Comment,
-  TransferDetail,
   ListProjectTasksQuery,
 } from '@/types'
 
@@ -65,10 +64,6 @@ export async function addTaskComment(taskId: string, input: AddTaskCommentInput)
     .json<ApiResponse<AddTaskCommentResult>>()
 }
 
-export async function getTaskArtifactTransfer(taskId: string, artifactId: string) {
-  return api.get(`tasks/${taskId}/artifacts/${artifactId}/transfer`).json<ApiResponse<TransferDetail>>()
-}
-
-export async function getTaskArtifactContent(taskId: string, artifactId: string) {
-  return api.get(`tasks/${taskId}/artifacts/${artifactId}/content`).blob()
+export async function getTaskArtifactContent(taskId: string, transferId: string) {
+  return api.get(`tasks/${taskId}/artifacts/${transferId}/content`).blob()
 }

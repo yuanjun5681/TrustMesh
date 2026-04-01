@@ -41,7 +41,7 @@ func (s *Store) GetTask(userID, taskID string) (*model.TaskDetail, *transport.Ap
 	if !ok || task.UserID != userID {
 		return nil, transport.NotFound("task not found")
 	}
-	return copyTask(task), nil
+	return s.copyTaskWithArtifactsUnsafe(task), nil
 }
 
 // GetTaskByNodeID returns a task if the requesting agent (identified by nodeID)
@@ -59,11 +59,11 @@ func (s *Store) GetTaskByNodeID(nodeID, taskID string) (*model.TaskDetail, *tran
 		return nil, transport.NotFound("task not found")
 	}
 	if task.PMAgent.NodeID == nodeID {
-		return copyTask(task), nil
+		return s.copyTaskWithArtifactsUnsafe(task), nil
 	}
 	for i := range task.Todos {
 		if task.Todos[i].Assignee.NodeID == nodeID {
-			return copyTask(task), nil
+			return s.copyTaskWithArtifactsUnsafe(task), nil
 		}
 	}
 	return nil, transport.Forbidden("agent is not a participant of this task")
