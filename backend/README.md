@@ -119,7 +119,8 @@ docker compose up -d --build backend
 
 - `PORT`，默认 `8080`
 - `JWT_SECRET`，默认 `trustmesh-dev-secret`
-- `TOKEN_TTL`，默认 `24h`
+- `ACCESS_TOKEN_TTL`，默认 `15m`
+- `REFRESH_TOKEN_TTL`，默认 `168h`
 - `LOG_LEVEL`，默认 `info`
 - `ALLOW_ALL_CORS`，默认 `true`
 - `MONGO_ENABLED`，默认 `true`
