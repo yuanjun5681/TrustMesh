@@ -5,14 +5,14 @@ import { formatRelativeTime } from '@/lib/utils'
 import type { Notification } from '@/types'
 
 function stripMarkdown(body: string): string {
-  return body.replace(/[*_~`#>\-\[\]()]/g, '').replace(/\n+/g, ' ').trim()
+  return body.replace(/[*_~`#>\-[\]()]/g, '').replace(/\n+/g, ' ').trim()
 }
 
 const categoryFallback: Record<string, string> = {
   conversation: 'PM Agent',
   task: 'PM Agent',
   todo: '执行 Agent',
-  system: '系统',
+  agent: 'Agent',
 }
 
 interface NotificationItemProps {

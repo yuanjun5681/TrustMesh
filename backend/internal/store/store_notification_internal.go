@@ -5,31 +5,29 @@ import "trustmesh/backend/internal/model"
 func (s *Store) maybeCreateNotificationUnsafe(event *model.Event) {
 	var title, body, category, priority string
 	switch event.EventType {
-	case "task_created":
-		title = "任务已创建"
-		body = stringOrDefault(event.Content, "新任务")
-		category = "task"
-		priority = "medium"
 	case "task_status_changed":
-		title = "任务状态变更"
-		body = stringOrDefault(event.Content, "状态已变更")
+		// 只通知终态（done / failed / canceled），中间状态不通知
+		if to, ok := event.Metadata["to"].(string); ok {
+			switch to {
+			case "done":
+				title = "任务已完成"
+				body = stringOrDefault(event.Content, "任务完成")
+				priority = "medium"
+			case "failed":
+				title = "任务执行失败"
+				body = stringOrDefault(event.Content, "任务失败")
+				priority = "high"
+			case "canceled":
+				title = "任务已取消"
+				body = stringOrDefault(event.Content, "任务被取消")
+				priority = "medium"
+			default:
+				return
+			}
+		} else {
+			return
+		}
 		category = "task"
-		priority = "high"
-	case "todo_assigned":
-		title = "Todo 已分派"
-		body = stringOrDefault(event.Content, "新的 Todo 分派")
-		category = "todo"
-		priority = "low"
-	case "todo_started":
-		title = "Todo 开始执行"
-		body = stringOrDefault(event.Content, "Todo 已开始")
-		category = "todo"
-		priority = "low"
-	case "todo_completed":
-		title = "Todo 已完成"
-		body = stringOrDefault(event.Content, "Todo 完成")
-		category = "todo"
-		priority = "medium"
 	case "todo_failed":
 		title = "Todo 执行失败"
 		body = stringOrDefault(event.Content, "Todo 失败")
@@ -40,11 +38,6 @@ func (s *Store) maybeCreateNotificationUnsafe(event *model.Event) {
 		body = stringOrDefault(event.Content, "新的回复")
 		category = "conversation"
 		priority = "medium"
-	case "task_comment":
-		title = "任务评论"
-		body = stringOrDefault(event.Content, "新评论")
-		category = "task"
-		priority = "low"
 	case "join_request_received":
 		title = "Agent 加入申请"
 		body = stringOrDefault(event.Content, "收到新的 Agent 加入申请")

@@ -332,7 +332,7 @@ export interface Notification {
   actor_name?: string
   title: string
   body: string
-  category: 'task' | 'todo' | 'conversation' | 'system'
+  category: 'task' | 'todo' | 'conversation' | 'agent'
   priority: 'low' | 'medium' | 'high'
   is_read: boolean
   read_at: string | null
