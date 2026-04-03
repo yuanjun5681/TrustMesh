@@ -12,24 +12,42 @@ import { ApiRequestError } from '@/api/client'
 import { toast } from 'sonner'
 import type { JoinRequest, AgentRole } from '@/types'
 
-const SKILL_INSTRUCTIONS = [
+type SkillAdapter = 'openclaw' | 'opencode'
+
+function buildSkillPrompt(adapter: SkillAdapter, skillName: string, url: string) {
+  if (adapter === 'opencode') {
+    return `请创建或更新 Skill「${skillName}」。
+
+从以下地址获取完整内容：
+${url}
+
+请按 OpenCode 的全局 Skill 方式安装：
+1. 创建目录 ~/.config/opencode/skills/${skillName}/
+2. 将技能内容保存为 ~/.config/opencode/skills/${skillName}/SKILL.md
+
+兼容路径：
+- ~/.agents/skills/${skillName}/SKILL.md
+- ~/.claude/skills/${skillName}/SKILL.md`
+  }
+
+  return `请创建或更新 Skill「${skillName}」。
+
+从以下地址获取完整内容并安装为本地 Skill：
+${url}`
+}
+
+const SKILL_DEFINITIONS = [
   {
     key: 'tm-task-plan',
     title: 'PM 任务规划 Skill',
     description: '适用于 PM Agent，提供需求澄清、任务规划、任务创建的完整工作流。',
-    prompt: `请创建或更新 Skill「tm-task-plan」。
-
-从以下地址获取完整内容并安装为本地 Skill：
-https://github.com/yuanjun5681/TrustMesh/blob/main/skills/tm-task-plan/SKILL.md`,
+    url: 'https://github.com/yuanjun5681/TrustMesh/blob/main/skills/tm-task-plan/SKILL.md',
   },
   {
     key: 'tm-task-exec',
     title: '执行 Agent 任务执行 Skill',
     description: '适用于执行 Agent，提供 Todo 接收、进度回报、结果交付的完整工作流。',
-    prompt: `请创建或更新 Skill「tm-task-exec」。
-
-从以下地址获取完整内容并安装为本地 Skill：
-https://github.com/yuanjun5681/TrustMesh/blob/main/skills/tm-task-exec/SKILL.md`,
+    url: 'https://github.com/yuanjun5681/TrustMesh/blob/main/skills/tm-task-exec/SKILL.md',
   },
 ] as const
 
@@ -52,6 +70,12 @@ export function AgentInvitePage() {
   const [editName, setEditName] = useState('')
   const [editRole, setEditRole] = useState<AgentRole>('developer')
   const [editDescription, setEditDescription] = useState('')
+  const [skillAdapter, setSkillAdapter] = useState<SkillAdapter>('openclaw')
+
+  const skillInstructions = SKILL_DEFINITIONS.map((skill) => ({
+    ...skill,
+    prompt: buildSkillPrompt(skillAdapter, skill.key, skill.url),
+  }))
 
   const handleCopy = async () => {
     if (!invite?.prompt) return
@@ -139,15 +163,26 @@ export function AgentInvitePage() {
 
           {/* Skill Instructions */}
           <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Wrench className="size-5 text-muted-foreground" />
-              <h2 className="text-lg font-semibold">添加 / 更新 Skill</h2>
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <div className="flex items-center gap-2">
+                <Wrench className="size-5 text-muted-foreground" />
+                <h2 className="text-lg font-semibold">添加 / 更新 Skill</h2>
+              </div>
+              <Select value={skillAdapter} onValueChange={(value) => setSkillAdapter(value as SkillAdapter)}>
+                <SelectTrigger className="w-36 h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="openclaw">openclaw</SelectItem>
+                  <SelectItem value="opencode">opencode</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <p className="text-sm text-muted-foreground mb-4">
               Agent 入职后，复制以下指令发送给对应 Agent，使其安装或更新 Skill。
             </p>
             <div className="space-y-4">
-              {SKILL_INSTRUCTIONS.map((skill) => (
+              {skillInstructions.map((skill) => (
                 <div key={skill.key} className="rounded-lg border p-4 space-y-2">
                   <div className="flex items-center justify-between">
                     <div>
