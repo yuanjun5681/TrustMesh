@@ -59,6 +59,8 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 	}
 
 	switch strings.TrimSpace(payload.Type) {
+	case "chat.message":
+		h.handleChatMessage(c, payload)
 	case "conversation.reply":
 		h.handleConversationReply(c, payload)
 	case "task.create":
@@ -80,6 +82,21 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 	default:
 		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "unsupported webhook type"))
 	}
+}
+
+func (h *WebhookHandler) handleChatMessage(c *gin.Context, webhook protocol.WebhookPayload) {
+	content := strings.TrimSpace(webhook.Message)
+	if content == "" {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid chat.message payload"))
+		return
+	}
+
+	detail, appErr := h.store.AppendAgentChatMessageByNode(webhook.From, webhook.SessionKey, content, messageIDFromMetadata(webhook.Metadata))
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+	transport.WriteData(c, http.StatusOK, detail)
 }
 
 func (h *WebhookHandler) resolveLocalNodeID(ctx context.Context) (string, *transport.AppError) {

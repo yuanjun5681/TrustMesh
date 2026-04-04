@@ -1,4 +1,4 @@
-import type { Agent, Comment, ConversationDetail, Event, JoinRequest, Notification, TaskDetail } from '@/types'
+import type { Agent, AgentChatDetail, Comment, ConversationDetail, Event, JoinRequest, Notification, TaskDetail } from '@/types'
 
 export type RealtimeEvent =
   | {
@@ -73,6 +73,14 @@ export type RealtimeEvent =
       occurred_at: string
       payload: {
         conversation: ConversationDetail
+      }
+    }
+  | {
+      id: string
+      type: 'agent_chat.updated'
+      occurred_at: string
+      payload: {
+        chat: AgentChatDetail
       }
     }
   | {

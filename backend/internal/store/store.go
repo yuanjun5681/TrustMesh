@@ -28,6 +28,9 @@ type Store struct {
 
 	conversations        map[string]*model.Conversation
 	projectConversations map[string][]string
+	agentChats           map[string]*model.AgentChat
+	activeAgentChats     map[string]string
+	agentChatBySession   map[string]string
 
 	tasks             map[string]*model.TaskDetail
 	projectTasks      map[string][]string
@@ -57,6 +60,7 @@ type Store struct {
 	mongoAgents            *mongo.Collection
 	mongoProjects          *mongo.Collection
 	mongoConversations     *mongo.Collection
+	mongoAgentChats        *mongo.Collection
 	mongoTasks             *mongo.Collection
 	mongoEvents            *mongo.Collection
 	mongoComments          *mongo.Collection
@@ -90,6 +94,9 @@ func New() *Store {
 		projects:             make(map[string]*model.Project),
 		conversations:        make(map[string]*model.Conversation),
 		projectConversations: make(map[string][]string),
+		agentChats:           make(map[string]*model.AgentChat),
+		activeAgentChats:     make(map[string]string),
+		agentChatBySession:   make(map[string]string),
 		tasks:                make(map[string]*model.TaskDetail),
 		projectTasks:         make(map[string][]string),
 		conversationTasks:    make(map[string]string),

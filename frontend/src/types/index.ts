@@ -141,6 +141,27 @@ export interface ConversationStreamSnapshot {
   conversation: ConversationDetail
 }
 
+export interface AgentChatMessage {
+  id: string
+  sender_type: 'user' | 'agent'
+  direction: 'outbound' | 'inbound'
+  content: string
+  status: 'pending' | 'sent' | 'failed'
+  remote_message_id?: string
+  created_at: string
+}
+
+export interface AgentChatDetail {
+  id: string
+  agent_id: string
+  agent_node_id: string
+  session_key: string
+  status: 'active' | 'closed'
+  messages: AgentChatMessage[]
+  created_at: string
+  updated_at: string
+}
+
 export type AgentRole = 'pm' | 'developer' | 'reviewer' | 'custom'
 export type AgentStatus = 'online' | 'offline' | 'busy'
 
@@ -520,6 +541,10 @@ export interface CreateConversationRequest {
 export interface AppendConversationMessageRequest {
   content: string
   ui_response?: UIResponse
+}
+
+export interface SendAgentChatMessageRequest {
+  content: string
 }
 
 export interface ListProjectTasksQuery {
