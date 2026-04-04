@@ -1,0 +1,64 @@
+package store
+
+import (
+	"testing"
+	"time"
+)
+
+func TestResetAgentChatRequiresChatCapableOnlineAgent(t *testing.T) {
+	s := New()
+	user, appErr := s.CreateUser("user@example.com", "User", "hash")
+	if appErr != nil {
+		t.Fatalf("create user: %v", appErr)
+	}
+
+	offlineAgent, appErr := s.CreateAgent(user.ID, "node-offline-001", "Offline", "developer", "dev", []string{"conversation"})
+	if appErr != nil {
+		t.Fatalf("create offline agent: %v", appErr)
+	}
+	if _, appErr := s.ResetAgentChat(user.ID, offlineAgent.ID); appErr == nil || appErr.Code != "AGENT_OFFLINE" {
+		t.Fatalf("expected AGENT_OFFLINE, got %v", appErr)
+	}
+
+	capabilityAgent, appErr := s.CreateAgent(user.ID, "node-noconv-001", "No Conversation", "developer", "dev", []string{"backend"})
+	if appErr != nil {
+		t.Fatalf("create capability agent: %v", appErr)
+	}
+	now := time.Now().UTC()
+	s.SyncAgentPresence([]AgentPresence{{NodeID: capabilityAgent.NodeID, LastSeenAt: now}}, now)
+	if _, appErr := s.ResetAgentChat(user.ID, capabilityAgent.ID); appErr == nil || appErr.Code != "VALIDATION_ERROR" {
+		t.Fatalf("expected VALIDATION_ERROR, got %v", appErr)
+	}
+}
+
+func TestResetAgentChatRemovesOldSessionRouting(t *testing.T) {
+	s := New()
+	user, appErr := s.CreateUser("user@example.com", "User", "hash")
+	if appErr != nil {
+		t.Fatalf("create user: %v", appErr)
+	}
+	agent, appErr := s.CreateAgent(user.ID, "node-chat-001", "Chat Agent", "developer", "dev", []string{"conversation"})
+	if appErr != nil {
+		t.Fatalf("create agent: %v", appErr)
+	}
+	now := time.Now().UTC()
+	s.SyncAgentPresence([]AgentPresence{{NodeID: agent.NodeID, LastSeenAt: now}}, now)
+
+	first, appErr := s.ResetAgentChat(user.ID, agent.ID)
+	if appErr != nil {
+		t.Fatalf("reset first chat: %v", appErr)
+	}
+	second, appErr := s.ResetAgentChat(user.ID, agent.ID)
+	if appErr != nil {
+		t.Fatalf("reset second chat: %v", appErr)
+	}
+	if first.SessionKey == second.SessionKey {
+		t.Fatal("expected a new session key after reset")
+	}
+	if _, ok := s.agentChatBySession[first.SessionKey]; ok {
+		t.Fatal("expected old session key to be removed from routing table")
+	}
+	if _, appErr := s.AppendAgentChatMessageByNode(agent.NodeID, first.SessionKey, "stale reply", "remote-1"); appErr == nil || appErr.Code != "NOT_FOUND" {
+		t.Fatalf("expected NOT_FOUND for stale session, got %v", appErr)
+	}
+}

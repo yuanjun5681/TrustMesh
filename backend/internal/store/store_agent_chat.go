@@ -39,8 +39,8 @@ func (s *Store) ResetAgentChat(userID, agentID string) (*model.AgentChatDetail, 
 	if err != nil {
 		return nil, err
 	}
-	if agent.Archived {
-		return nil, transport.NotFound("agent not found")
+	if appErr := validateAgentChatAvailability(agent); appErr != nil {
+		return nil, appErr
 	}
 
 	key := activeAgentChatKey(userID, agentID)
@@ -51,6 +51,7 @@ func (s *Store) ResetAgentChat(userID, agentID string) (*model.AgentChatDetail, 
 			if err := s.persistAgentChatUnsafe(existing); err != nil {
 				return nil, mongoWriteError(err)
 			}
+			delete(s.agentChatBySession, existing.SessionKey)
 		}
 		delete(s.activeAgentChats, key)
 	}
@@ -77,14 +78,8 @@ func (s *Store) AppendAgentChatUserMessage(userID, agentID, content string) (*mo
 	if err != nil {
 		return nil, nil, err
 	}
-	if agent.Archived {
-		return nil, nil, transport.NotFound("agent not found")
-	}
-	if !agentSupportsCapability(agent, "conversation") {
-		return nil, nil, transport.Validation("agent does not support conversation", map[string]any{"agent_id": "missing_conversation_capability"})
-	}
-	if agent.Status != "online" {
-		return nil, nil, transport.Conflict("AGENT_OFFLINE", "agent 当前离线，无法发送消息")
+	if appErr := validateAgentChatAvailability(agent); appErr != nil {
+		return nil, nil, appErr
 	}
 
 	chat := s.getOrCreateActiveAgentChatUnsafe(userID, agent)
@@ -166,6 +161,10 @@ func (s *Store) AppendAgentChatMessageByNode(nodeID, sessionKey, content, remote
 	if chat.AgentID != agent.ID || chat.AgentNodeID != nodeID {
 		return nil, transport.Forbidden("agent is not allowed to reply this chat")
 	}
+	if chat.Status != "active" {
+		delete(s.agentChatBySession, sessionKey)
+		return nil, transport.NotFound("agent chat not found")
+	}
 	for i := range chat.Messages {
 		if remoteMessageID != "" && chat.Messages[i].RemoteMessageID == remoteMessageID {
 			detail := s.toAgentChatDetailUnsafe(chat)
@@ -214,6 +213,19 @@ func agentSupportsCapability(agent *model.Agent, capability string) bool {
 		}
 	}
 	return false
+}
+
+func validateAgentChatAvailability(agent *model.Agent) *transport.AppError {
+	if agent.Archived {
+		return transport.NotFound("agent not found")
+	}
+	if !agentSupportsCapability(agent, "conversation") {
+		return transport.Validation("agent does not support conversation", map[string]any{"agent_id": "missing_conversation_capability"})
+	}
+	if agent.Status != "online" {
+		return transport.Conflict("AGENT_OFFLINE", "agent 当前离线，无法发送消息")
+	}
+	return nil
 }
 
 func (s *Store) getOrCreateActiveAgentChatUnsafe(userID string, agent *model.Agent) *model.AgentChat {

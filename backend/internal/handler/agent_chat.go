@@ -66,8 +66,9 @@ func (h *AgentChatHandler) SendMessage(c *gin.Context) {
 	}
 
 	result, err := h.publisher.Publish(context.Background(), detail.AgentNodeID, "", req.Content, detail.SessionKey, map[string]any{
-		"agentId": detail.AgentID,
-		"chatId":  detail.ID,
+		"agentId":   detail.AgentID,
+		"chatId":    detail.ID,
+		"messageId": msg.ID,
 	})
 	if err != nil {
 		updated, markErr := h.store.UpdateAgentChatMessageStatus(userID, detail.ID, msg.ID, "failed", "")
@@ -83,9 +84,32 @@ func (h *AgentChatHandler) SendMessage(c *gin.Context) {
 		return
 	}
 
+	currentDetail := detail
 	detail, appErr = h.store.UpdateAgentChatMessageStatus(userID, detail.ID, msg.ID, "sent", result.MessageID)
 	if appErr != nil {
-		transport.WriteError(c, appErr)
+		detail = currentDetail
+		if h.log != nil {
+			h.log.Warn("agent chat delivery confirmed but local status update failed",
+				zap.String("agent_id", detail.AgentID),
+				zap.String("chat_id", detail.ID),
+				zap.String("message_id", msg.ID),
+				zap.String("remote_message_id", result.MessageID),
+				zap.Error(appErr),
+			)
+		}
+		fallback, getErr := h.store.GetActiveAgentChat(userID, c.Param("id"))
+		if getErr == nil && fallback != nil {
+			detail = fallback
+		}
+		for i := range detail.Messages {
+			if detail.Messages[i].ID != msg.ID {
+				continue
+			}
+			detail.Messages[i].Status = "sent"
+			detail.Messages[i].RemoteMessageID = result.MessageID
+			break
+		}
+		transport.WriteData(c, http.StatusOK, detail)
 		return
 	}
 
