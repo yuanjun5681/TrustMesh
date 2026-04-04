@@ -1,14 +1,14 @@
 import { cn } from '@/lib/utils'
-import type { ConversationMessage } from '@/types'
+import type { TaskMessage } from '@/types'
 import { formatRelativeTime } from '@/lib/utils'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { UIBlockRenderer } from './UIBlockRenderer'
 
 interface MessageBubbleProps {
-  message: ConversationMessage
+  message: TaskMessage
   /** 下一条用户消息的 ui_response（用于回显选择结果） */
-  nextUserResponse?: ConversationMessage
+  nextUserResponse?: TaskMessage
   /** ui_blocks 正在底部交互面板中展示，气泡内隐藏 */
   hideUIBlocks?: boolean
 }

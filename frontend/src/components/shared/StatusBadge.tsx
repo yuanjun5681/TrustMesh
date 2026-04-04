@@ -4,6 +4,7 @@ import { CircleCheck, CircleOff, Cog } from 'lucide-react'
 import type { TaskStatus, TaskPriority, AgentStatus, ProjectStatus, ProjectWorkStatus } from '@/types'
 
 const taskStatusConfig: Record<TaskStatus, { label: string; variant: 'secondary' | 'info' | 'success' | 'destructive' }> = {
+  planning: { label: '规划中', variant: 'info' },
   pending: { label: '待处理', variant: 'secondary' },
   in_progress: { label: '进行中', variant: 'info' },
   done: { label: '已完成', variant: 'success' },

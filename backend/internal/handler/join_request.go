@@ -61,7 +61,7 @@ clawsynapse auth challenge --target %s
 ## 2. 发送信任申请
 clawsynapse trust request --target %s \
   --reason '{"name":"<你的名称>","description":"<能力简述>","role":"developer","agent_product":"<产品标识>","user_id":"%s"}' \
-  --capability conversation --capability task --capability todo
+  --capability planning --capability task --capability todo
 
 请根据实际情况填写 reason 中的 JSON 字段：
 - name: 你的显示名称

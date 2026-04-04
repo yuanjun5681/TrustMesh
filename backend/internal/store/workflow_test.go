@@ -8,13 +8,12 @@ import (
 )
 
 func TestSyncAgentPresenceMarksOfflineAndBusy(t *testing.T) {
-	s, _, pm, developer, project, conversation := seedWorkflowState(t)
+	s, _, pm, developer, project := seedWorkflowState(t)
 
 	_, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login",
-		Description:    "Support email password login",
+		ProjectID:   project.ID,
+		Title:       "Implement login",
+		Description: "Support email password login",
 		Todos: []TaskCreateTodoInput{
 			{
 				Title:          "Build backend API",
@@ -70,13 +69,12 @@ func TestSyncAgentPresenceMarksOfflineAndBusy(t *testing.T) {
 }
 
 func TestAgentUsageAndDeleteConflictDetails(t *testing.T) {
-	s, userID, pm, developer, project, conversation := seedWorkflowState(t)
+	s, userID, pm, developer, project := seedWorkflowState(t)
 
 	_, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login",
-		Description:    "Support email password login",
+		ProjectID:   project.ID,
+		Title:       "Implement login",
+		Description: "Support email password login",
 		Todos: []TaskCreateTodoInput{
 			{
 				Title:          "Build backend API",
@@ -150,13 +148,12 @@ func TestAgentUsageAndDeleteConflictDetails(t *testing.T) {
 }
 
 func TestTaskCreateIdempotencyByMessageID(t *testing.T) {
-	s, _, pm, developer, project, conversation := seedWorkflowState(t)
+	s, _, pm, developer, project := seedWorkflowState(t)
 
 	task1, appErr := s.CreateTaskByPMNodeWithMessageID(pm.NodeID, "msg-task-create-1", TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login",
-		Description:    "Support email password login",
+		ProjectID:   project.ID,
+		Title:       "Implement login",
+		Description: "Support email password login",
 		Todos: []TaskCreateTodoInput{
 			{
 				Title:          "Build backend API",
@@ -170,10 +167,9 @@ func TestTaskCreateIdempotencyByMessageID(t *testing.T) {
 	}
 
 	task2, appErr := s.CreateTaskByPMNodeWithMessageID(pm.NodeID, "msg-task-create-1", TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login duplicate",
-		Description:    "duplicate retry",
+		ProjectID:   project.ID,
+		Title:       "Implement login duplicate",
+		Description: "duplicate retry",
 		Todos: []TaskCreateTodoInput{
 			{
 				Title:          "Build backend API duplicate",
@@ -194,13 +190,12 @@ func TestTaskCreateIdempotencyByMessageID(t *testing.T) {
 }
 
 func TestTodoCompleteIdempotencyByMessageID(t *testing.T) {
-	s, _, pm, developer, project, conversation := seedWorkflowState(t)
+	s, _, pm, developer, project := seedWorkflowState(t)
 
 	task, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login",
-		Description:    "Support email password login",
+		ProjectID:   project.ID,
+		Title:       "Implement login",
+		Description: "Support email password login",
 		Todos: []TaskCreateTodoInput{
 			{
 				ID:             "todo-1",
@@ -254,13 +249,12 @@ func TestTodoCompleteIdempotencyByMessageID(t *testing.T) {
 }
 
 func TestTaskResultAggregationFromCompletedTodos(t *testing.T) {
-	s, _, pm, developer, project, conversation := seedWorkflowState(t)
+	s, _, pm, developer, project := seedWorkflowState(t)
 
 	task, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login",
-		Description:    "Support email password login",
+		ProjectID:   project.ID,
+		Title:       "Implement login",
+		Description: "Support email password login",
 		Todos: []TaskCreateTodoInput{
 			{
 				ID:             "todo-1",
@@ -328,13 +322,12 @@ func TestTaskResultAggregationFromCompletedTodos(t *testing.T) {
 }
 
 func TestSaveArtifactAndFillOnTaskQuery(t *testing.T) {
-	s, _, pm, developer, project, conversation := seedWorkflowState(t)
+	s, _, pm, developer, project := seedWorkflowState(t)
 
 	task, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Deliver report",
-		Description:    "Upload final report",
+		ProjectID:   project.ID,
+		Title:       "Deliver report",
+		Description: "Upload final report",
 		Todos: []TaskCreateTodoInput{
 			{
 				ID:             "todo-1",
@@ -398,13 +391,12 @@ func TestSaveArtifactAndFillOnTaskQuery(t *testing.T) {
 }
 
 func TestRecordTodoDispatchMarksTaskInProgress(t *testing.T) {
-	s, userID, pm, developer, project, conversation := seedWorkflowState(t)
+	s, userID, pm, developer, project := seedWorkflowState(t)
 
 	task, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login",
-		Description:    "Support email password login",
+		ProjectID:   project.ID,
+		Title:       "Implement login",
+		Description: "Support email password login",
 		Todos: []TaskCreateTodoInput{
 			{
 				ID:             "todo-1",
@@ -441,13 +433,12 @@ func TestRecordTodoDispatchMarksTaskInProgress(t *testing.T) {
 }
 
 func TestTaskResultAggregationOnTodoFailure(t *testing.T) {
-	s, _, pm, developer, project, conversation := seedWorkflowState(t)
+	s, _, pm, developer, project := seedWorkflowState(t)
 
 	task, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login",
-		Description:    "Support email password login",
+		ProjectID:   project.ID,
+		Title:       "Implement login",
+		Description: "Support email password login",
 		Todos: []TaskCreateTodoInput{
 			{
 				ID:             "todo-1",
@@ -485,13 +476,12 @@ func TestTaskResultAggregationOnTodoFailure(t *testing.T) {
 }
 
 func TestTaskTodoOrderAndSequentialExecutionGuards(t *testing.T) {
-	s, _, pm, developer, project, conversation := seedWorkflowState(t)
+	s, _, pm, developer, project := seedWorkflowState(t)
 
 	task, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login",
-		Description:    "Support email password login",
+		ProjectID:   project.ID,
+		Title:       "Implement login",
+		Description: "Support email password login",
 		Todos: []TaskCreateTodoInput{
 			{
 				ID:             "todo-2",
@@ -564,13 +554,12 @@ func TestTaskTodoOrderAndSequentialExecutionGuards(t *testing.T) {
 }
 
 func TestCancelTaskStopsFurtherTodoUpdates(t *testing.T) {
-	s, userID, pm, developer, project, conversation := seedWorkflowState(t)
+	s, userID, pm, developer, project := seedWorkflowState(t)
 
 	task, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login",
-		Description:    "Support email password login",
+		ProjectID:   project.ID,
+		Title:       "Implement login",
+		Description: "Support email password login",
 		Todos: []TaskCreateTodoInput{
 			{
 				ID:             "todo-1",
@@ -646,7 +635,7 @@ func TestCancelTaskStopsFurtherTodoUpdates(t *testing.T) {
 }
 
 func TestCreateTaskByUser(t *testing.T) {
-	s, userID, _, developer, project, _ := seedWorkflowState(t)
+	s, userID, _, developer, project := seedWorkflowState(t)
 
 	task, appErr := s.CreateTaskByUser(userID, UserTaskCreateInput{
 		ProjectID:       project.ID,
@@ -666,9 +655,6 @@ func TestCreateTaskByUser(t *testing.T) {
 	}
 	if task.Priority != "high" {
 		t.Fatalf("expected high priority, got %s", task.Priority)
-	}
-	if task.ConversationID != "" {
-		t.Fatalf("expected empty conversation_id, got %s", task.ConversationID)
 	}
 	if len(task.Todos) != 1 {
 		t.Fatalf("expected 1 todo, got %d", len(task.Todos))
@@ -695,7 +681,7 @@ func TestCreateTaskByUser(t *testing.T) {
 }
 
 func TestCreateTaskByUserValidation(t *testing.T) {
-	s, userID, _, developer, project, _ := seedWorkflowState(t)
+	s, userID, _, developer, project := seedWorkflowState(t)
 
 	// Missing title
 	_, appErr := s.CreateTaskByUser(userID, UserTaskCreateInput{
@@ -750,7 +736,7 @@ func TestCreateTaskByUserValidation(t *testing.T) {
 }
 
 func TestCreateTaskByUserTodoWorkflow(t *testing.T) {
-	s, userID, _, developer, project, _ := seedWorkflowState(t)
+	s, userID, _, developer, project := seedWorkflowState(t)
 
 	task, appErr := s.CreateTaskByUser(userID, UserTaskCreateInput{
 		ProjectID:       project.ID,
@@ -785,7 +771,7 @@ func TestCreateTaskByUserTodoWorkflow(t *testing.T) {
 	}
 }
 
-func seedWorkflowState(t *testing.T) (*Store, string, stringAgent, stringAgent, projectRef, conversationRef) {
+func seedWorkflowState(t *testing.T) (*Store, string, stringAgent, stringAgent, projectRef) {
 	t.Helper()
 
 	s := New()
@@ -809,12 +795,7 @@ func seedWorkflowState(t *testing.T) (*Store, string, stringAgent, stringAgent, 
 	if appErr != nil {
 		t.Fatalf("create project: %v", appErr)
 	}
-	conversation, appErr := s.CreateConversation(user.ID, project.ID, "Need login")
-	if appErr != nil {
-		t.Fatalf("create conversation: %v", appErr)
-	}
-
-	return s, user.ID, stringAgent{ID: pm.ID, NodeID: pm.NodeID}, stringAgent{ID: developer.ID, NodeID: developer.NodeID}, projectRef{ID: project.ID}, conversationRef{ID: conversation.ID}
+	return s, user.ID, stringAgent{ID: pm.ID, NodeID: pm.NodeID}, stringAgent{ID: developer.ID, NodeID: developer.NodeID}, projectRef{ID: project.ID}
 }
 
 type stringAgent struct {
@@ -823,9 +804,5 @@ type stringAgent struct {
 }
 
 type projectRef struct {
-	ID string
-}
-
-type conversationRef struct {
 	ID string
 }

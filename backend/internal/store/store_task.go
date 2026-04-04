@@ -15,7 +15,7 @@ func (s *Store) ListTasks(userID, projectID, status string) ([]model.TaskListIte
 		return nil, err
 	}
 	if status != "" && !isValidTaskStatus(status) {
-		return nil, transport.Validation("invalid status", map[string]any{"status": "must be pending/in_progress/done/failed/canceled"})
+		return nil, transport.Validation("invalid status", map[string]any{"status": "must be planning/pending/in_progress/done/failed/canceled"})
 	}
 
 	ids := s.projectTasks[projectID]
@@ -135,33 +135,6 @@ func (s *Store) ListRecentTasks(userID string, limit int) []model.TaskListItem {
 	return items
 }
 
-func (s *Store) getTaskSummaryByConversationUnsafe(conversationID string) *model.TaskSummary {
-	taskID, ok := s.conversationTasks[conversationID]
-	if !ok {
-		return nil
-	}
-	task, ok := s.tasks[taskID]
-	if !ok {
-		return nil
-	}
-	completed := 0
-	for _, todo := range task.Todos {
-		if todo.Status == "done" {
-			completed++
-		}
-	}
-	return &model.TaskSummary{
-		ID:                 task.ID,
-		Title:              task.Title,
-		Status:             task.Status,
-		Priority:           task.Priority,
-		TodoCount:          len(task.Todos),
-		CompletedTodoCount: completed,
-		CreatedAt:          task.CreatedAt,
-		UpdatedAt:          task.UpdatedAt,
-	}
-}
-
 func toTaskListItem(task model.TaskDetail) model.TaskListItem {
 	completed := 0
 	failed := 0
@@ -176,7 +149,6 @@ func toTaskListItem(task model.TaskDetail) model.TaskListItem {
 	return model.TaskListItem{
 		ID:                 task.ID,
 		ProjectID:          task.ProjectID,
-		ConversationID:     task.ConversationID,
 		Title:              task.Title,
 		Description:        task.Description,
 		Status:             task.Status,
@@ -196,7 +168,7 @@ func toPMSummary(a *model.Agent) model.PMAgentSummary {
 
 func isValidTaskStatus(status string) bool {
 	switch status {
-	case "pending", "in_progress", "done", "failed", "canceled":
+	case "planning", "pending", "in_progress", "done", "failed", "canceled":
 		return true
 	default:
 		return false

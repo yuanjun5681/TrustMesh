@@ -71,7 +71,6 @@ type TaskResult struct {
 type TaskListItem struct {
 	ID                 string         `json:"id" bson:"id"`
 	ProjectID          string         `json:"project_id" bson:"project_id"`
-	ConversationID     string         `json:"conversation_id" bson:"conversation_id"`
 	Title              string         `json:"title" bson:"title"`
 	Description        string         `json:"description" bson:"description"`
 	Status             string         `json:"status" bson:"status"`
@@ -85,25 +84,25 @@ type TaskListItem struct {
 }
 
 type TaskDetail struct {
-	ID             string         `json:"id" bson:"_id"`
-	UserID         string         `json:"-" bson:"user_id"`
-	ProjectID      string         `json:"project_id" bson:"project_id"`
-	ConversationID string         `json:"conversation_id,omitempty" bson:"conversation_id,omitempty"`
-	Title          string         `json:"title" bson:"title"`
-	Description    string         `json:"description" bson:"description"`
-	Status         string         `json:"status" bson:"status"`
-	Priority       string         `json:"priority" bson:"priority"`
-	PMAgentID      string         `json:"-" bson:"pm_agent_id"`
-	PMAgent        PMAgentSummary `json:"pm_agent" bson:"pm_agent"`
-	Todos          []Todo         `json:"todos" bson:"todos"`
-	Artifacts      []TaskArtifact `json:"artifacts" bson:"-"`
-	Result         TaskResult     `json:"result" bson:"result"`
-	Version        int            `json:"version" bson:"version"`
-	CanceledAt     *time.Time     `json:"canceled_at" bson:"canceled_at"`
-	CanceledBy     *ActorRef      `json:"canceled_by" bson:"canceled_by"`
-	CancelReason   *string        `json:"cancel_reason" bson:"cancel_reason"`
-	CreatedAt      time.Time      `json:"created_at" bson:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at" bson:"updated_at"`
+	ID           string         `json:"id" bson:"_id"`
+	UserID       string         `json:"-" bson:"user_id"`
+	ProjectID    string         `json:"project_id" bson:"project_id"`
+	Title        string         `json:"title" bson:"title"`
+	Description  string         `json:"description" bson:"description"`
+	Status       string         `json:"status" bson:"status"`
+	Priority     string         `json:"priority" bson:"priority"`
+	PMAgentID    string         `json:"-" bson:"pm_agent_id"`
+	PMAgent      PMAgentSummary `json:"pm_agent" bson:"pm_agent"`
+	Messages     []TaskMessage  `json:"messages,omitempty" bson:"messages,omitempty"`
+	Todos        []Todo         `json:"todos" bson:"todos"`
+	Artifacts    []TaskArtifact `json:"artifacts" bson:"-"`
+	Result       TaskResult     `json:"result" bson:"result"`
+	Version      int            `json:"version" bson:"version"`
+	CanceledAt   *time.Time     `json:"canceled_at" bson:"canceled_at"`
+	CanceledBy   *ActorRef      `json:"canceled_by" bson:"canceled_by"`
+	CancelReason *string        `json:"cancel_reason" bson:"cancel_reason"`
+	CreatedAt    time.Time      `json:"created_at" bson:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at" bson:"updated_at"`
 }
 
 func (t *TaskDetail) NextDispatchableTodo() *Todo {

@@ -38,7 +38,6 @@ func (s *Store) enableMongo(cfg config.Config, log *zap.Logger) error {
 	s.mongoUsers = db.Collection("users")
 	s.mongoAgents = db.Collection("agents")
 	s.mongoProjects = db.Collection("projects")
-	s.mongoConversations = db.Collection("conversations")
 	s.mongoTasks = db.Collection("tasks")
 	s.mongoEvents = db.Collection("events")
 	s.mongoComments = db.Collection("comments")
@@ -85,7 +84,6 @@ func (s *Store) clearMongoCollections() {
 	s.mongoUsers = nil
 	s.mongoAgents = nil
 	s.mongoProjects = nil
-	s.mongoConversations = nil
 	s.mongoTasks = nil
 	s.mongoEvents = nil
 	s.mongoComments = nil
@@ -118,7 +116,6 @@ func (s *Store) ensureMongoIndexes() error {
 		},
 		s.mongoTasks: {
 			{Keys: bson.D{{Key: "project_id", Value: 1}, {Key: "status", Value: 1}}},
-			{Keys: bson.D{{Key: "conversation_id", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true)},
 			{Keys: bson.D{{Key: "pm_agent_id", Value: 1}}},
 			{Keys: bson.D{{Key: "todos.assignee.agent_id", Value: 1}, {Key: "todos.status", Value: 1}}},
 			{Keys: bson.D{{Key: "status", Value: 1}}},
@@ -133,9 +130,6 @@ func (s *Store) ensureMongoIndexes() error {
 		},
 		s.mongoNotifications: {
 			{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "is_read", Value: 1}, {Key: "created_at", Value: -1}}},
-		},
-		s.mongoConversations: {
-			{Keys: bson.D{{Key: "project_id", Value: 1}, {Key: "user_id", Value: 1}}},
 		},
 		s.mongoArtifacts: {
 			{Keys: bson.D{{Key: "task_id", Value: 1}}},
@@ -152,8 +146,6 @@ func (s *Store) ensureMongoIndexes() error {
 		},
 	}
 
-	// Drop the old non-sparse conversation_id unique index if it exists,
-	// since we now need it to be sparse (to allow tasks without a conversation).
 	if s.mongoTasks != nil {
 		ctx, cancel := s.mongoContext()
 		_ = s.mongoTasks.Indexes().DropOne(ctx, "conversation_id_1")
@@ -187,11 +179,7 @@ func (s *Store) loadMongoState() error {
 	if err != nil {
 		return err
 	}
-	conversations, projectConversations, err := s.loadConversations()
-	if err != nil {
-		return err
-	}
-	tasks, projectTasks, conversationTasks, err := s.loadTasks()
+	tasks, projectTasks, err := s.loadTasks()
 	if err != nil {
 		return err
 	}
@@ -237,11 +225,8 @@ func (s *Store) loadMongoState() error {
 	s.agents = agents
 	s.agentByNode = agentByNode
 	s.projects = projects
-	s.conversations = conversations
-	s.projectConversations = projectConversations
 	s.tasks = tasks
 	s.projectTasks = projectTasks
-	s.conversationTasks = conversationTasks
 	s.taskEvents = taskEvents
 	s.userEvents = userEvents
 	s.agentEvents = agentEvents
@@ -327,54 +312,23 @@ func (s *Store) loadProjects() (map[string]*model.Project, error) {
 	return items, nil
 }
 
-func (s *Store) loadConversations() (map[string]*model.Conversation, map[string][]string, error) {
-	items := make(map[string]*model.Conversation)
-	projectConversations := make(map[string][]string)
-	if s.mongoConversations == nil {
-		return items, projectConversations, nil
-	}
-	ctx, cancel := s.mongoContext()
-	defer cancel()
-	cursor, err := s.mongoConversations.Find(ctx, bson.D{})
-	if err != nil {
-		return nil, nil, err
-	}
-	defer cursor.Close(ctx)
-
-	var conversations []model.Conversation
-	if err := cursor.All(ctx, &conversations); err != nil {
-		return nil, nil, err
-	}
-	sort.Slice(conversations, func(i, j int) bool {
-		return conversations[i].CreatedAt.Before(conversations[j].CreatedAt)
-	})
-	for i := range conversations {
-		conversation := conversations[i]
-		convCopy := conversation
-		items[conversation.ID] = &convCopy
-		projectConversations[conversation.ProjectID] = append(projectConversations[conversation.ProjectID], conversation.ID)
-	}
-	return items, projectConversations, nil
-}
-
-func (s *Store) loadTasks() (map[string]*model.TaskDetail, map[string][]string, map[string]string, error) {
+func (s *Store) loadTasks() (map[string]*model.TaskDetail, map[string][]string, error) {
 	items := make(map[string]*model.TaskDetail)
 	projectTasks := make(map[string][]string)
-	conversationTasks := make(map[string]string)
 	if s.mongoTasks == nil {
-		return items, projectTasks, conversationTasks, nil
+		return items, projectTasks, nil
 	}
 	ctx, cancel := s.mongoContext()
 	defer cancel()
 	cursor, err := s.mongoTasks.Find(ctx, bson.D{})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	defer cursor.Close(ctx)
 
 	var tasks []model.TaskDetail
 	if err := cursor.All(ctx, &tasks); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	sort.Slice(tasks, func(i, j int) bool {
 		return tasks[i].CreatedAt.Before(tasks[j].CreatedAt)
@@ -383,11 +337,8 @@ func (s *Store) loadTasks() (map[string]*model.TaskDetail, map[string][]string, 
 		task := tasks[i]
 		items[task.ID] = copyTask(&task)
 		projectTasks[task.ProjectID] = append(projectTasks[task.ProjectID], task.ID)
-		if task.ConversationID != "" {
-			conversationTasks[task.ConversationID] = task.ID
-		}
 	}
-	return items, projectTasks, conversationTasks, nil
+	return items, projectTasks, nil
 }
 
 func (s *Store) loadEvents() (map[string][]model.Event, map[string][]*model.Event, map[string][]*model.Event, error) {
@@ -513,18 +464,6 @@ func (s *Store) persistProjectUnsafe(project *model.Project) error {
 	ctx, cancel := s.mongoContext()
 	defer cancel()
 	_, err := s.mongoProjects.ReplaceOne(ctx, bson.M{"_id": project.ID}, copyProject(project), options.Replace().SetUpsert(true))
-	return err
-}
-
-func (s *Store) persistConversationUnsafe(conversation *model.Conversation) error {
-	if !s.mongoEnabled || s.mongoConversations == nil || conversation == nil {
-		return nil
-	}
-	ctx, cancel := s.mongoContext()
-	defer cancel()
-	clone := *conversation
-	clone.Messages = append([]model.ConversationMessage(nil), conversation.Messages...)
-	_, err := s.mongoConversations.ReplaceOne(ctx, bson.M{"_id": conversation.ID}, clone, options.Replace().SetUpsert(true))
 	return err
 }
 
@@ -771,4 +710,3 @@ func (s *Store) persistArtifactUnsafe(artifact *model.TaskArtifact) error {
 	_, err := s.mongoArtifacts.ReplaceOne(ctx, bson.M{"_id": artifact.TransferID}, artifact, options.Replace().SetUpsert(true))
 	return err
 }
-

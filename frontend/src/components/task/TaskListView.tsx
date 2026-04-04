@@ -5,6 +5,7 @@ import { TaskListRow } from './TaskListRow'
 import type { TaskListItem, TaskStatus } from '@/types'
 
 const statusGroups: { status: TaskStatus; label: string }[] = [
+  { status: 'planning', label: '规划中' },
   { status: 'in_progress', label: '进行中' },
   { status: 'pending', label: '待处理' },
   { status: 'done', label: '已完成' },

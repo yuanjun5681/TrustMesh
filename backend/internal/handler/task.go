@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -349,7 +350,6 @@ func (h *TaskHandler) buildTaskMentionPayload(task *model.TaskDetail, comment *m
 	payload := protocol.TaskMentionPayload{
 		TaskID:          task.ID,
 		ProjectID:       task.ProjectID,
-		ConversationID:  task.ConversationID,
 		CommentID:       comment.ID,
 		TodoID:          comment.TodoID,
 		TaskTitle:       task.Title,
@@ -370,4 +370,156 @@ func (h *TaskHandler) buildTaskMentionPayload(task *model.TaskDetail, comment *m
 	}
 
 	return payload
+}
+
+func (h *TaskHandler) CreatePlanning(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	var body struct {
+		Content string `json:"content"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid request body"))
+		return
+	}
+
+	projectID := c.Param("projectId")
+	task, appErr := h.store.CreateTaskPlanning(userID, projectID, body.Content)
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	h.notifyPMTaskMessage(c, userID, projectID, task.ID, body.Content, true, nil)
+	transport.WriteData(c, http.StatusCreated, task)
+}
+
+func (h *TaskHandler) AppendTaskMessage(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	var body struct {
+		Content    string            `json:"content"`
+		UIResponse *model.UIResponse `json:"ui_response,omitempty"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid request body"))
+		return
+	}
+
+	taskID := c.Param("id")
+	task, appErr := h.store.AppendTaskMessage(userID, taskID, body.Content, body.UIResponse)
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	h.notifyPMTaskMessage(c, userID, task.ProjectID, task.ID, body.Content, false, body.UIResponse)
+	transport.WriteData(c, http.StatusOK, task)
+}
+
+func (h *TaskHandler) notifyPMTaskMessage(c *gin.Context, userID, projectID, taskID, content string, initial bool, uiResponse *model.UIResponse) {
+	if h.publisher == nil {
+		return
+	}
+	pmNodeID, appErr := h.store.GetTaskPMNode(userID, taskID)
+	if appErr != nil {
+		if h.log != nil {
+			h.log.Warn("skip notify task.message", zap.String("task_id", taskID), zap.String("code", appErr.Code))
+		}
+		return
+	}
+	payload := h.buildPMTaskMessage(userID, projectID, taskID, content, initial, uiResponse)
+	if _, err := h.publisher.Publish(c.Request.Context(), pmNodeID, "task.message", payload, taskID, nil); err != nil {
+		if h.log != nil {
+			h.log.Warn("notify task.message failed", zap.String("task_id", taskID), zap.Error(err))
+		}
+	}
+}
+
+func (h *TaskHandler) buildPMTaskMessage(userID, projectID, taskID, userContent string, initial bool, uiResponse *model.UIResponse) protocol.PMTaskMessage {
+	payload := protocol.PMTaskMessage{
+		TaskID:         taskID,
+		ProjectID:      projectID,
+		UserContent:    userContent,
+		IsInitial:      initial,
+		UserUIResponse: uiResponse,
+	}
+	if initial {
+		payload.Content = "请使用 /tm-task-plan skill 处理本次需求。首先理解用户需求，澄清不明确之处，待需求明确后再创建任务。"
+	} else {
+		payload.Content = "用户发送了新的消息，请使用 /tm-task-plan skill 继续处理。"
+	}
+
+	if !initial {
+		return payload
+	}
+
+	project, appErr := h.store.GetProject(userID, projectID)
+	if appErr != nil {
+		if h.log != nil {
+			h.log.Warn("build initial pm task message missing project context", zap.String("project_id", projectID))
+		}
+		return payload
+	}
+
+	candidates := buildCandidateAgents(project.PMAgent.ID, h.store.ListAgents(userID))
+	payload.Project = &protocol.PMTaskProject{
+		Name:        project.Name,
+		Description: project.Description,
+	}
+	payload.PMBrief = defaultPMBrief()
+	payload.CandidateAgents = candidates
+	return payload
+}
+
+func defaultPMBrief() *protocol.PMTaskBrief {
+	return &protocol.PMTaskBrief{
+		Objective:                   "明确任务目标和业务目的；在需求清晰前持续澄清；仅在需求满足执行条件后拆解任务并派发给其他 Agent。",
+		MustClarifyBeforeTaskCreate: true,
+		MustUseSkill:                "tm-task-plan",
+	}
+}
+
+func buildCandidateAgents(pmAgentID string, agents []model.Agent) []protocol.PMTaskAgent {
+	out := make([]protocol.PMTaskAgent, 0, len(agents))
+	for _, agent := range agents {
+		if agent.ID == pmAgentID {
+			continue
+		}
+		out = append(out, protocol.PMTaskAgent{
+			ID:           agent.ID,
+			Name:         agent.Name,
+			NodeID:       agent.NodeID,
+			Role:         agent.Role,
+			Status:       agent.Status,
+			Capabilities: append([]string(nil), agent.Capabilities...),
+		})
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		left := agentStatusRank(out[i].Status)
+		right := agentStatusRank(out[j].Status)
+		if left != right {
+			return left < right
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+func agentStatusRank(status string) int {
+	switch status {
+	case "online":
+		return 0
+	case "busy":
+		return 1
+	default:
+		return 2
+	}
 }

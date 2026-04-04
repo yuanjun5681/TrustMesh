@@ -1,8 +1,10 @@
 import { api } from './client'
 import type {
   AddTaskCommentResult,
+  AppendTaskMessageRequest,
   ApiResponse,
   ApiListResponse,
+  CreatePlanningTaskRequest,
   TaskListItem,
   TaskDetail,
   TaskPriority,
@@ -22,6 +24,10 @@ export async function createTask(projectId: string, input: CreateTaskInput) {
   return api.post(`projects/${projectId}/tasks`, { json: input }).json<ApiResponse<TaskDetail>>()
 }
 
+export async function createPlanningTask(projectId: string, input: CreatePlanningTaskRequest) {
+  return api.post(`projects/${projectId}/tasks/planning`, { json: input }).json<ApiResponse<TaskDetail>>()
+}
+
 export async function listProjectTasks(projectId: string, query?: ListProjectTasksQuery) {
   const searchParams: Record<string, string> = {}
   if (query?.status) searchParams.status = query.status
@@ -32,6 +38,10 @@ export async function listProjectTasks(projectId: string, query?: ListProjectTas
 
 export async function getTask(id: string) {
   return api.get(`tasks/${id}`).json<ApiResponse<TaskDetail>>()
+}
+
+export async function appendTaskMessage(taskId: string, input: AppendTaskMessageRequest) {
+  return api.post(`tasks/${taskId}/messages`, { json: input }).json<ApiResponse<TaskDetail>>()
 }
 
 export async function listTaskEvents(id: string) {

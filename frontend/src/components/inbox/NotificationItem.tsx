@@ -9,7 +9,6 @@ function stripMarkdown(body: string): string {
 }
 
 const categoryFallback: Record<string, string> = {
-  conversation: 'PM Agent',
   task: 'PM Agent',
   todo: '执行 Agent',
   agent: 'Agent',
@@ -18,10 +17,9 @@ const categoryFallback: Record<string, string> = {
 interface NotificationItemProps {
   notification: Notification
   onMarkRead?: (id: string) => void
-  onViewConversation?: (projectId: string, conversationId?: string) => void
 }
 
-export function NotificationItem({ notification, onMarkRead, onViewConversation }: NotificationItemProps) {
+export function NotificationItem({ notification, onMarkRead }: NotificationItemProps) {
   const navigate = useNavigate()
   const isUnread = !notification.is_read
   const from = notification.actor_name || categoryFallback[notification.category] || '未知'
@@ -34,9 +32,7 @@ export function NotificationItem({ notification, onMarkRead, onViewConversation 
     if (isUnread && onMarkRead) {
       onMarkRead(notification.id)
     }
-    if (notification.category === 'conversation') {
-      onViewConversation?.(notification.project_id, notification.conversation_id)
-    } else if (taskLink) {
+    if (taskLink) {
       navigate(taskLink)
     }
   }
@@ -85,7 +81,7 @@ export function NotificationItem({ notification, onMarkRead, onViewConversation 
 
       {/* 跳转指示 */}
       <div className="w-8 shrink-0 flex justify-center">
-        {(taskLink || notification.category === 'conversation') && (
+        {taskLink && (
           <ChevronRight className="size-4 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground" />
         )}
       </div>

@@ -33,10 +33,10 @@ func (s *Store) maybeCreateNotificationUnsafe(event *model.Event) {
 		body = stringOrDefault(event.Content, "Todo 失败")
 		category = "todo"
 		priority = "high"
-	case "conversation_reply":
+	case "planning_reply":
 		title = "PM 回复"
 		body = stringOrDefault(event.Content, "新的回复")
-		category = "conversation"
+		category = "task"
 		priority = "medium"
 	case "join_request_received":
 		title = "Agent 加入申请"
@@ -52,32 +52,22 @@ func (s *Store) maybeCreateNotificationUnsafe(event *model.Event) {
 		return
 	}
 
-	var conversationID string
-	if cid, ok := event.Metadata["conversation_id"].(string); ok && cid != "" {
-		conversationID = cid
-	} else if event.TaskID != "" {
-		if task, ok := s.tasks[event.TaskID]; ok {
-			conversationID = task.ConversationID
-		}
-	}
-
 	now := event.CreatedAt
 	notification := &model.Notification{
-		ID:             newID(),
-		UserID:         event.UserID,
-		EventID:        event.ID,
-		ProjectID:      event.ProjectID,
-		TaskID:         event.TaskID,
-		ConversationID: conversationID,
-		ActorType:      event.ActorType,
-		ActorName:      event.ActorName,
-		Title:          title,
-		Body:           body,
-		Category:       category,
-		Priority:       priority,
-		IsRead:         false,
-		ReadAt:         nil,
-		CreatedAt:      now,
+		ID:        newID(),
+		UserID:    event.UserID,
+		EventID:   event.ID,
+		ProjectID: event.ProjectID,
+		TaskID:    event.TaskID,
+		ActorType: event.ActorType,
+		ActorName: event.ActorName,
+		Title:     title,
+		Body:      body,
+		Category:  category,
+		Priority:  priority,
+		IsRead:    false,
+		ReadAt:    nil,
+		CreatedAt: now,
 	}
 	s.notifications[notification.ID] = notification
 	s.userNotifications[event.UserID] = append(s.userNotifications[event.UserID], notification.ID)

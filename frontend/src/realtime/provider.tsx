@@ -13,7 +13,6 @@ import {
 } from './reducers/notifications'
 import { applyTaskCommentCreated, applyTaskEventCreated, applyTaskUpdated } from './reducers/tasks'
 import { applyAgentStatusChanged } from './reducers/agents'
-import { applyConversationUpdated } from './reducers/conversations'
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
@@ -38,7 +37,6 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         void queryClient.invalidateQueries({ queryKey: ['projects'] })
         void queryClient.invalidateQueries({ queryKey: ['agents'] })
         void queryClient.invalidateQueries({ queryKey: ['tasks'] })
-        void queryClient.invalidateQueries({ queryKey: ['conversations'] })
       },
       onError: () => {
         setStatus((current) => (current === 'connected' ? 'reconnecting' : 'disconnected'))
@@ -65,9 +63,6 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
             break
           case 'agent.status.changed':
             applyAgentStatusChanged(queryClient, event.payload)
-            break
-          case 'conversation.updated':
-            applyConversationUpdated(queryClient, event.payload)
             break
           case 'join_request.created':
             void queryClient.invalidateQueries({ queryKey: ['join-requests'] })

@@ -25,7 +25,7 @@ export function CancelTaskDialog({ open, onOpenChange, task, onCanceled }: Props
     onOpenChange(nextOpen)
   }
 
-  const cancelable = task?.status === 'pending' || task?.status === 'in_progress'
+  const cancelable = task?.status === 'planning' || task?.status === 'pending' || task?.status === 'in_progress'
 
   const handleCancelTask = async () => {
     if (!task || !cancelable) {

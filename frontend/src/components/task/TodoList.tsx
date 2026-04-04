@@ -1,10 +1,11 @@
-import { CheckCircle2, Circle, Loader2, XCircle, ChevronDown, ChevronRight, CircleSlash2 } from 'lucide-react'
+import { CheckCircle2, Circle, Loader2, XCircle, ChevronDown, ChevronRight, CircleSlash2, MessageSquareMore } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import type { Todo, TaskArtifact } from '@/types'
 
 const statusIcons = {
+  planning: MessageSquareMore,
   pending: Circle,
   in_progress: Loader2,
   done: CheckCircle2,
@@ -13,6 +14,7 @@ const statusIcons = {
 }
 
 const statusColors = {
+  planning: 'text-info',
   pending: 'text-muted-foreground',
   in_progress: 'text-info animate-spin',
   done: 'text-success',

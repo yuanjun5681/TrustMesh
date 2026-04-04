@@ -20,6 +20,7 @@ import type { Event, EventType } from '@/types'
 
 const eventConfig: Record<EventType, { icon: typeof Circle; color: string; label: string }> = {
   task_created: { icon: Circle, color: 'text-info', label: '任务创建' },
+  task_plan_ready: { icon: Cog, color: 'text-info', label: '规划完成' },
   task_status_changed: { icon: Cog, color: 'text-warning', label: '状态变更' },
   todo_assigned: { icon: UserCircle, color: 'text-info', label: '分配 Todo' },
   todo_started: { icon: PlayCircle, color: 'text-info', label: '开始执行' },
@@ -27,12 +28,13 @@ const eventConfig: Record<EventType, { icon: typeof Circle; color: string; label
   todo_completed: { icon: CheckCircle2, color: 'text-success', label: 'Todo 完成' },
   todo_failed: { icon: AlertCircle, color: 'text-destructive', label: 'Todo 失败' },
   task_comment: { icon: MessageSquare, color: 'text-muted-foreground', label: '评论' },
-  conversation_reply: { icon: MessageSquare, color: 'text-info', label: 'PM 回复' },
+  planning_reply: { icon: MessageSquare, color: 'text-info', label: 'PM 规划回复' },
   agent_status_changed: { icon: Radio, color: 'text-warning', label: 'Agent 状态' },
   artifact_received: { icon: Paperclip, color: 'text-info', label: '上传了文件' },
 }
 
 const taskStatusBadge: Record<string, { label: string; variant: 'secondary' | 'info' | 'success' | 'destructive' }> = {
+  planning: { label: '规划中', variant: 'info' },
   pending: { label: '待处理', variant: 'secondary' },
   in_progress: { label: '进行中', variant: 'info' },
   done: { label: '已完成', variant: 'success' },
@@ -138,7 +140,7 @@ function EventDetail({ event }: { event: Event }) {
     )
   }
 
-  if (event.content && event.event_type === 'conversation_reply') {
+  if (event.content && event.event_type === 'planning_reply') {
     return <p className="text-xs text-muted-foreground mt-0.5 truncate">{event.content}</p>
   }
 
@@ -147,9 +149,6 @@ function EventDetail({ event }: { event: Event }) {
 
 function buildEventLink(event: Event): string | null {
   if (event.project_id && event.task_id) {
-    return `/projects/${event.project_id}`
-  }
-  if (event.metadata.conversation_id && event.project_id) {
     return `/projects/${event.project_id}`
   }
   return null

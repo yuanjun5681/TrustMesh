@@ -76,7 +76,7 @@ func clawsynapseHealthResponse(t *testing.T, nodeID string) string {
 	return string(body)
 }
 
-func TestHappyPathAuthToConversation(t *testing.T) {
+func TestHappyPathAuthToPlanningTask(t *testing.T) {
 	log, err := logger.New("error")
 	if err != nil {
 		t.Fatalf("new logger: %v", err)
@@ -328,7 +328,7 @@ func TestInvitePromptUsesNodeIDFromClawSynapseHealth(t *testing.T) {
 	}
 }
 
-func TestCreateConversationPublishesInitialPMBrief(t *testing.T) {
+func TestCreatePlanningTaskPublishesInitialPMBrief(t *testing.T) {
 	log, err := logger.New("error")
 	if err != nil {
 		t.Fatalf("new logger: %v", err)

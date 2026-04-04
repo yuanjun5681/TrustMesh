@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Circle, CircleDot, CheckCircle2, Loader2, XCircle, CircleSlash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Circle, CircleDot, CheckCircle2, Loader2, XCircle, CircleSlash2, MessageSquareMore } from 'lucide-react'
 import { useTask } from '@/hooks/useTasks'
 import { TodoList } from './TodoList'
 import { cn } from '@/lib/utils'
@@ -8,6 +8,7 @@ import { PriorityBadge } from '@/components/shared/StatusBadge'
 import type { TaskListItem, TaskStatus } from '@/types'
 
 const statusIcon: Record<TaskStatus, { icon: typeof Circle; className: string }> = {
+  planning: { icon: MessageSquareMore, className: 'text-info' },
   pending: { icon: Circle, className: 'text-muted-foreground' },
   in_progress: { icon: CircleDot, className: 'text-info animate-pulse' },
   done: { icon: CheckCircle2, className: 'text-success' },
@@ -30,6 +31,7 @@ export function TaskListRow({ task, isSelected, onClick }: TaskListRowProps) {
   const Icon = statusIcon[task.status].icon
   const iconClass = statusIcon[task.status].className
   const canExpandTodos = task.todo_count > 0
+  const isPlanning = task.status === 'planning'
 
   return (
     <div data-task-id={task.id}>
@@ -81,7 +83,9 @@ export function TaskListRow({ task, isSelected, onClick }: TaskListRowProps) {
 
         {/* Progress */}
         <div className="flex items-center gap-2">
-          {task.todo_count > 0 ? (
+          {isPlanning ? (
+            <span className="text-xs text-info">等待 PM 规划</span>
+          ) : task.todo_count > 0 ? (
             <>
               <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
                 <div

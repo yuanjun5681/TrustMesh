@@ -17,17 +17,3 @@ func (s *Store) publishTaskUnsafe(taskID string) {
 		)
 	}
 }
-
-func (s *Store) publishConversationUnsafe(conversationID string) {
-	conversation := s.toConversationDetailUnsafe(s.conversations[conversationID])
-	s.publishUserEventUnsafe(s.conversations[conversationID].UserID, "conversation.updated", map[string]any{
-		"conversation": conversation,
-	}, conversation.UpdatedAt)
-
-	if s.log != nil {
-		s.log.Info("publishConversationUnsafe",
-			zap.String("conversation_id", conversationID),
-			zap.Int("messages", len(conversation.Messages)),
-		)
-	}
-}

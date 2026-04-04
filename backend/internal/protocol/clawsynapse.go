@@ -11,18 +11,24 @@ type WebhookPayload struct {
 	Metadata   map[string]any `json:"metadata"`
 }
 
-type ConversationReplyPayload struct {
-	ConversationID string          `json:"conversation_id"`
-	Content        string          `json:"content"`
-	UIBlocks       []model.UIBlock `json:"ui_blocks,omitempty"`
+type TaskCreatePayload struct {
+	ProjectID   string                  `json:"project_id"`
+	Title       string                  `json:"title"`
+	Description string                  `json:"description"`
+	Todos       []TaskCreateTodoPayload `json:"todos"`
 }
 
-type TaskCreatePayload struct {
-	ProjectID      string                  `json:"project_id"`
-	ConversationID string                  `json:"conversation_id"`
-	Title          string                  `json:"title"`
-	Description    string                  `json:"description"`
-	Todos          []TaskCreateTodoPayload `json:"todos"`
+type TaskReplyPayload struct {
+	TaskID   string          `json:"task_id"`
+	Content  string          `json:"content"`
+	UIBlocks []model.UIBlock `json:"ui_blocks,omitempty"`
+}
+
+type TaskPlanReadyPayload struct {
+	TaskID      string                  `json:"task_id"`
+	Title       string                  `json:"title"`
+	Description string                  `json:"description"`
+	Todos       []TaskCreateTodoPayload `json:"todos"`
 }
 
 type TaskCreateTodoPayload struct {
@@ -60,7 +66,6 @@ type TaskCommentPayload struct {
 type TaskMentionPayload struct {
 	TaskID          string `json:"task_id"`
 	ProjectID       string `json:"project_id"`
-	ConversationID  string `json:"conversation_id,omitempty"`
 	CommentID       string `json:"comment_id"`
 	TodoID          string `json:"todo_id,omitempty"`
 	TaskTitle       string `json:"task_title"`
@@ -74,10 +79,9 @@ type TaskMentionPayload struct {
 }
 
 type TaskCreatedPayload struct {
-	TaskID         string `json:"task_id"`
-	ProjectID      string `json:"project_id"`
-	ConversationID string `json:"conversation_id"`
-	Title          string `json:"title"`
+	TaskID    string `json:"task_id"`
+	ProjectID string `json:"project_id"`
+	Title     string `json:"title"`
 }
 
 type TaskStatusChangedPayload struct {
@@ -95,14 +99,14 @@ type TodoExecBrief struct {
 }
 
 type TodoAssignedPayload struct {
-	TaskID       string             `json:"task_id"`
-	TodoID       string             `json:"todo_id"`
-	Title        string             `json:"title"`
-	Description  string             `json:"description"`
-	Content      string             `json:"content"`
-	ExecBrief    *TodoExecBrief     `json:"exec_brief,omitempty"`
-	TaskContext  *TaskContext        `json:"task_context,omitempty"`
-	PriorResults []TodoPriorResult  `json:"prior_results,omitempty"`
+	TaskID       string            `json:"task_id"`
+	TodoID       string            `json:"todo_id"`
+	Title        string            `json:"title"`
+	Description  string            `json:"description"`
+	Content      string            `json:"content"`
+	ExecBrief    *TodoExecBrief    `json:"exec_brief,omitempty"`
+	TaskContext  *TaskContext      `json:"task_context,omitempty"`
+	PriorResults []TodoPriorResult `json:"prior_results,omitempty"`
 }
 
 // TaskContext provides task-level context for the assigned agent.
@@ -179,23 +183,23 @@ type ContextQueryPayload struct {
 
 // task.context.result — TrustMesh responds with full task context snapshot
 type ContextResultPayload struct {
-	TaskID       string            `json:"task_id"`
-	TaskContext  *TaskContext       `json:"task_context"`
-	AllResults   []TodoPriorResult `json:"all_results,omitempty"`
+	TaskID      string            `json:"task_id"`
+	TaskContext *TaskContext      `json:"task_context"`
+	AllResults  []TodoPriorResult `json:"all_results,omitempty"`
 }
 
-type PMConversationProject struct {
+type PMTaskProject struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 }
 
-type PMConversationBrief struct {
+type PMTaskBrief struct {
 	Objective                   string `json:"objective"`
 	MustClarifyBeforeTaskCreate bool   `json:"must_clarify_before_task_create"`
 	MustUseSkill                string `json:"must_use_skill"`
 }
 
-type PMConversationAgent struct {
+type PMTaskAgent struct {
 	ID           string   `json:"id"`
 	Name         string   `json:"name"`
 	NodeID       string   `json:"node_id"`
@@ -204,14 +208,15 @@ type PMConversationAgent struct {
 	Capabilities []string `json:"capabilities"`
 }
 
-type PMConversationMessage struct {
-	ConversationID  string                 `json:"conversation_id"`
-	ProjectID       string                 `json:"project_id"`
-	Content         string                 `json:"content"`
-	UserContent     string                 `json:"user_content"`
-	IsInitial       bool                   `json:"is_initial_message"`
-	UserUIResponse  *model.UIResponse      `json:"user_ui_response,omitempty"`
-	Project         *PMConversationProject `json:"project,omitempty"`
-	PMBrief         *PMConversationBrief   `json:"pm_brief,omitempty"`
-	CandidateAgents []PMConversationAgent  `json:"candidate_agents,omitempty"`
+// PMTaskMessage is published by TrustMesh to PM Agent during planning phase.
+type PMTaskMessage struct {
+	TaskID          string            `json:"task_id"`
+	ProjectID       string            `json:"project_id"`
+	Content         string            `json:"content"`
+	UserContent     string            `json:"user_content"`
+	IsInitial       bool              `json:"is_initial_message"`
+	UserUIResponse  *model.UIResponse `json:"user_ui_response,omitempty"`
+	Project         *PMTaskProject    `json:"project,omitempty"`
+	PMBrief         *PMTaskBrief      `json:"pm_brief,omitempty"`
+	CandidateAgents []PMTaskAgent     `json:"candidate_agents,omitempty"`
 }

@@ -59,10 +59,12 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 	}
 
 	switch strings.TrimSpace(payload.Type) {
-	case "conversation.reply":
-		h.handleConversationReply(c, payload)
 	case "task.create":
 		h.handleTaskCreate(c, payload)
+	case "task.reply":
+		h.handleTaskReply(c, payload)
+	case "task.plan_ready":
+		h.handleTaskPlanReady(c, payload)
 	case "todo.progress":
 		h.handleTodoProgress(c, payload)
 	case "todo.complete":
@@ -105,21 +107,6 @@ func (h *WebhookHandler) resolveLocalNodeID(ctx context.Context) (string, *trans
 	return nodeID, nil
 }
 
-func (h *WebhookHandler) handleConversationReply(c *gin.Context, webhook protocol.WebhookPayload) {
-	var payload protocol.ConversationReplyPayload
-	if err := decodeWebhookMessage(webhook.Message, &payload); err != nil {
-		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid conversation.reply message"))
-		return
-	}
-
-	detail, appErr := h.store.AppendPMReplyByNode(webhook.From, payload.ConversationID, payload.Content, payload.UIBlocks)
-	if appErr != nil {
-		transport.WriteError(c, appErr)
-		return
-	}
-	transport.WriteData(c, http.StatusOK, detail)
-}
-
 func (h *WebhookHandler) handleTaskCreate(c *gin.Context, webhook protocol.WebhookPayload) {
 	var payload protocol.TaskCreatePayload
 	if err := decodeWebhookMessage(webhook.Message, &payload); err != nil {
@@ -128,11 +115,10 @@ func (h *WebhookHandler) handleTaskCreate(c *gin.Context, webhook protocol.Webho
 	}
 
 	in := store.TaskCreateInput{
-		ProjectID:      payload.ProjectID,
-		ConversationID: payload.ConversationID,
-		Title:          payload.Title,
-		Description:    payload.Description,
-		Todos:          make([]store.TaskCreateTodoInput, 0, len(payload.Todos)),
+		ProjectID:   payload.ProjectID,
+		Title:       payload.Title,
+		Description: payload.Description,
+		Todos:       make([]store.TaskCreateTodoInput, 0, len(payload.Todos)),
 	}
 	for _, todo := range payload.Todos {
 		in.Todos = append(in.Todos, store.TaskCreateTodoInput{
@@ -145,6 +131,56 @@ func (h *WebhookHandler) handleTaskCreate(c *gin.Context, webhook protocol.Webho
 	}
 
 	task, appErr := h.store.CreateTaskByPMNodeWithMessageID(webhook.From, messageIDFromMetadata(webhook.Metadata), in)
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	h.publishTaskCreated(task)
+	task = h.dispatchNextTodo(context.Background(), task)
+	transport.WriteData(c, http.StatusOK, task)
+}
+
+func (h *WebhookHandler) handleTaskReply(c *gin.Context, webhook protocol.WebhookPayload) {
+	var payload protocol.TaskReplyPayload
+	if err := decodeWebhookMessage(webhook.Message, &payload); err != nil {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid task.reply message"))
+		return
+	}
+
+	task, appErr := h.store.AppendPMTaskReply(webhook.From, payload.TaskID, payload.Content, payload.UIBlocks)
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	transport.WriteData(c, http.StatusOK, task)
+}
+
+func (h *WebhookHandler) handleTaskPlanReady(c *gin.Context, webhook protocol.WebhookPayload) {
+	var payload protocol.TaskPlanReadyPayload
+	if err := decodeWebhookMessage(webhook.Message, &payload); err != nil {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid task.plan_ready message"))
+		return
+	}
+
+	in := store.TaskPlanReadyInput{
+		TaskID:      payload.TaskID,
+		Title:       payload.Title,
+		Description: payload.Description,
+		Todos:       make([]store.TaskCreateTodoInput, 0, len(payload.Todos)),
+	}
+	for _, todo := range payload.Todos {
+		in.Todos = append(in.Todos, store.TaskCreateTodoInput{
+			ID:             todo.ID,
+			Order:          todo.Order,
+			Title:          todo.Title,
+			Description:    todo.Description,
+			AssigneeNodeID: todo.AssigneeNodeID,
+		})
+	}
+
+	task, appErr := h.store.FinalizePlanByPMNode(webhook.From, messageIDFromMetadata(webhook.Metadata), in)
 	if appErr != nil {
 		transport.WriteError(c, appErr)
 		return
@@ -267,10 +303,9 @@ func (h *WebhookHandler) handleContextQuery(c *gin.Context, webhook protocol.Web
 
 func (h *WebhookHandler) publishTaskCreated(task *model.TaskDetail) {
 	h.publish(context.Background(), task.PMAgent.NodeID, "task.created", protocol.TaskCreatedPayload{
-		TaskID:         task.ID,
-		ProjectID:      task.ProjectID,
-		ConversationID: task.ConversationID,
-		Title:          task.Title,
+		TaskID:    task.ID,
+		ProjectID: task.ProjectID,
+		Title:     task.Title,
 	}, task.ID)
 }
 

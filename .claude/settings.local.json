@@ -79,7 +79,12 @@
       "Bash(curl -s \"https://raw.githubusercontent.com/Alcumus/react-doc-viewer/master/README.md\")",
       "Bash(curl -s \"https://registry.npmjs.org/react-doc-viewer/0.1.16\")",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''peerDeps:'''', d.get\\(''''peerDependencies'''',{}\\)\\); print\\(''''deps:'''', list\\(d.get\\(''''dependencies'''',{}\\).keys\\(\\)\\)\\)\")",
-      "Bash(curl -s \"https://registry.npmjs.org/react-file-viewer/1.2.1\")"
+      "Bash(curl -s \"https://registry.npmjs.org/react-file-viewer/1.2.1\")",
+      "Bash(go vet:*)",
+      "Bash(git -C /Volumes/UWorks/Projects/TrustMesh/backend stash)",
+      "Bash(git:*)",
+      "Bash(go clean:*)",
+      "Bash(gofmt -e /Volumes/UWorks/Projects/TrustMesh/backend/internal/app/router_test.go)"
     ]
   }
 }
