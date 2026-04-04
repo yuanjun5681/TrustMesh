@@ -38,6 +38,7 @@ func (s *Store) enableMongo(cfg config.Config, log *zap.Logger) error {
 	s.mongoUsers = db.Collection("users")
 	s.mongoAgents = db.Collection("agents")
 	s.mongoProjects = db.Collection("projects")
+	s.mongoAgentChats = db.Collection("agent_chats")
 	s.mongoTasks = db.Collection("tasks")
 	s.mongoEvents = db.Collection("events")
 	s.mongoComments = db.Collection("comments")
@@ -84,6 +85,7 @@ func (s *Store) clearMongoCollections() {
 	s.mongoUsers = nil
 	s.mongoAgents = nil
 	s.mongoProjects = nil
+	s.mongoAgentChats = nil
 	s.mongoTasks = nil
 	s.mongoEvents = nil
 	s.mongoComments = nil
@@ -130,6 +132,10 @@ func (s *Store) ensureMongoIndexes() error {
 		},
 		s.mongoNotifications: {
 			{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "is_read", Value: 1}, {Key: "created_at", Value: -1}}},
+		},
+		s.mongoAgentChats: {
+			{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "agent_id", Value: 1}, {Key: "status", Value: 1}}},
+			{Keys: bson.D{{Key: "session_key", Value: 1}}, Options: options.Index().SetUnique(true)},
 		},
 		s.mongoArtifacts: {
 			{Keys: bson.D{{Key: "task_id", Value: 1}}},
@@ -179,6 +185,10 @@ func (s *Store) loadMongoState() error {
 	if err != nil {
 		return err
 	}
+	agentChats, activeAgentChats, agentChatBySession, err := s.loadAgentChats()
+	if err != nil {
+		return err
+	}
 	tasks, projectTasks, err := s.loadTasks()
 	if err != nil {
 		return err
@@ -225,6 +235,9 @@ func (s *Store) loadMongoState() error {
 	s.agents = agents
 	s.agentByNode = agentByNode
 	s.projects = projects
+	s.agentChats = agentChats
+	s.activeAgentChats = activeAgentChats
+	s.agentChatBySession = agentChatBySession
 	s.tasks = tasks
 	s.projectTasks = projectTasks
 	s.taskEvents = taskEvents
@@ -310,6 +323,37 @@ func (s *Store) loadProjects() (map[string]*model.Project, error) {
 		items[project.ID] = copyProject(&project)
 	}
 	return items, nil
+}
+
+func (s *Store) loadAgentChats() (map[string]*model.AgentChat, map[string]string, map[string]string, error) {
+	items := make(map[string]*model.AgentChat)
+	activeChats := make(map[string]string)
+	bySession := make(map[string]string)
+	if s.mongoAgentChats == nil {
+		return items, activeChats, bySession, nil
+	}
+	ctx, cancel := s.mongoContext()
+	defer cancel()
+	cursor, err := s.mongoAgentChats.Find(ctx, bson.D{}, options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}}))
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var chats []model.AgentChat
+	if err := cursor.All(ctx, &chats); err != nil {
+		return nil, nil, nil, err
+	}
+	for i := range chats {
+		chat := chats[i]
+		chatCopy := chat
+		items[chat.ID] = &chatCopy
+		bySession[chat.SessionKey] = chat.ID
+		if chat.Status == "active" {
+			activeChats[activeAgentChatKey(chat.UserID, chat.AgentID)] = chat.ID
+		}
+	}
+	return items, activeChats, bySession, nil
 }
 
 func (s *Store) loadTasks() (map[string]*model.TaskDetail, map[string][]string, error) {
@@ -467,6 +511,17 @@ func (s *Store) persistProjectUnsafe(project *model.Project) error {
 	return err
 }
 
+func (s *Store) persistAgentChatUnsafe(chat *model.AgentChat) error {
+	if !s.mongoEnabled || s.mongoAgentChats == nil || chat == nil {
+		return nil
+	}
+	ctx, cancel := s.mongoContext()
+	defer cancel()
+	clone := *chat
+	clone.Messages = append([]model.AgentChatMessage(nil), chat.Messages...)
+	_, err := s.mongoAgentChats.ReplaceOne(ctx, bson.M{"_id": chat.ID}, clone, options.Replace().SetUpsert(true))
+	return err
+}
 func (s *Store) persistTaskUnsafe(task *model.TaskDetail) error {
 	if !s.mongoEnabled || s.mongoTasks == nil || task == nil {
 		return nil

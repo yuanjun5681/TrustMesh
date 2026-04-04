@@ -26,6 +26,9 @@ type Store struct {
 
 	projects map[string]*model.Project
 
+	agentChats           map[string]*model.AgentChat
+	activeAgentChats     map[string]string
+	agentChatBySession   map[string]string
 	tasks             map[string]*model.TaskDetail
 	projectTasks      map[string][]string
 	taskEvents        map[string][]model.Event
@@ -52,6 +55,7 @@ type Store struct {
 	mongoUsers             *mongo.Collection
 	mongoAgents            *mongo.Collection
 	mongoProjects          *mongo.Collection
+	mongoAgentChats        *mongo.Collection
 	mongoTasks             *mongo.Collection
 	mongoEvents            *mongo.Collection
 	mongoComments          *mongo.Collection
@@ -78,27 +82,30 @@ type AgentPresence struct {
 
 func New() *Store {
 	return &Store{
-		users:             make(map[string]*model.User),
-		usersByMail:       make(map[string]string),
-		agents:            make(map[string]*model.Agent),
-		agentByNode:       make(map[string]string),
-		projects:          make(map[string]*model.Project),
-		tasks:             make(map[string]*model.TaskDetail),
-		projectTasks:      make(map[string][]string),
-		taskEvents:        make(map[string][]model.Event),
-		userEvents:        make(map[string][]*model.Event),
-		agentEvents:       make(map[string][]*model.Event),
-		processedMessages: make(map[string]processedMessage),
-		taskArtifacts:     make(map[string][]model.TaskArtifact),
-		taskComments:      make(map[string][]model.Comment),
-		notifications:     make(map[string]*model.Notification),
-		userNotifications: make(map[string][]string),
-		joinRequests:      make(map[string]*model.JoinRequest),
-		userJoinRequests:  make(map[string][]string),
-		trustRequestIndex: make(map[string]string),
-		knowledgeDocs:     make(map[string]*model.KnowledgeDocument),
-		userKnowledgeDocs: make(map[string][]string),
-		userSubscribers:   make(map[string]map[chan model.UserStreamEvent]struct{}),
+		users:              make(map[string]*model.User),
+		usersByMail:        make(map[string]string),
+		agents:             make(map[string]*model.Agent),
+		agentByNode:        make(map[string]string),
+		projects:           make(map[string]*model.Project),
+		agentChats:         make(map[string]*model.AgentChat),
+		activeAgentChats:   make(map[string]string),
+		agentChatBySession: make(map[string]string),
+		tasks:              make(map[string]*model.TaskDetail),
+		projectTasks:       make(map[string][]string),
+		taskEvents:         make(map[string][]model.Event),
+		userEvents:         make(map[string][]*model.Event),
+		agentEvents:        make(map[string][]*model.Event),
+		processedMessages:  make(map[string]processedMessage),
+		taskArtifacts:      make(map[string][]model.TaskArtifact),
+		taskComments:       make(map[string][]model.Comment),
+		notifications:      make(map[string]*model.Notification),
+		userNotifications:  make(map[string][]string),
+		joinRequests:       make(map[string]*model.JoinRequest),
+		userJoinRequests:   make(map[string][]string),
+		trustRequestIndex:  make(map[string]string),
+		knowledgeDocs:      make(map[string]*model.KnowledgeDocument),
+		userKnowledgeDocs:  make(map[string][]string),
+		userSubscribers:    make(map[string]map[chan model.UserStreamEvent]struct{}),
 	}
 }
 

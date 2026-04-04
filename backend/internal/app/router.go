@@ -49,6 +49,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 
 	authHandler := handler.NewAuthHandler(s, jwtManager)
 	agentHandler := handler.NewAgentHandler(s, clawClient)
+	agentChatHandler := handler.NewAgentChatHandler(s, clawClient, log)
 	projectHandler := handler.NewProjectHandler(s)
 	taskHandler := handler.NewTaskHandler(s, clawClient, log)
 	transferHandler := handler.NewTransferHandler(s)
@@ -112,6 +113,9 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	authed.GET("/agents/:id/stats", agentHandler.Stats)
 	authed.GET("/agents/:id/insights", agentHandler.Insights)
 	authed.GET("/agents/:id/tasks", agentHandler.Tasks)
+	authed.GET("/agents/:id/chat", agentChatHandler.Get)
+	authed.POST("/agents/:id/chat/messages", agentChatHandler.SendMessage)
+	authed.POST("/agents/:id/chat/reset", agentChatHandler.Reset)
 
 	authed.POST("/projects", projectHandler.Create)
 	authed.GET("/projects", projectHandler.List)

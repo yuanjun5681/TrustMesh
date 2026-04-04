@@ -117,6 +117,59 @@ export interface TaskSummary {
   updated_at: string
 }
 
+export interface ConversationMessage {
+  id: string
+  role: 'user' | 'pm_agent'
+  content: string
+  ui_blocks?: UIBlock[]
+  ui_response?: UIResponse
+  created_at: string
+}
+
+export interface ConversationListItem {
+  id: string
+  project_id: string
+  status: 'active' | 'resolved'
+  last_message: ConversationMessage
+  linked_task: TaskSummary | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ConversationDetail {
+  id: string
+  project_id: string
+  status: 'active' | 'resolved'
+  messages: ConversationMessage[]
+  linked_task: TaskSummary | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ConversationStreamSnapshot {
+  conversation: ConversationDetail
+}
+
+export interface AgentChatMessage {
+  id: string
+  sender_type: 'user' | 'agent'
+  direction: 'outbound' | 'inbound'
+  content: string
+  status: 'pending' | 'sent' | 'failed'
+  remote_message_id?: string
+  created_at: string
+}
+
+export interface AgentChatDetail {
+  id: string
+  agent_id: string
+  agent_node_id: string
+  session_key: string
+  status: 'active' | 'closed'
+  messages: AgentChatMessage[]
+  created_at: string
+  updated_at: string
+}
 export type AgentRole = 'pm' | 'developer' | 'reviewer' | 'custom'
 export type AgentStatus = 'online' | 'offline' | 'busy'
 
@@ -495,6 +548,10 @@ export interface CreatePlanningTaskRequest {
 export interface AppendTaskMessageRequest {
   content: string
   ui_response?: UIResponse
+}
+
+export interface SendAgentChatMessageRequest {
+  content: string
 }
 
 export interface ListProjectTasksQuery {

@@ -24,6 +24,7 @@ import {
 import { AgentTaskList } from '@/components/agent/AgentTaskList'
 import { AgentConfigDialog } from '@/components/agent/AgentConfigDialog'
 import { ArchiveAgentDialog } from '@/components/agent/ArchiveAgentDialog'
+import { AgentChatPanel } from '@/components/agent/AgentChatPanel'
 import { CreateTaskDialog } from '@/components/task/CreateTaskDialog'
 import { Avatar } from '@/components/ui/avatar'
 import type { EventType } from '@/types'
@@ -153,6 +154,7 @@ export function AgentDetailPage() {
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <TabsList variant="line" className="pointer-events-auto">
                 <TabsTrigger value="overview">概览</TabsTrigger>
+                <TabsTrigger value="chat">对话</TabsTrigger>
                 <TabsTrigger value="tasks">工作记录</TabsTrigger>
                 <TabsTrigger value="activity">活动日志</TabsTrigger>
               </TabsList>
@@ -213,6 +215,10 @@ export function AgentDetailPage() {
               )}
               {stats && <AgentWorkload stats={stats} />}
             </div>
+          </TabsContent>
+
+          <TabsContent value="chat">
+            <AgentChatPanel agent={agent} />
           </TabsContent>
 
           {/* Tab: 工作记录 */}

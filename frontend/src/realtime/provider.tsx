@@ -13,6 +13,7 @@ import {
 } from './reducers/notifications'
 import { applyTaskCommentCreated, applyTaskEventCreated, applyTaskUpdated } from './reducers/tasks'
 import { applyAgentStatusChanged } from './reducers/agents'
+import { applyAgentChatUpdated } from './reducers/agent-chat'
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
@@ -63,6 +64,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
             break
           case 'agent.status.changed':
             applyAgentStatusChanged(queryClient, event.payload)
+            break
+          case 'agent_chat.updated':
+            applyAgentChatUpdated(queryClient, event.payload)
             break
           case 'join_request.created':
             void queryClient.invalidateQueries({ queryKey: ['join-requests'] })
