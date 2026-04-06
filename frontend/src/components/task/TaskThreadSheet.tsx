@@ -29,22 +29,23 @@ export function TaskThreadSheet({ taskId, open, onOpenChange }: TaskThreadSheetP
   const appendTaskMessage = useAppendTaskMessage()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const isPlanning = task?.status === 'planning'
-  const messages = task?.messages ?? []
+  const messageList = task?.messages
+  const messages = messageList ?? []
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messageList])
 
   const pendingUIBlocks = useMemo(() => {
-    if (!isPlanning || messages.length === 0) {
+    if (!isPlanning || !messageList || messageList.length === 0) {
       return null
     }
-    const lastMessage = messages[messages.length - 1]
+    const lastMessage = messageList[messageList.length - 1]
     if (lastMessage.role === 'pm_agent' && lastMessage.ui_blocks && lastMessage.ui_blocks.length > 0) {
       return lastMessage.ui_blocks
     }
     return null
-  }, [isPlanning, messages])
+  }, [isPlanning, messageList])
 
   const handleSend = async (content: string, uiResponse?: UIResponse) => {
     try {

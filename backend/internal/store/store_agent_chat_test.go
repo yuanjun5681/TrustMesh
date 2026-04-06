@@ -5,6 +5,39 @@ import (
 	"time"
 )
 
+func TestResetAgentChatInitializesEmptyMessages(t *testing.T) {
+	s := New()
+	user, appErr := s.CreateUser("user@example.com", "User", "hash")
+	if appErr != nil {
+		t.Fatalf("create user: %v", appErr)
+	}
+	agent, appErr := s.CreateAgent(user.ID, "node-chat-000", "Chat Agent", "developer", "dev", []string{"conversation"})
+	if appErr != nil {
+		t.Fatalf("create agent: %v", appErr)
+	}
+	now := time.Now().UTC()
+	s.SyncAgentPresence([]AgentPresence{{NodeID: agent.NodeID, LastSeenAt: now}}, now)
+
+	chat, appErr := s.ResetAgentChat(user.ID, agent.ID)
+	if appErr != nil {
+		t.Fatalf("reset chat: %v", appErr)
+	}
+	if chat.Messages == nil {
+		t.Fatal("expected empty messages slice, got nil")
+	}
+	if len(chat.Messages) != 0 {
+		t.Fatalf("expected empty messages slice, got %d messages", len(chat.Messages))
+	}
+
+	stored, ok := s.agentChats[chat.ID]
+	if !ok {
+		t.Fatalf("expected chat %s in store", chat.ID)
+	}
+	if stored.Messages == nil {
+		t.Fatal("expected persisted store chat messages slice, got nil")
+	}
+}
+
 func TestResetAgentChatRequiresChatCapableOnlineAgent(t *testing.T) {
 	s := New()
 	user, appErr := s.CreateUser("user@example.com", "User", "hash")

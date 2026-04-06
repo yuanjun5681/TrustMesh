@@ -12,6 +12,13 @@ func activeAgentChatKey(userID, agentID string) string {
 	return userID + "|" + agentID
 }
 
+func copyAgentChatMessages(messages []model.AgentChatMessage) []model.AgentChatMessage {
+	if len(messages) == 0 {
+		return []model.AgentChatMessage{}
+	}
+	return append([]model.AgentChatMessage{}, messages...)
+}
+
 func (s *Store) GetActiveAgentChat(userID, agentID string) (*model.AgentChatDetail, *transport.AppError) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -235,6 +242,7 @@ func (s *Store) newAgentChatUnsafe(userID string, agent *model.Agent) *model.Age
 		AgentID:     agent.ID,
 		AgentNodeID: agent.NodeID,
 		Status:      "active",
+		Messages:    []model.AgentChatMessage{},
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -246,7 +254,7 @@ func (s *Store) newAgentChatUnsafe(userID string, agent *model.Agent) *model.Age
 }
 
 func (s *Store) toAgentChatDetailUnsafe(chat *model.AgentChat) model.AgentChatDetail {
-	messages := append([]model.AgentChatMessage(nil), chat.Messages...)
+	messages := copyAgentChatMessages(chat.Messages)
 	return model.AgentChatDetail{
 		ID:          chat.ID,
 		AgentID:     chat.AgentID,

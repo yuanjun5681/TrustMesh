@@ -347,6 +347,7 @@ func (s *Store) loadAgentChats() (map[string]*model.AgentChat, map[string]string
 	for i := range chats {
 		chat := chats[i]
 		chatCopy := chat
+		chatCopy.Messages = copyAgentChatMessages(chat.Messages)
 		items[chat.ID] = &chatCopy
 		bySession[chat.SessionKey] = chat.ID
 		if chat.Status == "active" {
@@ -518,7 +519,7 @@ func (s *Store) persistAgentChatUnsafe(chat *model.AgentChat) error {
 	ctx, cancel := s.mongoContext()
 	defer cancel()
 	clone := *chat
-	clone.Messages = append([]model.AgentChatMessage(nil), chat.Messages...)
+	clone.Messages = copyAgentChatMessages(chat.Messages)
 	_, err := s.mongoAgentChats.ReplaceOne(ctx, bson.M{"_id": chat.ID}, clone, options.Replace().SetUpsert(true))
 	return err
 }

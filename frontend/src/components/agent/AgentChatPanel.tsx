@@ -25,10 +25,12 @@ export function AgentChatPanel({ agent }: AgentChatPanelProps) {
   const sendMessage = useSendAgentChatMessage()
   const resetChat = useResetAgentChat()
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messages = chat?.messages ?? []
+  const messageList = chat?.messages
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [chat?.messages])
+  }, [messageList])
 
   const disabled = agent.archived || agent.status !== 'online'
 
@@ -70,7 +72,7 @@ export function AgentChatPanel({ agent }: AgentChatPanelProps) {
       <ScrollArea className="flex-1 p-4">
         {isLoading ? (
           <div className="text-sm text-muted-foreground">加载中...</div>
-        ) : !chat || chat.messages.length === 0 ? (
+        ) : !chat || messages.length === 0 ? (
           <div className="flex h-full min-h-64 flex-col items-center justify-center gap-3 text-center">
             <div className="flex size-12 items-center justify-center rounded-2xl bg-primary/10">
               <MessageSquareText className="size-6 text-primary" />
@@ -84,7 +86,7 @@ export function AgentChatPanel({ agent }: AgentChatPanelProps) {
           </div>
         ) : (
           <div className="space-y-4">
-            {chat.messages.map((message) => {
+            {messages.map((message) => {
               const isUser = message.sender_type === 'user'
               return (
                 <div key={message.id} className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
