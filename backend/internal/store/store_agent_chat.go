@@ -284,7 +284,7 @@ func (s *Store) newAgentChatUnsafe(userID string, agent *model.Agent) *model.Age
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-	chat.SessionKey = "agent-chat:" + chat.ID
+	chat.SessionKey = chat.ID
 	s.agentChats[chat.ID] = chat
 	s.activeAgentChats[activeAgentChatKey(userID, agent.ID)] = chat.ID
 	s.agentChatBySession[chat.SessionKey] = chat.ID
