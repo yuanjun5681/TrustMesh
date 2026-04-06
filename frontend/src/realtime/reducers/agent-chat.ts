@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
 import type { AgentChatDetail } from '@/types'
-import { stripMessagePrefix } from '@/lib/utils'
+import { normalizeChatMessageContent } from '@/lib/utils'
 
 export function applyAgentChatUpdated(
   queryClient: QueryClient,
@@ -10,7 +10,7 @@ export function applyAgentChatUpdated(
     ...payload.chat,
     messages: (payload.chat.messages ?? []).map((message) => ({
       ...message,
-      content: stripMessagePrefix(message.content),
+      content: normalizeChatMessageContent(message.content),
     })),
   })
 }

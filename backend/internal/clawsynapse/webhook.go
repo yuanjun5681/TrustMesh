@@ -87,7 +87,7 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 }
 
 func (h *WebhookHandler) handleChatMessage(c *gin.Context, webhook protocol.WebhookPayload) {
-	content := strings.TrimSpace(webhook.Message)
+	content := strings.TrimSpace(normalizeChatMessageContent(webhook.Message))
 	if content == "" {
 		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid chat.message payload"))
 		return
@@ -99,6 +99,22 @@ func (h *WebhookHandler) handleChatMessage(c *gin.Context, webhook protocol.Webh
 		return
 	}
 	transport.WriteData(c, http.StatusOK, detail)
+}
+
+func normalizeChatMessageContent(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+
+	var decoded string
+	if len(raw) >= 2 && raw[0] == '"' && raw[len(raw)-1] == '"' {
+		if err := json.Unmarshal([]byte(raw), &decoded); err == nil {
+			return decoded
+		}
+	}
+
+	return raw
 }
 
 func (h *WebhookHandler) resolveLocalNodeID(ctx context.Context) (string, *transport.AppError) {

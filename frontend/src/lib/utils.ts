@@ -39,3 +39,18 @@ export function formatDateTime(dateStr: string): string {
 export function stripMessagePrefix(content: string): string {
   return content.replace(/^(?:\s*\[[^[\]]+\]\s*)+/u, '').trimStart()
 }
+
+export function normalizeChatMessageContent(content: string): string {
+  const stripped = stripMessagePrefix(content)
+
+  if (!(stripped.startsWith('"') && stripped.endsWith('"'))) {
+    return stripped
+  }
+
+  try {
+    const parsed = JSON.parse(stripped)
+    return typeof parsed === 'string' ? parsed : stripped
+  } catch {
+    return stripped
+  }
+}

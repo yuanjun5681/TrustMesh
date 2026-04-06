@@ -522,6 +522,117 @@ func TestWebhookPlanningTaskLifecycle(t *testing.T) {
 	}
 }
 
+func TestWebhookChatMessageDecodesJSONStringContent(t *testing.T) {
+	log, err := logger.New("error")
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	defer func() { _ = log.Sync() }()
+
+	clawServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/health":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(clawsynapseHealthResponse(t, "n1-local-trustmesh")))
+		case "/v1/peers":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(clawsynapsePeersResponse(t, "node-agent-001")))
+		case "/v1/publish":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"code":"msg.published","message":"ok","data":{"targetNode":"node-agent-001","messageId":"msg-1"},"ts":1}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer clawServer.Close()
+
+	application, err := New(config.Config{
+		Port:               "0",
+		JWTSecret:          "test-secret",
+		AccessTokenTTL:     time.Hour,
+		RefreshTokenTTL:    168 * time.Hour,
+		LogLevel:           "error",
+		AllowAllCORS:       true,
+		ReadTimeout:        3 * time.Second,
+		ShutdownGrace:      3 * time.Second,
+		ClawSynapseAPIURL:  clawServer.URL,
+		ClawSynapseTimeout: time.Second,
+	}, log)
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
+	defer func() {
+		if closeErr := application.Close(); closeErr != nil {
+			t.Fatalf("close app: %v", closeErr)
+		}
+	}()
+
+	testServer := httptest.NewServer(application.Engine)
+	defer testServer.Close()
+
+	registerResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/auth/register", "", map[string]any{
+		"email":    "chat-webhook@example.com",
+		"name":     "Chat User",
+		"password": "StrongPass123!",
+	})
+	token := nestedString(decodeBody(t, registerResp), "data", "access_token")
+
+	agentResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/agents", token, map[string]any{
+		"node_id":      "node-agent-001",
+		"name":         "Chat Agent",
+		"role":         "developer",
+		"description":  "Dev",
+		"capabilities": []string{"conversation"},
+	})
+	agentID := nestedString(decodeBody(t, agentResp), "data", "id")
+
+	application.Store.SyncAgentPresence([]store.AgentPresence{
+		{NodeID: "node-agent-001", LastSeenAt: time.Now().UTC()},
+	}, time.Now().UTC())
+
+	sendResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/agents/"+agentID+"/chat/messages", token, map[string]any{
+		"content": "帮我写一个简单的入门 Python 代码",
+	})
+	if sendResp.StatusCode != http.StatusOK {
+		t.Fatalf("send chat message status=%d", sendResp.StatusCode)
+	}
+	sendData := decodeBody(t, sendResp)
+	sessionKey := nestedString(sendData, "data", "session_key")
+	if sessionKey == "" {
+		t.Fatal("empty session key")
+	}
+
+	webhookResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/webhook/clawsynapse", "", map[string]any{
+		"nodeId":     "n1-local-trustmesh",
+		"type":       "chat.message",
+		"from":       "node-agent-001",
+		"sessionKey": sessionKey,
+		"message":    "\"当然可以！\\n\\n# Hello World 程序\\nprint(\\\"Hello, World!\\\")\"",
+		"metadata": map[string]any{
+			"messageId": "msg-chat-reply-1",
+		},
+	})
+	if webhookResp.StatusCode != http.StatusOK {
+		t.Fatalf("chat.message webhook status=%d", webhookResp.StatusCode)
+	}
+
+	chatResp := doJSON(t, testServer.Client(), "GET", testServer.URL+"/api/v1/agents/"+agentID+"/chat", token, nil)
+	if chatResp.StatusCode != http.StatusOK {
+		t.Fatalf("get active chat status=%d", chatResp.StatusCode)
+	}
+	chatData := decodeBody(t, chatResp)
+	data := nestedMap(chatData, "data")
+	messages, _ := data["messages"].([]any)
+	if len(messages) != 2 {
+		t.Fatalf("expected 2 chat messages, got %d", len(messages))
+	}
+	reply, _ := messages[1].(map[string]any)
+	content, _ := reply["content"].(string)
+	if content != "当然可以！\n\n# Hello World 程序\nprint(\"Hello, World!\")" {
+		t.Fatalf("unexpected normalized content: %q", content)
+	}
+}
+
 func TestWebhookRejectsMismatchedLocalNodeID(t *testing.T) {
 	log, err := logger.New("error")
 	if err != nil {
