@@ -28,6 +28,12 @@ export async function createPlanningTask(projectId: string, input: CreatePlannin
   return api.post(`projects/${projectId}/tasks/planning`, { json: input }).json<ApiResponse<TaskDetail>>()
 }
 
+export async function createTaskFromText(projectId: string, content: string, agentId?: string) {
+  return api
+    .post(`projects/${projectId}/tasks/from-text`, { json: { content, agent_id: agentId ?? '' } })
+    .json<ApiResponse<TaskDetail>>()
+}
+
 export async function listProjectTasks(projectId: string, query?: ListProjectTasksQuery) {
   const searchParams: Record<string, string> = {}
   if (query?.status) searchParams.status = query.status

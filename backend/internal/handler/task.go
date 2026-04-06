@@ -60,41 +60,125 @@ func (h *TaskHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// Auto-dispatch the todo to the agent
-	todo := &task.Todos[0]
-	if h.publisher != nil {
-		payload := protocol.TodoAssignedPayload{
-			TaskID:      task.ID,
-			TodoID:      todo.ID,
-			Title:       todo.Title,
-			Description: todo.Description,
-			Content:     "你收到了一个新的 Todo 任务。请使用 /tm-task-exec skill 执行此任务，按要求回报进度和结果。",
-			ExecBrief: &protocol.TodoExecBrief{
-				Objective:    "执行分派的 Todo 任务；及时回报进度；完成后提交结果，失败时说明原因。",
-				MustUseSkill: "tm-task-exec",
-			},
-		}
-		if _, err := h.publisher.Publish(c.Request.Context(), todo.Assignee.NodeID, "todo.assigned", payload, task.ID, map[string]any{"source": "user_created"}); err != nil {
-			if h.log != nil {
-				h.log.Warn("auto dispatch todo failed for user-created task", zap.String("task_id", task.ID), zap.String("todo_id", todo.ID), zap.Error(err))
-			}
-			// Task is created but dispatch failed — return the task anyway
-			transport.WriteData(c, http.StatusCreated, task)
-			return
-		}
+	task = h.autoDispatchFirstTodo(c.Request.Context(), userID, task)
+	transport.WriteData(c, http.StatusCreated, task)
+}
 
-		dispatched, dispatchErr := h.store.RecordTodoDispatch(userID, task.ID, todo.ID)
-		if dispatchErr != nil {
-			if h.log != nil {
-				h.log.Warn("record todo dispatch failed", zap.String("task_id", task.ID), zap.String("todo_id", todo.ID), zap.Error(dispatchErr))
-			}
-			transport.WriteData(c, http.StatusCreated, task)
-			return
-		}
-		task = dispatched
+// CreateFromText creates a task from a free-text description.
+// If agent_id is provided (set by the frontend @mention), the task is created in
+// building mode and dispatched immediately. Otherwise it enters planning mode.
+func (h *TaskHandler) CreateFromText(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
 	}
 
+	var body struct {
+		Content string `json:"content"`
+		AgentID string `json:"agent_id"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.Content) == "" {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "content is required"))
+		return
+	}
+
+	projectID := c.Param("projectId")
+
+	if strings.TrimSpace(body.AgentID) != "" {
+		task, appErr := h.store.CreateTaskByUser(userID, store.UserTaskCreateInput{
+			ProjectID:       projectID,
+			Title:           deriveTitle(body.Content),
+			Description:     body.Content,
+			Priority:        "medium",
+			AssigneeAgentID: body.AgentID,
+		})
+		if appErr != nil {
+			transport.WriteError(c, appErr)
+			return
+		}
+		task = h.autoDispatchFirstTodo(c.Request.Context(), userID, task)
+		transport.WriteData(c, http.StatusCreated, task)
+		return
+	}
+
+	h.createPlanningTask(c, userID, projectID, body.Content)
+}
+
+// deriveTitle extracts a short title from free-form content.
+// Uses the first line if it is short enough, otherwise truncates.
+func deriveTitle(content string) string {
+	content = strings.TrimSpace(content)
+	// Use the first line as the title candidate
+	firstLine := content
+	if idx := strings.IndexAny(content, "\n\r"); idx != -1 {
+		firstLine = strings.TrimSpace(content[:idx])
+	}
+	// Strip leading @mentions so the title reads naturally
+	for strings.HasPrefix(firstLine, "@") {
+		if idx := strings.IndexByte(firstLine, ' '); idx != -1 {
+			firstLine = strings.TrimSpace(firstLine[idx+1:])
+		} else {
+			firstLine = ""
+			break
+		}
+	}
+	if firstLine == "" {
+		firstLine = content
+	}
+	return truncateTitle(firstLine, 30)
+}
+
+func truncateTitle(s string, max int) string {
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max]) + "…"
+}
+
+// createPlanningTask creates a planning-mode task and notifies the PM agent.
+func (h *TaskHandler) createPlanningTask(c *gin.Context, userID, projectID, content string) {
+	task, appErr := h.store.CreateTaskPlanning(userID, projectID, content)
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+	h.notifyPMTaskMessage(c, userID, projectID, task.ID, content, true, nil)
 	transport.WriteData(c, http.StatusCreated, task)
+}
+
+// autoDispatchFirstTodo publishes a todo.assigned event for the first todo and records the dispatch.
+// It returns the updated task if dispatch succeeds, or the original task if it fails (non-fatal).
+func (h *TaskHandler) autoDispatchFirstTodo(ctx context.Context, userID string, task *model.TaskDetail) *model.TaskDetail {
+	if h.publisher == nil || len(task.Todos) == 0 {
+		return task
+	}
+	todo := &task.Todos[0]
+	payload := protocol.TodoAssignedPayload{
+		TaskID:      task.ID,
+		TodoID:      todo.ID,
+		Title:       todo.Title,
+		Description: todo.Description,
+		Content:     "你收到了一个新的 Todo 任务。请使用 /tm-task-exec skill 执行此任务，按要求回报进度和结果。",
+		ExecBrief: &protocol.TodoExecBrief{
+			Objective:    "执行分派的 Todo 任务；及时回报进度；完成后提交结果，失败时说明原因。",
+			MustUseSkill: "tm-task-exec",
+		},
+	}
+	if _, err := h.publisher.Publish(ctx, todo.Assignee.NodeID, "todo.assigned", payload, task.ID, map[string]any{"source": "user_created"}); err != nil {
+		if h.log != nil {
+			h.log.Warn("auto dispatch todo failed", zap.String("task_id", task.ID), zap.String("todo_id", todo.ID), zap.Error(err))
+		}
+		return task
+	}
+	dispatched, dispatchErr := h.store.RecordTodoDispatch(userID, task.ID, todo.ID)
+	if dispatchErr != nil {
+		if h.log != nil {
+			h.log.Warn("record todo dispatch failed", zap.String("task_id", task.ID), zap.String("todo_id", todo.ID), zap.Error(dispatchErr))
+		}
+		return task
+	}
+	return dispatched
 }
 
 func (h *TaskHandler) ListByProject(c *gin.Context) {

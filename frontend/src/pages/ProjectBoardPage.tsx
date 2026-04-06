@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { MessageSquarePlus, Plus, MoreHorizontal, Pencil, Archive, Loader2 } from 'lucide-react'
+import { MessageSquarePlus, MoreHorizontal, Pencil, Archive, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { AgentStatusDot, ProjectStatusBadge, ProjectWorkStatusBadge } from '@/components/shared/StatusBadge'
@@ -9,7 +9,6 @@ import { TaskListView } from '@/components/task/TaskListView'
 import { TaskWorkspace } from '@/components/task/TaskWorkspace'
 import { EditProjectDialog } from '@/components/project/EditProjectDialog'
 import { ArchiveProjectDialog } from '@/components/project/ArchiveProjectDialog'
-import { CreateTaskDialog } from '@/components/task/CreateTaskDialog'
 import { useProject } from '@/hooks/useProjects'
 import { useTasks } from '@/hooks/useTasks'
 import { formatDateTime, formatRelativeTime } from '@/lib/utils'
@@ -35,7 +34,6 @@ export function ProjectBoardPage() {
   const [workspace, setWorkspace] = useState<WorkspaceState>(null)
   const [editOpen, setEditOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
-  const [createTaskOpen, setCreateTaskOpen] = useState(false)
   const setFabVisibility = useAssistantStore((state) => state.setFabVisibility)
   const [taskSelectionState, setTaskSelectionState] = useState<TaskSelectionState>({
     observedTasks: undefined,
@@ -146,13 +144,9 @@ export function ProjectBoardPage() {
           )}
           </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" disabled={projectArchived} onClick={() => setCreateTaskOpen(true)}>
-            <Plus className="size-4 mr-1.5" />
-            创建任务
-          </Button>
           <Button size="sm" disabled={projectArchived} onClick={openDraftWorkspace}>
             <MessageSquarePlus className="size-4 mr-1.5" />
-            {projectArchived ? '项目已归档' : '提交新需求'}
+            {projectArchived ? '项目已归档' : '新任务'}
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger className="p-2 rounded-md hover:bg-muted">
@@ -222,14 +216,6 @@ export function ProjectBoardPage() {
         </div>
       )}
 
-      {projectId && (
-        <CreateTaskDialog
-          open={createTaskOpen}
-          onOpenChange={setCreateTaskOpen}
-          projectId={projectId}
-          onCreated={(taskId) => selectTask(taskId)}
-        />
-      )}
       <EditProjectDialog open={editOpen} onOpenChange={setEditOpen} project={project} />
       <ArchiveProjectDialog
         open={archiveOpen}

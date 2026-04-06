@@ -7,12 +7,13 @@ import { TaskThreadSheet } from './TaskThreadSheet'
 import { TaskResultView } from './TaskResult'
 import { TaskDescription } from './TaskDescription'
 import { TaskComposer } from './TaskComposer'
-import type { TaskCommentSubmitInput, TaskMentionCandidate } from './TaskCommentComposer'
+import { TaskCommentComposer, type TaskCommentSubmitInput, type TaskMentionCandidate } from './TaskCommentComposer'
 import { CancelTaskDialog } from './CancelTaskDialog'
 import { MessageBubble } from '@/components/task-thread/MessageBubble'
 import { ThinkingIndicator } from '@/components/task-thread/ThinkingIndicator'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { useTask, useAddTaskComment, useAppendTaskMessage, useCreatePlanningTask } from '@/hooks/useTasks'
+import { useTask, useAddTaskComment, useAppendTaskMessage, useCreateTaskFromText } from '@/hooks/useTasks'
+import { useAgents } from '@/hooks/useAgents'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ApiRequestError } from '@/api/client'
 import { useMemo, useState } from 'react'
@@ -58,31 +59,44 @@ function buildTaskMentionCandidates(task: TaskDetail | undefined): TaskMentionCa
   return candidates
 }
 
-function DraftPlanningState({ onPlanningSubmit, disabled }: { onPlanningSubmit: (content: string) => Promise<void>, disabled: boolean }) {
+function DraftPlanningState({
+  onSubmit,
+  disabled,
+  candidates,
+}: {
+  onSubmit: (content: string, agentId?: string) => Promise<void>
+  disabled: boolean
+  candidates: TaskMentionCandidate[]
+}) {
+  const handleSubmit = async ({ content, mentionAgentIds }: TaskCommentSubmitInput) => {
+    await onSubmit(content, mentionAgentIds[0])
+    return true
+  }
+
   return (
     <>
       <div className="px-5 py-4 shrink-0 border-b">
-        <h2 className="text-lg font-semibold">新需求</h2>
+        <h2 className="text-lg font-semibold">新任务</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          描述你想要实现的需求，PM 会先帮你澄清并拆解任务。
+          描述需求由 PM 规划；输入 @ 直接指派给执行 Agent。
         </p>
       </div>
 
       <div className="flex-1 min-h-0 px-5 py-6">
         <div className="rounded-2xl border border-dashed bg-muted/20 px-5 py-6">
-          <p className="text-sm font-medium">从这里开始规划</p>
+          <p className="text-sm font-medium">从这里开始</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            先输入第一条需求描述。创建后，这个工作区会自动切换到 planning 模式，继续和 PM 在同一处完成澄清。
+            提交后系统会自动判断：有指定执行 Agent 时直接创建并派发任务；否则进入 planning 模式由 PM 澄清需求。
           </p>
         </div>
       </div>
 
       <div className="border-t px-4 py-3 shrink-0">
-        <TaskComposer
-          mode="planning"
+        <TaskCommentComposer
+          candidates={candidates}
           disabled={disabled}
-          planningPlaceholder="描述你想要实现的需求..."
-          onPlanningSubmit={(content) => onPlanningSubmit(content)}
+          placeholder="描述需求，或 @ 执行 Agent 直接指派任务... (Enter 发送，Shift+Enter 换行)"
+          onSubmit={handleSubmit}
         />
       </div>
     </>
@@ -98,7 +112,8 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   const addComment = useAddTaskComment()
   const appendTaskMessage = useAppendTaskMessage()
-  const createPlanningTask = useCreatePlanningTask()
+  const createTaskFromText = useCreateTaskFromText()
+  const { data: allAgents } = useAgents()
   const canCancelTask = task?.status === 'planning' || task?.status === 'pending' || task?.status === 'in_progress'
   const mentionCandidates = buildTaskMentionCandidates(task)
   const isPlanning = task?.status === 'planning'
@@ -160,24 +175,24 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
     }
   }
 
-  const handleCreatePlanningTask = async (content: string) => {
+  const handleCreateTaskFromText = async (content: string, agentId?: string) => {
     if (!projectId) {
       return
     }
-
     try {
-      const res = await createPlanningTask.mutateAsync({
-        projectId,
-        input: { content },
-      })
+      const res = await createTaskFromText.mutateAsync({ projectId, content, agentId })
       props.onTaskCreated?.(res.data.id)
     } catch (error) {
-      const message = error instanceof ApiRequestError ? error.message : '创建规划任务失败'
+      const message = error instanceof ApiRequestError ? error.message : '创建任务失败'
       toast.error(message)
     }
   }
 
   if (!taskId && projectId) {
+    const executorCandidates: TaskMentionCandidate[] = (allAgents ?? [])
+      .filter((a) => a.role !== 'pm')
+      .map((a) => ({ id: a.id, name: a.name, roleLabel: '执行 Agent' }))
+
     return (
       <div className="flex flex-col h-full">
         <div className="flex items-center justify-between px-5 py-3 border-b shrink-0">
@@ -191,8 +206,9 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
           </Button>
         </div>
         <DraftPlanningState
-          onPlanningSubmit={handleCreatePlanningTask}
-          disabled={createPlanningTask.isPending}
+          onSubmit={handleCreateTaskFromText}
+          disabled={createTaskFromText.isPending}
+          candidates={executorCandidates}
         />
       </div>
     )

@@ -125,6 +125,21 @@ export function useCreatePlanningTask() {
   })
 }
 
+export function useCreateTaskFromText() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ projectId, content, agentId }: { projectId: string; content: string; agentId?: string }) =>
+      tasksApi.createTaskFromText(projectId, content, agentId),
+    onSuccess: (res) => {
+      qc.setQueryData(['tasks', 'detail', res.data.id], normalizeTaskDetail(res.data))
+      qc.invalidateQueries({ queryKey: ['tasks'] })
+      qc.invalidateQueries({ queryKey: ['projects'] })
+      qc.invalidateQueries({ queryKey: ['dashboard', 'tasks'] })
+      qc.invalidateQueries({ queryKey: ['dashboard', 'stats'] })
+    },
+  })
+}
+
 export function useAppendTaskMessage() {
   const qc = useQueryClient()
   return useMutation({

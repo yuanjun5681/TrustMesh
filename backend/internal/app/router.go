@@ -51,6 +51,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	agentHandler := handler.NewAgentHandler(s, clawClient)
 	agentChatHandler := handler.NewAgentChatHandler(s, clawClient, log)
 	projectHandler := handler.NewProjectHandler(s)
+
 	taskHandler := handler.NewTaskHandler(s, clawClient, log)
 	transferHandler := handler.NewTransferHandler(s)
 	dashboardHandler := handler.NewDashboardHandler(s)
@@ -127,6 +128,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 
 	authed.POST("/projects/:projectId/tasks", taskHandler.Create)
 	authed.POST("/projects/:projectId/tasks/planning", taskHandler.CreatePlanning)
+	authed.POST("/projects/:projectId/tasks/from-text", taskHandler.CreateFromText)
 	authed.GET("/projects/:projectId/tasks", taskHandler.ListByProject)
 	authed.GET("/tasks/:id", taskHandler.Get)
 	authed.GET("/tasks/:id/events", taskHandler.ListEvents)
