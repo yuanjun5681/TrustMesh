@@ -114,6 +114,8 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	authed.GET("/agents/:id/insights", agentHandler.Insights)
 	authed.GET("/agents/:id/tasks", agentHandler.Tasks)
 	authed.GET("/agents/:id/chat", agentChatHandler.Get)
+	authed.GET("/agents/:id/chat/sessions", agentChatHandler.ListSessions)
+	authed.GET("/agents/:id/chat/sessions/:sessionId", agentChatHandler.GetSession)
 	authed.POST("/agents/:id/chat/messages", agentChatHandler.SendMessage)
 	authed.POST("/agents/:id/chat/reset", agentChatHandler.Reset)
 

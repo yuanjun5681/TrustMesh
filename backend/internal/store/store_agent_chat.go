@@ -1,6 +1,7 @@
 package store
 
 import (
+	"sort"
 	"strings"
 	"time"
 
@@ -34,6 +35,49 @@ func (s *Store) GetActiveAgentChat(userID, agentID string) (*model.AgentChatDeta
 	if !ok {
 		return nil, nil
 	}
+	detail := s.toAgentChatDetailUnsafe(chat)
+	return &detail, nil
+}
+
+func (s *Store) ListAgentChatSessions(userID, agentID string) ([]model.AgentChatSessionSummary, *transport.AppError) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if _, err := s.agentForUserUnsafe(userID, agentID); err != nil {
+		return nil, err
+	}
+
+	sessions := make([]model.AgentChatSessionSummary, 0)
+	for _, chat := range s.agentChats {
+		if chat.UserID != userID || chat.AgentID != agentID {
+			continue
+		}
+		sessions = append(sessions, s.toAgentChatSessionSummaryUnsafe(chat))
+	}
+
+	sort.Slice(sessions, func(i, j int) bool {
+		if sessions[i].UpdatedAt.Equal(sessions[j].UpdatedAt) {
+			return sessions[i].CreatedAt.After(sessions[j].CreatedAt)
+		}
+		return sessions[i].UpdatedAt.After(sessions[j].UpdatedAt)
+	})
+
+	return sessions, nil
+}
+
+func (s *Store) GetAgentChatByID(userID, agentID, chatID string) (*model.AgentChatDetail, *transport.AppError) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if _, err := s.agentForUserUnsafe(userID, agentID); err != nil {
+		return nil, err
+	}
+
+	chat, ok := s.agentChats[chatID]
+	if !ok || chat.UserID != userID || chat.AgentID != agentID {
+		return nil, transport.NotFound("agent chat not found")
+	}
+
 	detail := s.toAgentChatDetailUnsafe(chat)
 	return &detail, nil
 }
@@ -265,4 +309,25 @@ func (s *Store) toAgentChatDetailUnsafe(chat *model.AgentChat) model.AgentChatDe
 		CreatedAt:   chat.CreatedAt,
 		UpdatedAt:   chat.UpdatedAt,
 	}
+}
+
+func (s *Store) toAgentChatSessionSummaryUnsafe(chat *model.AgentChat) model.AgentChatSessionSummary {
+	summary := model.AgentChatSessionSummary{
+		ID:           chat.ID,
+		AgentID:      chat.AgentID,
+		SessionKey:   chat.SessionKey,
+		Status:       chat.Status,
+		MessageCount: len(chat.Messages),
+		CreatedAt:    chat.CreatedAt,
+		UpdatedAt:    chat.UpdatedAt,
+	}
+
+	if n := len(chat.Messages); n > 0 {
+		last := chat.Messages[n-1]
+		summary.LastMessagePreview = last.Content
+		lastAt := last.CreatedAt
+		summary.LastMessageAt = &lastAt
+	}
+
+	return summary
 }

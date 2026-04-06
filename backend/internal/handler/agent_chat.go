@@ -39,6 +39,36 @@ func (h *AgentChatHandler) Get(c *gin.Context) {
 	transport.WriteData(c, http.StatusOK, detail)
 }
 
+func (h *AgentChatHandler) ListSessions(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	sessions, appErr := h.store.ListAgentChatSessions(userID, c.Param("id"))
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	transport.WriteData(c, http.StatusOK, sessions)
+}
+
+func (h *AgentChatHandler) GetSession(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	detail, appErr := h.store.GetAgentChatByID(userID, c.Param("id"), c.Param("sessionId"))
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	transport.WriteData(c, http.StatusOK, detail)
+}
+
 func (h *AgentChatHandler) SendMessage(c *gin.Context) {
 	userID, ok := currentUserID(c)
 	if !ok {

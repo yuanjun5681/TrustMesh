@@ -170,6 +170,18 @@ export interface AgentChatDetail {
   created_at: string
   updated_at: string
 }
+
+export interface AgentChatSessionSummary {
+  id: string
+  agent_id: string
+  session_key: string
+  status: 'active' | 'closed'
+  message_count: number
+  last_message_preview: string
+  last_message_at?: string | null
+  created_at: string
+  updated_at: string
+}
 export type AgentRole = 'pm' | 'developer' | 'reviewer' | 'custom'
 export type AgentStatus = 'online' | 'offline' | 'busy'
 

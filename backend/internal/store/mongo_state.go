@@ -135,6 +135,7 @@ func (s *Store) ensureMongoIndexes() error {
 		},
 		s.mongoAgentChats: {
 			{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "agent_id", Value: 1}, {Key: "status", Value: 1}}},
+			{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "agent_id", Value: 1}, {Key: "updated_at", Value: -1}}},
 			{Keys: bson.D{{Key: "session_key", Value: 1}}, Options: options.Index().SetUnique(true)},
 		},
 		s.mongoArtifacts: {

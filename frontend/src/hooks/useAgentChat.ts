@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as agentChatApi from '@/api/agentChat'
-import type { AgentChatDetail } from '@/types'
+import type { AgentChatDetail, AgentChatSessionSummary } from '@/types'
 
 function normalizeAgentChatDetail(chat: AgentChatDetail | null): AgentChatDetail | null {
   if (!chat) {
@@ -25,6 +25,34 @@ export function useAgentChat(agentId: string | undefined) {
   })
 }
 
+function normalizeAgentChatSessions(sessions: AgentChatSessionSummary[]): AgentChatSessionSummary[] {
+  return sessions ?? []
+}
+
+export function useAgentChatSessions(agentId: string | undefined) {
+  return useQuery({
+    queryKey: ['agents', agentId, 'chat', 'sessions'],
+    queryFn: async () => {
+      const res = await agentChatApi.getAgentChatSessions(agentId!)
+      return normalizeAgentChatSessions(res.data)
+    },
+    enabled: !!agentId,
+    staleTime: 15_000,
+  })
+}
+
+export function useAgentChatSession(agentId: string | undefined, sessionId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['agents', agentId, 'chat', 'session', sessionId],
+    queryFn: async () => {
+      const res = await agentChatApi.getAgentChatSession(agentId!, sessionId!)
+      return normalizeAgentChatDetail(res.data)
+    },
+    enabled: !!agentId && !!sessionId && enabled,
+    staleTime: 15_000,
+  })
+}
+
 export function useSendAgentChatMessage() {
   const qc = useQueryClient()
   return useMutation({
@@ -32,10 +60,13 @@ export function useSendAgentChatMessage() {
       agentChatApi.sendAgentChatMessage(agentId, content),
     onSuccess: (data, variables) => {
       qc.setQueryData(['agents', variables.agentId, 'chat'], normalizeAgentChatDetail(data.data))
+      qc.invalidateQueries({ queryKey: ['agents', variables.agentId, 'chat', 'sessions'] })
+      qc.setQueryData(['agents', variables.agentId, 'chat', 'session', data.data.id], normalizeAgentChatDetail(data.data))
     },
     onSettled: (_data, _error, variables) => {
       if (!variables) return
       void qc.invalidateQueries({ queryKey: ['agents', variables.agentId, 'chat'] })
+      void qc.invalidateQueries({ queryKey: ['agents', variables.agentId, 'chat', 'sessions'] })
     },
   })
 }
@@ -46,6 +77,8 @@ export function useResetAgentChat() {
     mutationFn: (agentId: string) => agentChatApi.resetAgentChat(agentId),
     onSuccess: (data, agentId) => {
       qc.setQueryData(['agents', agentId, 'chat'], normalizeAgentChatDetail(data.data))
+      qc.setQueryData(['agents', agentId, 'chat', 'session', data.data.id], normalizeAgentChatDetail(data.data))
+      qc.invalidateQueries({ queryKey: ['agents', agentId, 'chat', 'sessions'] })
     },
   })
 }
