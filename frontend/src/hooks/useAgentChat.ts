@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as agentChatApi from '@/api/agentChat'
 import type { AgentChatDetail, AgentChatSessionSummary } from '@/types'
+import { stripMessagePrefix } from '@/lib/utils'
 
 function normalizeAgentChatDetail(chat: AgentChatDetail | null): AgentChatDetail | null {
   if (!chat) {
@@ -9,7 +10,10 @@ function normalizeAgentChatDetail(chat: AgentChatDetail | null): AgentChatDetail
 
   return {
     ...chat,
-    messages: chat.messages ?? [],
+    messages: (chat.messages ?? []).map((message) => ({
+      ...message,
+      content: stripMessagePrefix(message.content),
+    })),
   }
 }
 
@@ -26,7 +30,10 @@ export function useAgentChat(agentId: string | undefined) {
 }
 
 function normalizeAgentChatSessions(sessions: AgentChatSessionSummary[]): AgentChatSessionSummary[] {
-  return sessions ?? []
+  return (sessions ?? []).map((session) => ({
+    ...session,
+    last_message_preview: stripMessagePrefix(session.last_message_preview),
+  }))
 }
 
 export function useAgentChatSessions(agentId: string | undefined) {

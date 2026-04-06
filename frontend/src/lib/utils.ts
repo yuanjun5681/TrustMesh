@@ -35,3 +35,7 @@ export function formatDateTime(dateStr: string): string {
     minute: '2-digit',
   })
 }
+
+export function stripMessagePrefix(content: string): string {
+  return content.replace(/^(?:\s*\[[^[\]]+\]\s*)+/u, '').trimStart()
+}
