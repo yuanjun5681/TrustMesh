@@ -152,10 +152,9 @@ func (h *AgentChatHandler) Reset(c *gin.Context) {
 		return
 	}
 
-	detail, appErr := h.store.ResetAgentChat(userID, c.Param("id"))
-	if appErr != nil {
+	if appErr := h.store.ResetAgentChat(userID, c.Param("id")); appErr != nil {
 		transport.WriteError(c, appErr)
 		return
 	}
-	transport.WriteData(c, http.StatusCreated, detail)
+	transport.WriteData(c, http.StatusOK, nil)
 }

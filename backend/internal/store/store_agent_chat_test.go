@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func TestResetAgentChatInitializesEmptyMessages(t *testing.T) {
+func TestResetAgentChatClearsActiveSessionWithoutCreatingEmptyChat(t *testing.T) {
 	s := New()
 	user, appErr := s.CreateUser("user@example.com", "User", "hash")
 	if appErr != nil {
@@ -18,23 +18,33 @@ func TestResetAgentChatInitializesEmptyMessages(t *testing.T) {
 	now := time.Now().UTC()
 	s.SyncAgentPresence([]AgentPresence{{NodeID: agent.NodeID, LastSeenAt: now}}, now)
 
-	chat, appErr := s.ResetAgentChat(user.ID, agent.ID)
+	first, _, appErr := s.AppendAgentChatUserMessage(user.ID, agent.ID, "hello")
 	if appErr != nil {
-		t.Fatalf("reset chat: %v", appErr)
+		t.Fatalf("append first message: %v", appErr)
 	}
-	if chat.Messages == nil {
-		t.Fatal("expected empty messages slice, got nil")
-	}
-	if len(chat.Messages) != 0 {
-		t.Fatalf("expected empty messages slice, got %d messages", len(chat.Messages))
+	if len(s.agentChats) != 1 {
+		t.Fatalf("expected 1 chat before reset, got %d", len(s.agentChats))
 	}
 
-	stored, ok := s.agentChats[chat.ID]
-	if !ok {
-		t.Fatalf("expected chat %s in store", chat.ID)
+	if appErr := s.ResetAgentChat(user.ID, agent.ID); appErr != nil {
+		t.Fatalf("reset chat: %v", appErr)
 	}
-	if stored.Messages == nil {
-		t.Fatal("expected persisted store chat messages slice, got nil")
+
+	if got := s.activeAgentChats[activeAgentChatKey(user.ID, agent.ID)]; got != "" {
+		t.Fatalf("expected no active chat after reset, got %s", got)
+	}
+	if len(s.agentChats) != 1 {
+		t.Fatalf("expected reset to avoid creating empty chat, got %d chats", len(s.agentChats))
+	}
+	stored, ok := s.agentChats[first.ID]
+	if !ok {
+		t.Fatalf("expected chat %s in store", first.ID)
+	}
+	if stored.Status != "closed" {
+		t.Fatalf("expected chat to be closed, got %s", stored.Status)
+	}
+	if _, ok := s.agentChatBySession[first.SessionKey]; ok {
+		t.Fatal("expected session routing to be removed after reset")
 	}
 }
 
@@ -49,7 +59,7 @@ func TestResetAgentChatRequiresChatCapableOnlineAgent(t *testing.T) {
 	if appErr != nil {
 		t.Fatalf("create offline agent: %v", appErr)
 	}
-	if _, appErr := s.ResetAgentChat(user.ID, offlineAgent.ID); appErr == nil || appErr.Code != "AGENT_OFFLINE" {
+	if appErr := s.ResetAgentChat(user.ID, offlineAgent.ID); appErr == nil || appErr.Code != "AGENT_OFFLINE" {
 		t.Fatalf("expected AGENT_OFFLINE, got %v", appErr)
 	}
 }
@@ -67,16 +77,19 @@ func TestResetAgentChatRemovesOldSessionRouting(t *testing.T) {
 	now := time.Now().UTC()
 	s.SyncAgentPresence([]AgentPresence{{NodeID: agent.NodeID, LastSeenAt: now}}, now)
 
-	first, appErr := s.ResetAgentChat(user.ID, agent.ID)
+	first, _, appErr := s.AppendAgentChatUserMessage(user.ID, agent.ID, "first")
 	if appErr != nil {
-		t.Fatalf("reset first chat: %v", appErr)
+		t.Fatalf("append first message: %v", appErr)
 	}
-	second, appErr := s.ResetAgentChat(user.ID, agent.ID)
+	if appErr := s.ResetAgentChat(user.ID, agent.ID); appErr != nil {
+		t.Fatalf("reset chat: %v", appErr)
+	}
+	second, _, appErr := s.AppendAgentChatUserMessage(user.ID, agent.ID, "second")
 	if appErr != nil {
-		t.Fatalf("reset second chat: %v", appErr)
+		t.Fatalf("append second message: %v", appErr)
 	}
 	if first.SessionKey == second.SessionKey {
-		t.Fatal("expected a new session key after reset")
+		t.Fatal("expected a new session key after first reset")
 	}
 	if _, ok := s.agentChatBySession[first.SessionKey]; ok {
 		t.Fatal("expected old session key to be removed from routing table")
@@ -99,19 +112,16 @@ func TestListAgentChatSessionsReturnsNewestFirst(t *testing.T) {
 	now := time.Now().UTC()
 	s.SyncAgentPresence([]AgentPresence{{NodeID: agent.NodeID, LastSeenAt: now}}, now)
 
-	first, appErr := s.ResetAgentChat(user.ID, agent.ID)
+	first, _, appErr := s.AppendAgentChatUserMessage(user.ID, agent.ID, "older")
 	if appErr != nil {
-		t.Fatalf("reset first chat: %v", appErr)
-	}
-	if _, _, appErr := s.AppendAgentChatUserMessage(user.ID, agent.ID, "older"); appErr != nil {
 		t.Fatalf("append first message: %v", appErr)
 	}
 
-	second, appErr := s.ResetAgentChat(user.ID, agent.ID)
-	if appErr != nil {
+	if appErr := s.ResetAgentChat(user.ID, agent.ID); appErr != nil {
 		t.Fatalf("reset second chat: %v", appErr)
 	}
-	if _, _, appErr := s.AppendAgentChatUserMessage(user.ID, agent.ID, "newer"); appErr != nil {
+	second, _, appErr := s.AppendAgentChatUserMessage(user.ID, agent.ID, "newer")
+	if appErr != nil {
 		t.Fatalf("append second message: %v", appErr)
 	}
 

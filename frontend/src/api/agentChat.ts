@@ -18,5 +18,5 @@ export async function sendAgentChatMessage(agentId: string, content: string) {
 }
 
 export async function resetAgentChat(agentId: string) {
-  return api.post(`agents/${agentId}/chat/reset`).json<ApiResponse<AgentChatDetail>>()
+  return api.post(`agents/${agentId}/chat/reset`).json<ApiResponse<null>>()
 }

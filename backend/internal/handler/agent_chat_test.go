@@ -125,15 +125,15 @@ func TestListSessionsReturnsChatHistory(t *testing.T) {
 	now := time.Now().UTC()
 	st.SyncAgentPresence([]store.AgentPresence{{NodeID: agent.NodeID, LastSeenAt: now}}, now)
 
-	if _, appErr := st.ResetAgentChat(user.ID, agent.ID); appErr != nil {
-		t.Fatalf("reset first chat: %v", appErr)
-	}
 	if _, _, appErr := st.AppendAgentChatUserMessage(user.ID, agent.ID, "older"); appErr != nil {
 		t.Fatalf("append first message: %v", appErr)
 	}
-	second, appErr := st.ResetAgentChat(user.ID, agent.ID)
-	if appErr != nil {
+	if appErr := st.ResetAgentChat(user.ID, agent.ID); appErr != nil {
 		t.Fatalf("reset second chat: %v", appErr)
+	}
+	second, _, appErr := st.AppendAgentChatUserMessage(user.ID, agent.ID, "newer")
+	if appErr != nil {
+		t.Fatalf("append second message: %v", appErr)
 	}
 
 	h := NewAgentChatHandler(st, nil, nil)
@@ -154,6 +154,43 @@ func TestListSessionsReturnsChatHistory(t *testing.T) {
 	}
 	if !bytes.Contains(w.Body.Bytes(), []byte(`"last_message_preview":"older"`)) {
 		t.Fatalf("expected older preview in response, got %s", w.Body.String())
+	}
+}
+
+func TestResetReturnsNullDraftState(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	st := store.New()
+	user, appErr := st.CreateUser("user@example.com", "User", "hash")
+	if appErr != nil {
+		t.Fatalf("create user: %v", appErr)
+	}
+	agent, appErr := st.CreateAgent(user.ID, "node-chat-003", "Chat Agent", "developer", "dev", []string{"conversation"})
+	if appErr != nil {
+		t.Fatalf("create agent: %v", appErr)
+	}
+	now := time.Now().UTC()
+	st.SyncAgentPresence([]store.AgentPresence{{NodeID: agent.NodeID, LastSeenAt: now}}, now)
+
+	if _, _, appErr := st.AppendAgentChatUserMessage(user.ID, agent.ID, "hello"); appErr != nil {
+		t.Fatalf("append first message: %v", appErr)
+	}
+
+	h := NewAgentChatHandler(st, nil, nil)
+	req := httptest.NewRequest(http.MethodPost, "/agents/"+agent.ID+"/chat/reset", nil)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+	c.Params = gin.Params{{Key: "id", Value: agent.ID}}
+	c.Set("user_id", user.ID)
+
+	h.Reset(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte(`"data":null`)) {
+		t.Fatalf("expected null data in response, got %s", w.Body.String())
 	}
 }
 

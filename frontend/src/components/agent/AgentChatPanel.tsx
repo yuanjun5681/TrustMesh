@@ -27,11 +27,29 @@ export function AgentChatPanel({ agent }: AgentChatPanelProps) {
   const sendMessage = useSendAgentChatMessage()
   const resetChat = useResetAgentChat()
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
+  const [isDraftingNewSession, setIsDraftingNewSession] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const effectiveSelectedSessionId = useMemo(() => {
+    if (isDraftingNewSession) {
+      return null
+    }
+    if (selectedSessionId) {
+      if (activeChat?.id === selectedSessionId) {
+        return selectedSessionId
+      }
+      if (sessions.some((session) => session.id === selectedSessionId)) {
+        return selectedSessionId
+      }
+    }
+    return sessions[0]?.id ?? null
+  }, [activeChat?.id, isDraftingNewSession, selectedSessionId, sessions])
 
   const selectedSession = useMemo(() => {
-    if (selectedSessionId && activeChat?.id === selectedSessionId) {
-      const existing = sessions.find((session) => session.id === selectedSessionId)
+    if (isDraftingNewSession) {
+      return null
+    }
+    if (effectiveSelectedSessionId && activeChat?.id === effectiveSelectedSessionId) {
+      const existing = sessions.find((session) => session.id === effectiveSelectedSessionId)
       if (existing) {
         return existing
       }
@@ -50,8 +68,8 @@ export function AgentChatPanel({ agent }: AgentChatPanelProps) {
     if (sessions.length === 0) {
       return null
     }
-    return sessions.find((session) => session.id === selectedSessionId) ?? sessions[0]
-  }, [activeChat, selectedSessionId, sessions])
+    return sessions.find((session) => session.id === effectiveSelectedSessionId) ?? sessions[0]
+  }, [activeChat, effectiveSelectedSessionId, isDraftingNewSession, sessions])
 
   const selectedIsActive = !!selectedSession && selectedSession.status === 'active'
   const { data: historicalChat, isLoading: historicalChatLoading } = useAgentChatSession(
@@ -63,24 +81,8 @@ export function AgentChatPanel({ agent }: AgentChatPanelProps) {
   const isLoading = sessionsLoading || (selectedIsActive ? activeChatLoading : historicalChatLoading)
   const messages = chat?.messages ?? []
   const messageList = chat?.messages
-  const disabled = agent.archived || agent.status !== 'online' || !selectedIsActive
-
-  useEffect(() => {
-    if (sessions.length === 0) {
-      setSelectedSessionId(null)
-      return
-    }
-    if (!selectedSessionId) {
-      setSelectedSessionId(sessions[0].id)
-      return
-    }
-    if (activeChat?.id === selectedSessionId) {
-      return
-    }
-    if (!sessions.some((session) => session.id === selectedSessionId)) {
-      setSelectedSessionId(sessions[0].id)
-    }
-  }, [activeChat?.id, selectedSessionId, sessions])
+  const isDraft = isDraftingNewSession && !selectedSession
+  const disabled = agent.archived || agent.status !== 'online' || (!selectedIsActive && !isDraft)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -88,7 +90,9 @@ export function AgentChatPanel({ agent }: AgentChatPanelProps) {
 
   const handleSend = async (content: string) => {
     try {
-      await sendMessage.mutateAsync({ agentId: agent.id, content })
+      const res = await sendMessage.mutateAsync({ agentId: agent.id, content })
+      setIsDraftingNewSession(false)
+      setSelectedSessionId(res.data.id)
     } catch (err) {
       toast.error(err instanceof ApiRequestError ? err.message : '消息发送失败')
     }
@@ -96,8 +100,9 @@ export function AgentChatPanel({ agent }: AgentChatPanelProps) {
 
   const handleReset = async () => {
     try {
-      const res = await resetChat.mutateAsync(agent.id)
-      setSelectedSessionId(res.data.id)
+      await resetChat.mutateAsync(agent.id)
+      setIsDraftingNewSession(true)
+      setSelectedSessionId(null)
       toast.success('已开始新对话')
     } catch (err) {
       toast.error(err instanceof ApiRequestError ? err.message : '新建对话失败')
@@ -110,6 +115,18 @@ export function AgentChatPanel({ agent }: AgentChatPanelProps) {
         <ScrollArea className="flex-1 p-4">
           {isLoading ? (
             <div className="text-sm text-muted-foreground">加载中...</div>
+          ) : isDraft ? (
+            <div className="flex h-full min-h-64 flex-col items-center justify-center gap-3 text-center">
+              <div className="flex size-12 items-center justify-center rounded-2xl bg-primary/10">
+                <MessageSquareText className="size-6 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">开始新的对话</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  输入第一条消息后，系统会创建新的 session。
+                </p>
+              </div>
+            </div>
           ) : !selectedSession ? (
             <div className="flex h-full min-h-64 flex-col items-center justify-center gap-3 text-center">
               <div className="flex size-12 items-center justify-center rounded-2xl bg-primary/10">
@@ -209,7 +226,10 @@ export function AgentChatPanel({ agent }: AgentChatPanelProps) {
                 <button
                   key={session.id}
                   type="button"
-                  onClick={() => setSelectedSessionId(session.id)}
+                  onClick={() => {
+                    setIsDraftingNewSession(false)
+                    setSelectedSessionId(session.id)
+                  }}
                   className={cn(
                     'w-full rounded-xl px-3 py-3 text-left transition-colors hover:bg-accent/40',
                     selectedSession?.id === session.id ? 'bg-primary/5' : ''

@@ -82,9 +82,8 @@ export function useResetAgentChat() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (agentId: string) => agentChatApi.resetAgentChat(agentId),
-    onSuccess: (data, agentId) => {
-      qc.setQueryData(['agents', agentId, 'chat'], normalizeAgentChatDetail(data.data))
-      qc.setQueryData(['agents', agentId, 'chat', 'session', data.data.id], normalizeAgentChatDetail(data.data))
+    onSuccess: (_data, agentId) => {
+      qc.setQueryData(['agents', agentId, 'chat'], null)
       qc.invalidateQueries({ queryKey: ['agents', agentId, 'chat', 'sessions'] })
     },
   })

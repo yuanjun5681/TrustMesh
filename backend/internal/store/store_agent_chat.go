@@ -82,16 +82,16 @@ func (s *Store) GetAgentChatByID(userID, agentID, chatID string) (*model.AgentCh
 	return &detail, nil
 }
 
-func (s *Store) ResetAgentChat(userID, agentID string) (*model.AgentChatDetail, *transport.AppError) {
+func (s *Store) ResetAgentChat(userID, agentID string) *transport.AppError {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	agent, err := s.agentForUserUnsafe(userID, agentID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if appErr := validateAgentChatAvailability(agent); appErr != nil {
-		return nil, appErr
+		return appErr
 	}
 
 	key := activeAgentChatKey(userID, agentID)
@@ -100,20 +100,14 @@ func (s *Store) ResetAgentChat(userID, agentID string) (*model.AgentChatDetail, 
 			existing.Status = "closed"
 			existing.UpdatedAt = time.Now().UTC()
 			if err := s.persistAgentChatUnsafe(existing); err != nil {
-				return nil, mongoWriteError(err)
+				return mongoWriteError(err)
 			}
 			delete(s.agentChatBySession, existing.SessionKey)
 		}
 		delete(s.activeAgentChats, key)
 	}
 
-	chat := s.newAgentChatUnsafe(userID, agent)
-	if err := s.persistAgentChatUnsafe(chat); err != nil {
-		return nil, mongoWriteError(err)
-	}
-	detail := s.toAgentChatDetailUnsafe(chat)
-	s.publishAgentChatUnsafe(chat.ID)
-	return &detail, nil
+	return nil
 }
 
 func (s *Store) AppendAgentChatUserMessage(userID, agentID, content string) (*model.AgentChatDetail, *model.AgentChatMessage, *transport.AppError) {
