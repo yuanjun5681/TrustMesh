@@ -19,16 +19,6 @@ func TestResetAgentChatRequiresChatCapableOnlineAgent(t *testing.T) {
 	if _, appErr := s.ResetAgentChat(user.ID, offlineAgent.ID); appErr == nil || appErr.Code != "AGENT_OFFLINE" {
 		t.Fatalf("expected AGENT_OFFLINE, got %v", appErr)
 	}
-
-	capabilityAgent, appErr := s.CreateAgent(user.ID, "node-noconv-001", "No Conversation", "developer", "dev", []string{"backend"})
-	if appErr != nil {
-		t.Fatalf("create capability agent: %v", appErr)
-	}
-	now := time.Now().UTC()
-	s.SyncAgentPresence([]AgentPresence{{NodeID: capabilityAgent.NodeID, LastSeenAt: now}}, now)
-	if _, appErr := s.ResetAgentChat(user.ID, capabilityAgent.ID); appErr == nil || appErr.Code != "VALIDATION_ERROR" {
-		t.Fatalf("expected VALIDATION_ERROR, got %v", appErr)
-	}
 }
 
 func TestResetAgentChatRemovesOldSessionRouting(t *testing.T) {

@@ -206,21 +206,9 @@ func (s *Store) agentForUserUnsafe(userID, agentID string) (*model.Agent, *trans
 	return agent, nil
 }
 
-func agentSupportsCapability(agent *model.Agent, capability string) bool {
-	for _, item := range agent.Capabilities {
-		if strings.TrimSpace(item) == capability {
-			return true
-		}
-	}
-	return false
-}
-
 func validateAgentChatAvailability(agent *model.Agent) *transport.AppError {
 	if agent.Archived {
 		return transport.NotFound("agent not found")
-	}
-	if !agentSupportsCapability(agent, "conversation") {
-		return transport.Validation("agent does not support conversation", map[string]any{"agent_id": "missing_conversation_capability"})
 	}
 	if agent.Status != "online" {
 		return transport.Conflict("AGENT_OFFLINE", "agent 当前离线，无法发送消息")
