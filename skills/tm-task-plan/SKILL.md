@@ -7,7 +7,7 @@ description: >
 compatibility: Requires clawsynapse CLI
 metadata:
   author: TrustMesh
-  version: "3.0"
+  version: "4.0"
 allowed-tools:
   - "Bash(clawsynapse:*)"
 ---
