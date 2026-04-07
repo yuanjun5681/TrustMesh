@@ -574,6 +574,7 @@ func (h *TaskHandler) notifyPMTaskMessage(c *gin.Context, userID, projectID, tas
 
 func (h *TaskHandler) buildPMTaskMessage(userID, projectID, taskID, userContent string, initial bool, uiResponse *model.UIResponse) protocol.PMTaskMessage {
 	payload := protocol.PMTaskMessage{
+		SchemaVersion:  "1.0",
 		TaskID:         taskID,
 		ProjectID:      projectID,
 		UserContent:    userContent,
@@ -581,9 +582,9 @@ func (h *TaskHandler) buildPMTaskMessage(userID, projectID, taskID, userContent 
 		UserUIResponse: uiResponse,
 	}
 	if initial {
-		payload.Content = "请使用 /tm-task-plan skill 处理本次需求。首先理解用户需求，澄清不明确之处，待需求明确后再创建任务。"
+		payload.Content = "请使用 /tm-task-plan skill 处理本次需求。"
 	} else {
-		payload.Content = "用户发送了新的消息，请使用 /tm-task-plan skill 继续处理。"
+		payload.Content = "用户发送了新消息，请使用 /tm-task-plan skill 继续处理。"
 	}
 
 	if !initial {
@@ -603,17 +604,8 @@ func (h *TaskHandler) buildPMTaskMessage(userID, projectID, taskID, userContent 
 		Name:        project.Name,
 		Description: project.Description,
 	}
-	payload.PMBrief = defaultPMBrief()
 	payload.CandidateAgents = candidates
 	return payload
-}
-
-func defaultPMBrief() *protocol.PMTaskBrief {
-	return &protocol.PMTaskBrief{
-		Objective:                   "明确任务目标和业务目的；在需求清晰前持续澄清；仅在需求满足执行条件后拆解任务并派发给其他 Agent。",
-		MustClarifyBeforeTaskCreate: true,
-		MustUseSkill:                "tm-task-plan",
-	}
 }
 
 func buildCandidateAgents(pmAgentID string, agents []model.Agent) []protocol.PMTaskAgent {

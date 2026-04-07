@@ -198,12 +198,6 @@ type PMTaskProject struct {
 	Description string `json:"description,omitempty"`
 }
 
-type PMTaskBrief struct {
-	Objective                   string `json:"objective"`
-	MustClarifyBeforeTaskCreate bool   `json:"must_clarify_before_task_create"`
-	MustUseSkill                string `json:"must_use_skill"`
-}
-
 type PMTaskAgent struct {
 	ID           string   `json:"id"`
 	Name         string   `json:"name"`
@@ -215,6 +209,7 @@ type PMTaskAgent struct {
 
 // PMTaskMessage is published by TrustMesh to PM Agent during planning phase.
 type PMTaskMessage struct {
+	SchemaVersion   string            `json:"schema_version"`
 	TaskID          string            `json:"task_id"`
 	ProjectID       string            `json:"project_id"`
 	Content         string            `json:"content"`
@@ -222,6 +217,5 @@ type PMTaskMessage struct {
 	IsInitial       bool              `json:"is_initial_message"`
 	UserUIResponse  *model.UIResponse `json:"user_ui_response,omitempty"`
 	Project         *PMTaskProject    `json:"project,omitempty"`
-	PMBrief         *PMTaskBrief      `json:"pm_brief,omitempty"`
 	CandidateAgents []PMTaskAgent     `json:"candidate_agents,omitempty"`
 }

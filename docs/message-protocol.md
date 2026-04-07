@@ -218,19 +218,15 @@ message:
 
 ```json
 {
+  "schema_version": "1.0",
   "conversation_id": "conv_123",
   "project_id": "proj_123",
-  "content": "请使用 /tm-task-plan skill 处理本次需求。首先理解用户需求，澄清不明确之处，待需求明确后再创建任务。",
+  "content": "请使用 /tm-task-plan skill 处理本次需求。",
   "user_content": "我需要一个用户登录功能",
   "is_initial_message": true,
   "project": {
     "name": "TrustMesh MVP",
     "description": "multi-agent task orchestration"
-  },
-  "pm_brief": {
-    "objective": "明确任务目标和业务目的；在需求清晰前持续澄清；仅在需求满足执行条件后拆解任务并派发给其他 Agent。",
-    "must_clarify_before_task_create": true,
-    "must_use_skill": "tm-task-plan"
   },
   "candidate_agents": [
     {
@@ -251,17 +247,17 @@ message:
 {
   "conversation_id": "conv_123",
   "project_id": "proj_123",
-  "content": "用户发送了新的消息，请使用 /tm-task-plan skill 继续处理。",
+  "content": "用户发送了新消息，请使用 /tm-task-plan skill 继续处理。",
   "user_content": "登录方式只需要邮箱密码，不需要 OAuth",
   "is_initial_message": false
 }
 ```
 
 约定：
-- `content` 是系统指令，指引 PM Agent 使用 `tm-task-plan` skill 处理需求。不包含用户原始输入。
+- `schema_version` 标识 payload 结构版本，便于将来字段演进。
+- `content` 是简短的路由提示，告诉 PM Agent 使用哪个 skill。角色定义、工作流和规则全部由 SKILL 自身承载，payload 不再重复指令。
 - `user_content` 始终是用户原始输入，PM Agent 应以此为准理解需求。
-- `is_initial_message=true` 表示首条需求消息，首次消息携带 `project`、`pm_brief`、`candidate_agents` 上下文。
-- `pm_brief.must_use_skill` 指定 PM Agent 必须使用的 skill 名称。
+- `is_initial_message=true` 表示首条需求消息，首次消息携带 `project`、`candidate_agents` 上下文。
 - `candidate_agents` 提供当前用户下可供派发的非 PM Agent 列表；PM Agent 应结合 `role`、`status` 和 `capabilities` 做分派。
 
 ### 6.2 PM 回复用户对话

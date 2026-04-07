@@ -487,18 +487,11 @@ func TestCreatePlanningTaskPublishesInitialPMBrief(t *testing.T) {
 		t.Fatalf("unexpected candidate_agents: %#v", message["candidate_agents"])
 	}
 
-	pmBrief, ok := message["pm_brief"].(map[string]any)
-	if !ok {
-		t.Fatalf("pm_brief missing: %#v", message["pm_brief"])
+	if _, exists := message["pm_brief"]; exists {
+		t.Fatalf("pm_brief should be removed, got: %#v", message["pm_brief"])
 	}
-	if pmBrief["objective"] == "" {
-		t.Fatalf("pm_brief objective missing: %#v", pmBrief)
-	}
-	if pmBrief["must_clarify_before_task_create"] != true {
-		t.Fatalf("pm_brief must_clarify_before_task_create missing: %#v", pmBrief)
-	}
-	if pmBrief["must_use_skill"] != "tm-task-plan" {
-		t.Fatalf("pm_brief must_use_skill missing: %#v", pmBrief)
+	if message["schema_version"] != "1.0" {
+		t.Fatalf("schema_version expected 1.0, got: %#v", message["schema_version"])
 	}
 }
 
