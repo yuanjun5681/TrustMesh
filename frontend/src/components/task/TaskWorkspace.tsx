@@ -91,12 +91,13 @@ function PlanReviewPanel({
         {todos.map((todo, idx) => (
           <div key={todo.id} className="flex items-start gap-2 rounded-lg bg-background border px-3 py-2 text-sm">
             <span className="shrink-0 text-xs text-muted-foreground w-5 pt-0.5">{idx + 1}.</span>
-            <div className="min-w-0">
-              <p className="font-medium truncate">{todo.title}</p>
-              <p className="text-xs text-muted-foreground truncate">
-                {todo.assignee.name}
-              </p>
+            <div className="min-w-0 flex-1">
+              <p className="font-medium">{todo.title}</p>
+              {todo.description && (
+                <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap">{todo.description}</p>
+              )}
             </div>
+            <span className="shrink-0 text-xs text-muted-foreground pt-0.5">{todo.assignee.name}</span>
           </div>
         ))}
       </div>

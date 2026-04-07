@@ -1,4 +1,5 @@
 import type { TaskListItem } from '@/types'
+import { normalizeEscapedText } from '@/lib/utils'
 import { ListTodo } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
@@ -42,7 +43,7 @@ export function TaskResultCard({ items }: Props) {
               </div>
               {task.description && (
                 <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-                  {task.description}
+                  {normalizeEscapedText(task.description)}
                 </p>
               )}
             </button>

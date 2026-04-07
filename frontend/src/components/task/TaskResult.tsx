@@ -9,19 +9,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { toast } from 'sonner'
 import { FileViewer } from '@/components/task/FileViewer'
+import { normalizeEscapedText } from '@/lib/utils'
 import type { TaskResult, TaskArtifact } from '@/types'
-
-function normalizeResultText(value: string | null | undefined) {
-  if (!value) {
-    return ''
-  }
-
-  return value
-    .replace(/\\r\\n/g, '\n')
-    .replace(/\\n/g, '\n')
-    .replace(/\\r/g, '\r')
-    .replace(/\\t/g, '\t')
-}
 
 interface TaskResultViewProps {
   taskId: string
@@ -31,8 +20,8 @@ interface TaskResultViewProps {
 
 export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProps) {
   const safeArtifacts = artifacts ?? []
-  const summaryText = normalizeResultText(result.summary)
-  const finalOutputText = normalizeResultText(result.final_output)
+  const summaryText = normalizeEscapedText(result.summary)
+  const finalOutputText = normalizeEscapedText(result.final_output)
   const hasResult = summaryText || finalOutputText
   const hasArtifacts = safeArtifacts.length > 0
   const [loadingArtifactId, setLoadingArtifactId] = useState<string | null>(null)
