@@ -12,12 +12,12 @@ import { CancelTaskDialog } from './CancelTaskDialog'
 import { MessageBubble } from '@/components/task-thread/MessageBubble'
 import { ThinkingIndicator } from '@/components/task-thread/ThinkingIndicator'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { useTask, useAddTaskComment, useAppendTaskMessage, useCreateTaskFromText } from '@/hooks/useTasks'
+import { useTask, useAddTaskComment, useAppendTaskMessage, useCreateTaskFromText, useApprovePlan, useRejectPlan } from '@/hooks/useTasks'
 import { useAgents } from '@/hooks/useAgents'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ApiRequestError } from '@/api/client'
 import { useMemo, useState } from 'react'
-import type { TaskMessage, TaskDetail, UIResponse } from '@/types'
+import type { TaskMessage, TaskDetail, UIResponse, Todo } from '@/types'
 
 type TaskWorkspaceProps = {
   onClose: () => void
@@ -57,6 +57,90 @@ function buildTaskMentionCandidates(task: TaskDetail | undefined): TaskMentionCa
   }
 
   return candidates
+}
+
+function PlanReviewPanel({
+  todos,
+  onApprove,
+  onReject,
+  isApproving,
+  isRejecting,
+}: {
+  todos: Todo[]
+  onApprove: () => void
+  onReject: (feedback: string) => void
+  isApproving: boolean
+  isRejecting: boolean
+}) {
+  const [showRejectInput, setShowRejectInput] = useState(false)
+  const [feedback, setFeedback] = useState('')
+
+  const handleReject = () => {
+    if (!feedback.trim()) return
+    onReject(feedback.trim())
+  }
+
+  return (
+    <div className="border rounded-xl bg-muted/20 p-4 flex flex-col gap-3">
+      <div>
+        <p className="text-sm font-medium">PM 已完成规划，请确认后开始执行</p>
+        <p className="text-xs text-muted-foreground mt-1">共 {todos.length} 个子任务</p>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        {todos.map((todo, idx) => (
+          <div key={todo.id} className="flex items-start gap-2 rounded-lg bg-background border px-3 py-2 text-sm">
+            <span className="shrink-0 text-xs text-muted-foreground w-5 pt-0.5">{idx + 1}.</span>
+            <div className="min-w-0">
+              <p className="font-medium truncate">{todo.title}</p>
+              <p className="text-xs text-muted-foreground truncate">
+                {todo.assignee.name}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {showRejectInput ? (
+        <div className="flex flex-col gap-2">
+          <textarea
+            className="w-full rounded-lg border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+            rows={3}
+            placeholder="说明需要调整的地方..."
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={!feedback.trim() || isRejecting}
+              onClick={handleReject}
+            >
+              {isRejecting ? '提交中...' : '提交修改意见'}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => { setShowRejectInput(false); setFeedback('') }}
+            >
+              取消
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex gap-2">
+          <Button size="sm" disabled={isApproving} onClick={onApprove}>
+            {isApproving ? '确认中...' : '确认执行'}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setShowRejectInput(true)}>
+            修改规划
+          </Button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function DraftPlanningState({
@@ -113,12 +197,15 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
   const addComment = useAddTaskComment()
   const appendTaskMessage = useAppendTaskMessage()
   const createTaskFromText = useCreateTaskFromText()
+  const approvePlan = useApprovePlan()
+  const rejectPlan = useRejectPlan()
   const { data: allAgents } = useAgents()
-  const canCancelTask = task?.status === 'planning' || task?.status === 'pending' || task?.status === 'in_progress'
+  const canCancelTask = task?.status === 'planning' || task?.status === 'review' || task?.status === 'pending' || task?.status === 'in_progress'
   const mentionCandidates = buildTaskMentionCandidates(task)
   const isPlanning = task?.status === 'planning'
+  const isReview = task?.status === 'review'
   const hasTaskThread = (task?.messages?.length ?? 0) > 0
-  const mode: 'planning' | 'building' = task?.status === 'planning' || !task ? 'planning' : 'building'
+  const mode: 'planning' | 'building' = task?.status === 'planning' || task?.status === 'review' || !task ? 'planning' : 'building'
 
   const pendingUIBlocks = useMemo(() => {
     if (!isPlanning || !task?.messages?.length) {
@@ -171,6 +258,26 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
       })
     } catch (error) {
       const message = error instanceof ApiRequestError ? error.message : '发送需求消息失败'
+      toast.error(message)
+    }
+  }
+
+  const handleApprovePlan = async () => {
+    if (!taskId) return
+    try {
+      await approvePlan.mutateAsync({ taskId })
+    } catch (error) {
+      const message = error instanceof ApiRequestError ? error.message : '确认规划失败'
+      toast.error(message)
+    }
+  }
+
+  const handleRejectPlan = async (feedback: string) => {
+    if (!taskId) return
+    try {
+      await rejectPlan.mutateAsync({ taskId, input: { feedback } })
+    } catch (error) {
+      const message = error instanceof ApiRequestError ? error.message : '提交修改意见失败'
       toast.error(message)
     }
   }
@@ -273,7 +380,7 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
 
       {/* Feed */}
       <div className="flex-1 min-h-0">
-        {isPlanning ? (
+        {isPlanning || isReview ? (
           <ScrollArea className="h-full px-5 py-4">
             <div className="flex flex-col gap-4">
               {(task.messages ?? []).map((message, index, messages) => {
@@ -292,7 +399,16 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
                   />
                 )
               })}
-              {task.messages && task.messages[task.messages.length - 1]?.role === 'user' && <ThinkingIndicator />}
+              {isPlanning && task.messages && task.messages[task.messages.length - 1]?.role === 'user' && <ThinkingIndicator />}
+              {isReview && (
+                <PlanReviewPanel
+                  todos={task.todos}
+                  onApprove={handleApprovePlan}
+                  onReject={handleRejectPlan}
+                  isApproving={approvePlan.isPending}
+                  isRejecting={rejectPlan.isPending}
+                />
+              )}
             </div>
           </ScrollArea>
         ) : (
@@ -302,14 +418,16 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
 
       {/* Comment input */}
       <div className="border-t px-4 py-3 shrink-0">
-        <TaskComposer
-          mode={mode}
-          disabled={mode === 'planning' ? appendTaskMessage.isPending : addComment.isPending}
-          pendingUIBlocks={pendingUIBlocks}
-          buildingCandidates={mentionCandidates}
-          onPlanningSubmit={handleSendPlanningMessage}
-          onBuildingSubmit={handleSubmitComment}
-        />
+        {isReview ? null : (
+          <TaskComposer
+            mode={mode}
+            disabled={mode === 'planning' ? appendTaskMessage.isPending : addComment.isPending}
+            pendingUIBlocks={pendingUIBlocks}
+            buildingCandidates={mentionCandidates}
+            onPlanningSubmit={handleSendPlanningMessage}
+            onBuildingSubmit={handleSubmitComment}
+          />
+        )}
       </div>
 
       <Sheet open={resultOpen} onOpenChange={setResultOpen}>

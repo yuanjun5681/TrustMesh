@@ -289,10 +289,10 @@ func (s *Store) FinalizePlanByPMNode(nodeID, messageID string, in TaskPlanReadyI
 		})
 	}
 
-	// Update task: planning → pending
+	// Update task: planning → review (awaiting user approval)
 	task.Title = in.Title
 	task.Description = in.Description
-	task.Status = "pending"
+	task.Status = "review"
 	task.Todos = todos
 	task.UpdatedAt = now
 	task.Version++
@@ -311,6 +311,89 @@ func (s *Store) FinalizePlanByPMNode(nodeID, messageID string, in TaskPlanReadyI
 		return nil, mongoWriteError(err)
 	}
 	if err := s.persistProcessedMessageUnsafe(processedMessageKey("task.plan_ready", nodeID, messageID)); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.publishTaskUnsafe(task.ID)
+
+	return s.copyTaskWithArtifactsUnsafe(task), nil
+}
+
+// ApprovePlan transitions a task from review → pending so todos can be dispatched.
+func (s *Store) ApprovePlan(userID, taskID string) (*model.TaskDetail, *transport.AppError) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[taskID]
+	if !ok || task.UserID != userID {
+		return nil, transport.NotFound("task not found")
+	}
+	if task.Status != "review" {
+		return nil, transport.Conflict("TASK_NOT_IN_REVIEW", "task is not awaiting approval")
+	}
+	if appErr := s.ensureTaskProjectActiveUnsafe(task); appErr != nil {
+		return nil, appErr
+	}
+
+	now := time.Now().UTC()
+	task.Status = "pending"
+	task.UpdatedAt = now
+	task.Version++
+
+	taskTitle := task.Title
+	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, "", "user", userID, "", "task_approved", &taskTitle, map[string]any{
+		"task_title": task.Title,
+	}, now)
+
+	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.publishTaskUnsafe(task.ID)
+
+	return s.copyTaskWithArtifactsUnsafe(task), nil
+}
+
+// RejectPlan transitions a task from review → planning and appends user feedback.
+func (s *Store) RejectPlan(userID, taskID, feedback string) (*model.TaskDetail, *transport.AppError) {
+	feedback = strings.TrimSpace(feedback)
+	if feedback == "" {
+		return nil, transport.Validation("invalid payload", map[string]any{"feedback": "required"})
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[taskID]
+	if !ok || task.UserID != userID {
+		return nil, transport.NotFound("task not found")
+	}
+	if task.Status != "review" {
+		return nil, transport.Conflict("TASK_NOT_IN_REVIEW", "task is not awaiting approval")
+	}
+	if appErr := s.ensureTaskProjectActiveUnsafe(task); appErr != nil {
+		return nil, appErr
+	}
+	project, ok := s.projects[task.ProjectID]
+	if !ok {
+		return nil, transport.NotFound("project not found")
+	}
+	if err := s.validateProjectPMAgentOnlineUnsafe(project); err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	msg := model.TaskMessage{ID: uuid.NewString(), Role: "user", Content: feedback, CreatedAt: now}
+	task.Messages = append(task.Messages, msg)
+	task.Status = "planning"
+	task.UpdatedAt = now
+	task.Version++
+
+	taskTitle := task.Title
+	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, "", "user", userID, "", "task_plan_rejected", &taskTitle, map[string]any{
+		"task_title": task.Title,
+		"feedback":   feedback,
+	}, now)
+
+	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
 		return nil, mongoWriteError(err)
 	}
 	s.publishTaskUnsafe(task.ID)

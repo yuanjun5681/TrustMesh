@@ -219,8 +219,6 @@ func (h *WebhookHandler) handleTaskPlanReady(c *gin.Context, webhook protocol.We
 		return
 	}
 
-	h.publishTaskCreated(task)
-	task = h.dispatchNextTodo(context.Background(), task)
 	transport.WriteData(c, http.StatusOK, task)
 }
 
@@ -340,6 +338,16 @@ func (h *WebhookHandler) publishTaskCreated(task *model.TaskDetail) {
 		ProjectID: task.ProjectID,
 		Title:     task.Title,
 	}, task.ID)
+}
+
+// PublishTaskCreated notifies the PM agent that a task has been created/approved.
+func (h *WebhookHandler) PublishTaskCreated(task *model.TaskDetail) {
+	h.publishTaskCreated(task)
+}
+
+// DispatchNextTodo dispatches the next pending todo in a task to its assignee agent.
+func (h *WebhookHandler) DispatchNextTodo(ctx context.Context, task *model.TaskDetail) *model.TaskDetail {
+	return h.dispatchNextTodo(ctx, task)
 }
 
 func (h *WebhookHandler) dispatchNextTodo(ctx context.Context, task *model.TaskDetail) *model.TaskDetail {

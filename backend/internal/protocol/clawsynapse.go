@@ -84,6 +84,11 @@ type TaskCreatedPayload struct {
 	Title     string `json:"title"`
 }
 
+type TaskPlanRejectedPayload struct {
+	TaskID   string `json:"task_id"`
+	Feedback string `json:"feedback"`
+}
+
 type TaskStatusChangedPayload struct {
 	TaskID      string `json:"task_id"`
 	Status      string `json:"status"`

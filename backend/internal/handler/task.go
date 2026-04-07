@@ -22,13 +22,14 @@ type addTaskCommentResponse struct {
 }
 
 type TaskHandler struct {
-	store     *store.Store
-	publisher *clawsynapse.Client
-	log       *zap.Logger
+	store          *store.Store
+	publisher      *clawsynapse.Client
+	webhookHandler *clawsynapse.WebhookHandler
+	log            *zap.Logger
 }
 
-func NewTaskHandler(s *store.Store, publisher *clawsynapse.Client, log *zap.Logger) *TaskHandler {
-	return &TaskHandler{store: s, publisher: publisher, log: log}
+func NewTaskHandler(s *store.Store, publisher *clawsynapse.Client, wh *clawsynapse.WebhookHandler, log *zap.Logger) *TaskHandler {
+	return &TaskHandler{store: s, publisher: publisher, webhookHandler: wh, log: log}
 }
 
 func (h *TaskHandler) Create(c *gin.Context) {
@@ -454,6 +455,51 @@ func (h *TaskHandler) buildTaskMentionPayload(task *model.TaskDetail, comment *m
 	}
 
 	return payload
+}
+
+func (h *TaskHandler) ApprovePlan(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	taskID := c.Param("id")
+	task, appErr := h.store.ApprovePlan(userID, taskID)
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	if h.webhookHandler != nil {
+		h.webhookHandler.PublishTaskCreated(task)
+		task = h.webhookHandler.DispatchNextTodo(c.Request.Context(), task)
+	}
+	transport.WriteData(c, http.StatusOK, task)
+}
+
+func (h *TaskHandler) RejectPlan(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	var body struct {
+		Feedback string `json:"feedback"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid request body"))
+		return
+	}
+
+	taskID := c.Param("id")
+	task, appErr := h.store.RejectPlan(userID, taskID, body.Feedback)
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	h.notifyPMTaskMessage(c, userID, task.ProjectID, task.ID, body.Feedback, false, nil)
+	transport.WriteData(c, http.StatusOK, task)
 }
 
 func (h *TaskHandler) CreatePlanning(c *gin.Context) {

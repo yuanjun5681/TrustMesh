@@ -5,6 +5,7 @@ import type {
   ApiResponse,
   ApiListResponse,
   CreatePlanningTaskRequest,
+  RejectPlanRequest,
   TaskListItem,
   TaskDetail,
   TaskPriority,
@@ -60,6 +61,14 @@ export async function dispatchTodo(taskId: string, todoId: string) {
 
 export async function cancelTask(taskId: string, reason: string) {
   return api.post(`tasks/${taskId}/cancel`, { json: { reason } }).json<ApiResponse<TaskDetail>>()
+}
+
+export async function approvePlan(taskId: string) {
+  return api.post(`tasks/${taskId}/approve`).json<ApiResponse<TaskDetail>>()
+}
+
+export async function rejectPlan(taskId: string, input: RejectPlanRequest) {
+  return api.post(`tasks/${taskId}/reject`, { json: input }).json<ApiResponse<TaskDetail>>()
 }
 
 export async function listTaskComments(taskId: string) {
