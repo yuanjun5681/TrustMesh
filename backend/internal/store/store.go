@@ -26,12 +26,11 @@ type Store struct {
 
 	projects map[string]*model.Project
 
-	conversations        map[string]*model.Conversation
-	projectConversations map[string][]string
-
+	agentChats           map[string]*model.AgentChat
+	activeAgentChats     map[string]string
+	agentChatBySession   map[string]string
 	tasks             map[string]*model.TaskDetail
 	projectTasks      map[string][]string
-	conversationTasks map[string]string
 	taskEvents        map[string][]model.Event
 	userEvents        map[string][]*model.Event
 	agentEvents       map[string][]*model.Event
@@ -56,7 +55,7 @@ type Store struct {
 	mongoUsers             *mongo.Collection
 	mongoAgents            *mongo.Collection
 	mongoProjects          *mongo.Collection
-	mongoConversations     *mongo.Collection
+	mongoAgentChats        *mongo.Collection
 	mongoTasks             *mongo.Collection
 	mongoEvents            *mongo.Collection
 	mongoComments          *mongo.Collection
@@ -83,30 +82,30 @@ type AgentPresence struct {
 
 func New() *Store {
 	return &Store{
-		users:                make(map[string]*model.User),
-		usersByMail:          make(map[string]string),
-		agents:               make(map[string]*model.Agent),
-		agentByNode:          make(map[string]string),
-		projects:             make(map[string]*model.Project),
-		conversations:        make(map[string]*model.Conversation),
-		projectConversations: make(map[string][]string),
-		tasks:                make(map[string]*model.TaskDetail),
-		projectTasks:         make(map[string][]string),
-		conversationTasks:    make(map[string]string),
-		taskEvents:           make(map[string][]model.Event),
-		userEvents:           make(map[string][]*model.Event),
-		agentEvents:          make(map[string][]*model.Event),
-		processedMessages:    make(map[string]processedMessage),
-		taskArtifacts:        make(map[string][]model.TaskArtifact),
-		taskComments:         make(map[string][]model.Comment),
-		notifications:        make(map[string]*model.Notification),
-		userNotifications:    make(map[string][]string),
-		joinRequests:         make(map[string]*model.JoinRequest),
-		userJoinRequests:     make(map[string][]string),
-		trustRequestIndex:    make(map[string]string),
-		knowledgeDocs:        make(map[string]*model.KnowledgeDocument),
-		userKnowledgeDocs:    make(map[string][]string),
-		userSubscribers:      make(map[string]map[chan model.UserStreamEvent]struct{}),
+		users:              make(map[string]*model.User),
+		usersByMail:        make(map[string]string),
+		agents:             make(map[string]*model.Agent),
+		agentByNode:        make(map[string]string),
+		projects:           make(map[string]*model.Project),
+		agentChats:         make(map[string]*model.AgentChat),
+		activeAgentChats:   make(map[string]string),
+		agentChatBySession: make(map[string]string),
+		tasks:              make(map[string]*model.TaskDetail),
+		projectTasks:       make(map[string][]string),
+		taskEvents:         make(map[string][]model.Event),
+		userEvents:         make(map[string][]*model.Event),
+		agentEvents:        make(map[string][]*model.Event),
+		processedMessages:  make(map[string]processedMessage),
+		taskArtifacts:      make(map[string][]model.TaskArtifact),
+		taskComments:       make(map[string][]model.Comment),
+		notifications:      make(map[string]*model.Notification),
+		userNotifications:  make(map[string][]string),
+		joinRequests:       make(map[string]*model.JoinRequest),
+		userJoinRequests:   make(map[string][]string),
+		trustRequestIndex:  make(map[string]string),
+		knowledgeDocs:      make(map[string]*model.KnowledgeDocument),
+		userKnowledgeDocs:  make(map[string][]string),
+		userSubscribers:    make(map[string]map[chan model.UserStreamEvent]struct{}),
 	}
 }
 
@@ -146,6 +145,7 @@ func copyProject(p *model.Project) *model.Project {
 
 func copyTask(t *model.TaskDetail) *model.TaskDetail {
 	clone := *t
+	clone.Messages = copyTaskMessages(t.Messages)
 	clone.Todos = append([]model.Todo{}, t.Todos...)
 	clone.Artifacts = append([]model.TaskArtifact{}, t.Artifacts...)
 	clone.Result = model.TaskResult{
@@ -193,6 +193,53 @@ func copyTask(t *model.TaskDetail) *model.TaskDetail {
 		clone.Todos[i].Result.Metadata = copyMap(clone.Todos[i].Result.Metadata)
 	}
 	return &clone
+}
+
+func copyTaskMessages(messages []model.TaskMessage) []model.TaskMessage {
+	if len(messages) == 0 {
+		return nil
+	}
+	clone := make([]model.TaskMessage, len(messages))
+	for i := range messages {
+		clone[i] = messages[i]
+		clone[i].UIBlocks = copyUIBlocks(messages[i].UIBlocks)
+		clone[i].UIResponse = copyUIResponse(messages[i].UIResponse)
+	}
+	return clone
+}
+
+func copyUIBlocks(blocks []model.UIBlock) []model.UIBlock {
+	if len(blocks) == 0 {
+		return nil
+	}
+	clone := make([]model.UIBlock, len(blocks))
+	for i := range blocks {
+		clone[i] = blocks[i]
+		clone[i].Options = append([]model.UIBlockOption{}, blocks[i].Options...)
+		clone[i].Default = append([]string{}, blocks[i].Default...)
+		if blocks[i].Required != nil {
+			required := *blocks[i].Required
+			clone[i].Required = &required
+		}
+	}
+	return clone
+}
+
+func copyUIResponse(resp *model.UIResponse) *model.UIResponse {
+	if resp == nil {
+		return nil
+	}
+	clone := &model.UIResponse{Blocks: make(map[string]model.UIBlockResponse, len(resp.Blocks))}
+	for key, value := range resp.Blocks {
+		copied := value
+		copied.Selected = append([]string{}, value.Selected...)
+		if value.Confirmed != nil {
+			confirmed := *value.Confirmed
+			copied.Confirmed = &confirmed
+		}
+		clone.Blocks[key] = copied
+	}
+	return clone
 }
 
 func copyMap(in map[string]any) map[string]any {

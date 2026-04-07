@@ -24,6 +24,7 @@ import {
 import { AgentTaskList } from '@/components/agent/AgentTaskList'
 import { AgentConfigDialog } from '@/components/agent/AgentConfigDialog'
 import { ArchiveAgentDialog } from '@/components/agent/ArchiveAgentDialog'
+import { AgentChatPanel } from '@/components/agent/AgentChatPanel'
 import { CreateTaskDialog } from '@/components/task/CreateTaskDialog'
 import { Avatar } from '@/components/ui/avatar'
 import type { EventType } from '@/types'
@@ -103,8 +104,8 @@ export function AgentDetailPage() {
     : (events ?? []).filter((e) => e.event_type === filter)
 
   return (
-    <PageContainer ref={containerRef} className="h-full overflow-y-auto overflow-x-hidden p-0 [--agent-header-h:4.5rem]">
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="min-h-full bg-background">
+    <PageContainer ref={containerRef} className="flex h-full min-h-0 flex-col overflow-hidden p-0 [--agent-header-h:4.5rem]">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col bg-background">
         {/* Sticky header with integrated tab navigation */}
         <div ref={headerRef} className="sticky top-0 z-20 border-b bg-background/95 px-6 py-3 supports-backdrop-filter:backdrop-blur-xs">
           <div className="relative flex items-center gap-3">
@@ -153,6 +154,7 @@ export function AgentDetailPage() {
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <TabsList variant="line" className="pointer-events-auto">
                 <TabsTrigger value="overview">概览</TabsTrigger>
+                <TabsTrigger value="chat">对话</TabsTrigger>
                 <TabsTrigger value="tasks">工作记录</TabsTrigger>
                 <TabsTrigger value="activity">活动日志</TabsTrigger>
               </TabsList>
@@ -198,10 +200,10 @@ export function AgentDetailPage() {
           </div>
         )}
 
-        <div className="px-6 py-4">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-4">
           {/* Tab: 概览 */}
-          <TabsContent value="overview">
-            <div className="flex flex-col gap-4">
+          <TabsContent value="overview" className="min-h-0 flex-1 overflow-y-auto">
+            <div className="flex flex-col gap-4 pb-2">
               {stats && <AgentMetricCards stats={stats} />}
               {stats && <AgentDailyChart stats={stats} />}
               {stats && (
@@ -215,13 +217,17 @@ export function AgentDetailPage() {
             </div>
           </TabsContent>
 
+          <TabsContent value="chat" className="min-h-0 flex-1 overflow-hidden">
+            <AgentChatPanel agent={agent} />
+          </TabsContent>
+
           {/* Tab: 工作记录 */}
-          <TabsContent value="tasks">
+          <TabsContent value="tasks" className="min-h-0 flex-1 overflow-y-auto">
             {id && <AgentTaskList agentId={id} />}
           </TabsContent>
 
           {/* Tab: 活动日志 */}
-          <TabsContent value="activity">
+          <TabsContent value="activity" className="min-h-0 flex-1 overflow-y-auto">
             <div className="flex flex-wrap gap-1 mb-4">
               {eventTypeFilters.map((f) => (
                 <Button

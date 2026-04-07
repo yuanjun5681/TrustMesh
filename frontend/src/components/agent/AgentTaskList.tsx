@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ClipboardList, Circle, CircleDot, CheckCircle2, XCircle, CircleSlash2 } from 'lucide-react'
+import { ClipboardList, Circle, CircleDot, CheckCircle2, XCircle, CircleSlash2, MessageSquareMore } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PriorityBadge } from '@/components/shared/StatusBadge'
 import { EmptyState } from '@/components/shared/EmptyState'
@@ -11,6 +11,7 @@ import type { AgentTaskItem, TaskStatus } from '@/types'
 
 const statusFilters: { label: string; value: TaskStatus | 'all' }[] = [
   { label: '全部', value: 'all' },
+  { label: '规划中', value: 'planning' },
   { label: '进行中', value: 'in_progress' },
   { label: '待处理', value: 'pending' },
   { label: '已完成', value: 'done' },
@@ -19,6 +20,8 @@ const statusFilters: { label: string; value: TaskStatus | 'all' }[] = [
 ]
 
 const statusIcon: Record<TaskStatus, { icon: typeof Circle; className: string }> = {
+  planning: { icon: MessageSquareMore, className: 'text-info' },
+  review: { icon: MessageSquareMore, className: 'text-warning' },
   pending: { icon: Circle, className: 'text-muted-foreground' },
   in_progress: { icon: CircleDot, className: 'text-info animate-pulse' },
   done: { icon: CheckCircle2, className: 'text-success' },

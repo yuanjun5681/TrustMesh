@@ -138,9 +138,9 @@ function PMMetricCards({ stats }: { stats: AgentStats }) {
         <CardContent className="p-4">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
             <MessageSquare className="size-3.5" />
-            <span className="text-xs">对话回复</span>
+            <span className="text-xs">规划回复</span>
           </div>
-          <div className="text-2xl font-bold">{stats.conversation_replies}</div>
+          <div className="text-2xl font-bold">{stats.planning_replies}</div>
         </CardContent>
       </Card>
     </div>

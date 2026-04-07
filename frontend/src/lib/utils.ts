@@ -35,3 +35,34 @@ export function formatDateTime(dateStr: string): string {
     minute: '2-digit',
   })
 }
+
+export function normalizeEscapedText(value: string | null | undefined) {
+  if (!value) {
+    return ''
+  }
+
+  return value
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+}
+
+export function stripMessagePrefix(content: string): string {
+  return content.replace(/^(?:\s*\[[^[\]]+\]\s*)+/u, '').trimStart()
+}
+
+export function normalizeChatMessageContent(content: string): string {
+  const stripped = stripMessagePrefix(content)
+
+  if (!(stripped.startsWith('"') && stripped.endsWith('"'))) {
+    return stripped
+  }
+
+  try {
+    const parsed = JSON.parse(stripped)
+    return typeof parsed === 'string' ? parsed : stripped
+  } catch {
+    return stripped
+  }
+}

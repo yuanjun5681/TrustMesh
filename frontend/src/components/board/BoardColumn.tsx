@@ -3,6 +3,8 @@ import type { TaskListItem, TaskStatus } from '@/types'
 import { TaskCard } from './TaskCard'
 
 const columnConfig: Record<TaskStatus, { title: string; accent: string }> = {
+  planning: { title: '规划中', accent: 'border-t-info' },
+  review: { title: '待确认', accent: 'border-t-warning' },
   pending: { title: '待处理', accent: 'border-t-muted-foreground' },
   in_progress: { title: '进行中', accent: 'border-t-info' },
   done: { title: '已完成', accent: 'border-t-success' },

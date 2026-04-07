@@ -24,7 +24,8 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       ALLOW_ALL_CORS: ${ALLOW_ALL_CORS:-false}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in the project root .env file}
-      TOKEN_TTL: ${TOKEN_TTL:-24h}
+      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-168h}
       MONGO_ENABLED: ${MONGO_ENABLED:-true}
       MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017}
       MONGO_DATABASE: ${MONGO_DATABASE:-trustmesh}

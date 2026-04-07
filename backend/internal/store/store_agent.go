@@ -662,10 +662,10 @@ func (s *Store) pmStatsUnsafe(agentID string) *model.AgentStats {
 		stats.TaskSuccessRate = float64(stats.TasksDone) / float64(finished) * 100
 	}
 
-	// conversation replies count from agent events
+	// planning replies count from agent events
 	for _, ev := range s.agentEvents[agentID] {
-		if ev.EventType == "conversation_reply" && ev.UserID == agent.UserID {
-			stats.ConversationReplies++
+		if ev.EventType == "planning_reply" && ev.UserID == agent.UserID {
+			stats.PlanningReplies++
 		}
 	}
 

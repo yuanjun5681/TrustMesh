@@ -47,14 +47,14 @@ type AgentStats struct {
 	AvgCompletionTimeMs *float64 `json:"avg_completion_time_ms"`
 
 	// PM 维度
-	ProjectsManaged     int     `json:"projects_managed"`
-	TasksCreated        int     `json:"tasks_created"`
-	TasksDone           int     `json:"tasks_done"`
-	TasksFailed         int     `json:"tasks_failed"`
-	TasksInProgress     int     `json:"tasks_in_progress"`
-	TasksPending        int     `json:"tasks_pending"`
-	TaskSuccessRate     float64 `json:"task_success_rate"`
-	ConversationReplies int     `json:"conversation_replies"`
+	ProjectsManaged int     `json:"projects_managed"`
+	TasksCreated    int     `json:"tasks_created"`
+	TasksDone       int     `json:"tasks_done"`
+	TasksFailed     int     `json:"tasks_failed"`
+	TasksInProgress int     `json:"tasks_in_progress"`
+	TasksPending    int     `json:"tasks_pending"`
+	TaskSuccessRate float64 `json:"task_success_rate"`
+	PlanningReplies int     `json:"planning_replies"`
 
 	DailyActivity   []DailyActivityItem `json:"daily_activity"`
 	CurrentWorkload []WorkloadItem      `json:"current_workload"`

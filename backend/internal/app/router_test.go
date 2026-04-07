@@ -76,7 +76,7 @@ func clawsynapseHealthResponse(t *testing.T, nodeID string) string {
 	return string(body)
 }
 
-func TestHappyPathAuthToConversation(t *testing.T) {
+func TestHappyPathAuthToPlanningTask(t *testing.T) {
 	log, err := logger.New("error")
 	if err != nil {
 		t.Fatalf("new logger: %v", err)
@@ -171,15 +171,15 @@ func TestHappyPathAuthToConversation(t *testing.T) {
 		t.Fatalf("unexpected initial project task count: %v", nestedFloat(projectData, "data", "task_summary", "task_total"))
 	}
 
-	conversationResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/projects/"+projectID+"/conversations", token, map[string]any{
+	planningResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/projects/"+projectID+"/tasks/planning", token, map[string]any{
 		"content": "我需要一个登录功能",
 	})
-	if conversationResp.StatusCode != http.StatusCreated {
-		t.Fatalf("create conversation status=%d", conversationResp.StatusCode)
+	if planningResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create planning task status=%d", planningResp.StatusCode)
 	}
-	conversationData := decodeBody(t, conversationResp)
-	if nestedString(conversationData, "data", "status") != "active" {
-		t.Fatalf("unexpected conversation status: %s", nestedString(conversationData, "data", "status"))
+	planningData := decodeBody(t, planningResp)
+	if nestedString(planningData, "data", "status") != "planning" {
+		t.Fatalf("unexpected planning task status: %s", nestedString(planningData, "data", "status"))
 	}
 
 	taskResp := doJSON(t, testServer.Client(), "GET", testServer.URL+"/api/v1/projects/"+projectID+"/tasks", token, nil)
@@ -187,7 +187,7 @@ func TestHappyPathAuthToConversation(t *testing.T) {
 		t.Fatalf("list tasks status=%d", taskResp.StatusCode)
 	}
 	taskData := decodeBody(t, taskResp)
-	if nestedFloat(taskData, "meta", "count") != 0 {
+	if nestedFloat(taskData, "meta", "count") != 1 {
 		t.Fatalf("unexpected task count: %v", nestedFloat(taskData, "meta", "count"))
 	}
 }
@@ -328,7 +328,7 @@ func TestInvitePromptUsesNodeIDFromClawSynapseHealth(t *testing.T) {
 	}
 }
 
-func TestCreateConversationPublishesInitialPMBrief(t *testing.T) {
+func TestCreatePlanningTaskPublishesInitialPMBrief(t *testing.T) {
 	log, err := logger.New("error")
 	if err != nil {
 		t.Fatalf("new logger: %v", err)
@@ -433,11 +433,11 @@ func TestCreateConversationPublishesInitialPMBrief(t *testing.T) {
 	})
 	projectID := nestedString(decodeBody(t, projectResp), "data", "id")
 
-	conversationResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/projects/"+projectID+"/conversations", token, map[string]any{
+	conversationResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/projects/"+projectID+"/tasks/planning", token, map[string]any{
 		"content": "实现一个带邮箱密码登录和退出能力的认证功能",
 	})
 	if conversationResp.StatusCode != http.StatusCreated {
-		t.Fatalf("create conversation status=%d", conversationResp.StatusCode)
+		t.Fatalf("create planning task status=%d", conversationResp.StatusCode)
 	}
 
 	mu.Lock()
@@ -450,7 +450,7 @@ func TestCreateConversationPublishesInitialPMBrief(t *testing.T) {
 	if publishReq["targetNode"] != "node-pm-001" {
 		t.Fatalf("unexpected targetNode: %v", publishReq["targetNode"])
 	}
-	if publishReq["type"] != "conversation.message" {
+	if publishReq["type"] != "task.message" {
 		t.Fatalf("unexpected publish type: %v", publishReq["type"])
 	}
 
@@ -487,18 +487,11 @@ func TestCreateConversationPublishesInitialPMBrief(t *testing.T) {
 		t.Fatalf("unexpected candidate_agents: %#v", message["candidate_agents"])
 	}
 
-	pmBrief, ok := message["pm_brief"].(map[string]any)
-	if !ok {
-		t.Fatalf("pm_brief missing: %#v", message["pm_brief"])
+	if _, exists := message["pm_brief"]; exists {
+		t.Fatalf("pm_brief should be removed, got: %#v", message["pm_brief"])
 	}
-	if pmBrief["objective"] == "" {
-		t.Fatalf("pm_brief objective missing: %#v", pmBrief)
-	}
-	if pmBrief["must_clarify_before_task_create"] != true {
-		t.Fatalf("pm_brief must_clarify_before_task_create missing: %#v", pmBrief)
-	}
-	if pmBrief["must_use_skill"] != "tm-task-plan" {
-		t.Fatalf("pm_brief must_use_skill missing: %#v", pmBrief)
+	if message["schema_version"] != "1.0" {
+		t.Fatalf("schema_version expected 1.0, got: %#v", message["schema_version"])
 	}
 }
 
@@ -573,15 +566,14 @@ func TestCancelTaskEndpointCancelsTaskAndRejectsLateUpdates(t *testing.T) {
 	if appErr != nil {
 		t.Fatalf("create project: %v", appErr)
 	}
-	conversation, appErr := application.Store.CreateConversation(userID, project.ID, "Need login")
+	planTask, appErr := application.Store.CreateTaskPlanning(userID, project.ID, "Need login")
 	if appErr != nil {
-		t.Fatalf("create conversation: %v", appErr)
+		t.Fatalf("create planning task: %v", appErr)
 	}
-	task, appErr := application.Store.CreateTaskByPMNode(pm.NodeID, store.TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login",
-		Description:    "Support email/password login",
+	task, appErr := application.Store.FinalizePlanByPMNode(pm.NodeID, "msg-cancel-finalize", store.TaskPlanReadyInput{
+		TaskID:      planTask.ID,
+		Title:       "Implement login",
+		Description: "Support email/password login",
 		Todos: []store.TaskCreateTodoInput{
 			{
 				ID:             "todo-1",
@@ -592,7 +584,7 @@ func TestCancelTaskEndpointCancelsTaskAndRejectsLateUpdates(t *testing.T) {
 		},
 	})
 	if appErr != nil {
-		t.Fatalf("create task: %v", appErr)
+		t.Fatalf("finalize plan: %v", appErr)
 	}
 
 	cancelResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/tasks/"+task.ID+"/cancel", token, map[string]any{
@@ -700,15 +692,14 @@ func TestDispatchTodoPublishesAssignmentToAssignee(t *testing.T) {
 	if appErr != nil {
 		t.Fatalf("create project: %v", appErr)
 	}
-	conversation, appErr := application.Store.CreateConversation(userID, project.ID, "Need login")
+	planTask, appErr := application.Store.CreateTaskPlanning(userID, project.ID, "Need login")
 	if appErr != nil {
-		t.Fatalf("create conversation: %v", appErr)
+		t.Fatalf("create planning task: %v", appErr)
 	}
-	task, appErr := application.Store.CreateTaskByPMNode(pm.NodeID, store.TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login",
-		Description:    "Support email/password login",
+	task, appErr := application.Store.FinalizePlanByPMNode(pm.NodeID, "msg-dispatch-finalize", store.TaskPlanReadyInput{
+		TaskID:      planTask.ID,
+		Title:       "Implement login",
+		Description: "Support email/password login",
 		Todos: []store.TaskCreateTodoInput{
 			{
 				ID:             "todo-1",
@@ -719,7 +710,7 @@ func TestDispatchTodoPublishesAssignmentToAssignee(t *testing.T) {
 		},
 	})
 	if appErr != nil {
-		t.Fatalf("create task: %v", appErr)
+		t.Fatalf("finalize plan: %v", appErr)
 	}
 
 	dispatchResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/tasks/"+task.ID+"/todos/todo-1/dispatch", token, nil)
@@ -876,15 +867,14 @@ func TestAddTaskCommentPublishesMentionsToTaskParticipants(t *testing.T) {
 	if appErr != nil {
 		t.Fatalf("create project: %v", appErr)
 	}
-	conversation, appErr := application.Store.CreateConversation(userID, project.ID, "Need auth work")
+	planTask, appErr := application.Store.CreateTaskPlanning(userID, project.ID, "Need auth work")
 	if appErr != nil {
-		t.Fatalf("create conversation: %v", appErr)
+		t.Fatalf("create planning task: %v", appErr)
 	}
-	task, appErr := application.Store.CreateTaskByPMNode(pm.NodeID, store.TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login",
-		Description:    "Support email/password login",
+	task, appErr := application.Store.FinalizePlanByPMNode(pm.NodeID, "msg-mention-finalize", store.TaskPlanReadyInput{
+		TaskID:      planTask.ID,
+		Title:       "Implement login",
+		Description: "Support email/password login",
 		Todos: []store.TaskCreateTodoInput{
 			{
 				ID:             "todo-1",
@@ -895,7 +885,7 @@ func TestAddTaskCommentPublishesMentionsToTaskParticipants(t *testing.T) {
 		},
 	})
 	if appErr != nil {
-		t.Fatalf("create task: %v", appErr)
+		t.Fatalf("finalize plan: %v", appErr)
 	}
 
 	commentResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/tasks/"+task.ID+"/comments", token, map[string]any{
@@ -1037,15 +1027,14 @@ func TestDispatchTodoDoesNotPublishForArchivedProject(t *testing.T) {
 	if appErr != nil {
 		t.Fatalf("create project: %v", appErr)
 	}
-	conversation, appErr := application.Store.CreateConversation(userID, project.ID, "Need login")
+	planTask, appErr := application.Store.CreateTaskPlanning(userID, project.ID, "Need login")
 	if appErr != nil {
-		t.Fatalf("create conversation: %v", appErr)
+		t.Fatalf("create planning task: %v", appErr)
 	}
-	task, appErr := application.Store.CreateTaskByPMNode(pm.NodeID, store.TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login",
-		Description:    "Support email/password login",
+	task, appErr := application.Store.FinalizePlanByPMNode(pm.NodeID, "msg-archived-finalize", store.TaskPlanReadyInput{
+		TaskID:      planTask.ID,
+		Title:       "Implement login",
+		Description: "Support email/password login",
 		Todos: []store.TaskCreateTodoInput{
 			{
 				ID:             "todo-1",
@@ -1056,7 +1045,7 @@ func TestDispatchTodoDoesNotPublishForArchivedProject(t *testing.T) {
 		},
 	})
 	if appErr != nil {
-		t.Fatalf("create task: %v", appErr)
+		t.Fatalf("finalize plan: %v", appErr)
 	}
 	if _, appErr := application.Store.ArchiveProject(userID, project.ID); appErr != nil {
 		t.Fatalf("archive project: %v", appErr)
@@ -1133,38 +1122,38 @@ func TestUserRealtimeStreamPushesDomainEvents(t *testing.T) {
 	if appErr != nil {
 		t.Fatalf("create project: %v", appErr)
 	}
-	conversation, appErr := application.Store.CreateConversation(userID, project.ID, "Need login flow")
+	planTask, appErr := application.Store.CreateTaskPlanning(userID, project.ID, "Need login flow")
 	if appErr != nil {
-		t.Fatalf("create conversation: %v", appErr)
+		t.Fatalf("create planning task: %v", appErr)
 	}
 
 	streamResp := openSSE(t, testServer.Client(), testServer.URL+"/api/v1/events/stream", token)
 	defer streamResp.Body.Close()
 	reader := bufio.NewReader(streamResp.Body)
 
-	if _, appErr := application.Store.AppendPMReplyByNode(pm.NodeID, conversation.ID, "先确认一下登录方式", nil); appErr != nil {
-		t.Fatalf("append pm reply: %v", appErr)
+	if _, appErr := application.Store.AppendPMTaskReply(pm.NodeID, planTask.ID, "先确认一下登录方式", nil); appErr != nil {
+		t.Fatalf("append pm task reply: %v", appErr)
 	}
 
 	notificationCreated := readUserStreamEventOfType(t, reader, "notification.created")
-	if nestedString(notificationCreated, "payload", "notification", "category") != "conversation" {
+	if nestedString(notificationCreated, "payload", "notification", "category") != "task" {
 		t.Fatalf("unexpected notification.created payload: %#v", notificationCreated)
 	}
 
-	conversationUpdated := readUserStreamEventOfType(t, reader, "conversation.updated")
-	if nestedString(conversationUpdated, "payload", "conversation", "id") != conversation.ID {
-		t.Fatalf("unexpected conversation.updated payload: %#v", conversationUpdated)
-	}
-	messages, ok := conversationUpdated["payload"].(map[string]any)["conversation"].(map[string]any)["messages"].([]any)
+	taskUpdated := readUserStreamEventMatching(t, reader, func(payload map[string]any) bool {
+		return nestedString(payload, "type") == "task.updated" &&
+			nestedString(payload, "payload", "task", "id") == planTask.ID &&
+			nestedString(payload, "payload", "task", "status") == "planning"
+	})
+	messages, ok := taskUpdated["payload"].(map[string]any)["task"].(map[string]any)["messages"].([]any)
 	if !ok || len(messages) != 2 {
-		t.Fatalf("unexpected conversation messages payload: %#v", conversationUpdated)
+		t.Fatalf("unexpected planning task messages payload: %#v", taskUpdated)
 	}
 
-	task, appErr := application.Store.CreateTaskByPMNode(pm.NodeID, store.TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login",
-		Description:    "Support email/password login",
+	task, appErr := application.Store.FinalizePlanByPMNode(pm.NodeID, "msg-realtime-finalize", store.TaskPlanReadyInput{
+		TaskID:      planTask.ID,
+		Title:       "Implement login",
+		Description: "Support email/password login",
 		Todos: []store.TaskCreateTodoInput{
 			{
 				ID:             "todo-1",
@@ -1175,7 +1164,7 @@ func TestUserRealtimeStreamPushesDomainEvents(t *testing.T) {
 		},
 	})
 	if appErr != nil {
-		t.Fatalf("create task: %v", appErr)
+		t.Fatalf("finalize plan: %v", appErr)
 	}
 
 	if _, appErr := application.Store.UpdateTodoProgressByNode(dev.NodeID, store.TodoProgressInput{
@@ -1191,13 +1180,13 @@ func TestUserRealtimeStreamPushesDomainEvents(t *testing.T) {
 		t.Fatalf("unexpected task.event.created payload: %#v", taskEventCreated)
 	}
 
-	taskUpdated := readUserStreamEventMatching(t, reader, func(payload map[string]any) bool {
+	taskInProgress := readUserStreamEventMatching(t, reader, func(payload map[string]any) bool {
 		return nestedString(payload, "type") == "task.updated" &&
 			nestedString(payload, "payload", "task", "id") == task.ID &&
 			nestedString(payload, "payload", "task", "status") == "in_progress"
 	})
-	if nestedString(taskUpdated, "payload", "task", "status") != "in_progress" {
-		t.Fatalf("unexpected task.updated payload: %#v", taskUpdated)
+	if nestedString(taskInProgress, "payload", "task", "status") != "in_progress" {
+		t.Fatalf("unexpected task.updated payload: %#v", taskInProgress)
 	}
 
 	if _, appErr := application.Store.AddTaskComment(userID, task.ID, store.TaskCommentInput{
@@ -1275,17 +1264,17 @@ func TestUserRealtimeStreamPushesNotificationReadLifecycle(t *testing.T) {
 	if appErr != nil {
 		t.Fatalf("create project: %v", appErr)
 	}
-	conversation, appErr := application.Store.CreateConversation(userID, project.ID, "Need notification coverage")
+	planTask, appErr := application.Store.CreateTaskPlanning(userID, project.ID, "Need notification coverage")
 	if appErr != nil {
-		t.Fatalf("create conversation: %v", appErr)
+		t.Fatalf("create planning task: %v", appErr)
 	}
 
 	streamResp := openSSE(t, testServer.Client(), testServer.URL+"/api/v1/events/stream", token)
 	defer streamResp.Body.Close()
 	reader := bufio.NewReader(streamResp.Body)
 
-	if _, appErr := application.Store.AppendPMReplyByNode(pm.NodeID, conversation.ID, "收到，我来分析", nil); appErr != nil {
-		t.Fatalf("append pm reply: %v", appErr)
+	if _, appErr := application.Store.AppendPMTaskReply(pm.NodeID, planTask.ID, "收到，我来分析", nil); appErr != nil {
+		t.Fatalf("append pm task reply: %v", appErr)
 	}
 	created := readUserStreamEventOfType(t, reader, "notification.created")
 	notificationID := nestedString(created, "payload", "notification", "id")
@@ -1302,8 +1291,8 @@ func TestUserRealtimeStreamPushesNotificationReadLifecycle(t *testing.T) {
 		t.Fatalf("unexpected notification.read payload: %#v", readEvent)
 	}
 
-	if _, appErr := application.Store.AppendPMReplyByNode(pm.NodeID, conversation.ID, "补充一个细节", nil); appErr != nil {
-		t.Fatalf("append second pm reply: %v", appErr)
+	if _, appErr := application.Store.AppendPMTaskReply(pm.NodeID, planTask.ID, "补充一个细节", nil); appErr != nil {
+		t.Fatalf("append second pm task reply: %v", appErr)
 	}
 	secondCreated := readUserStreamEventOfType(t, reader, "notification.created")
 	secondID := nestedString(secondCreated, "payload", "notification", "id")
@@ -1387,15 +1376,14 @@ func TestGetTaskArtifactContent(t *testing.T) {
 	if appErr != nil {
 		t.Fatalf("create project: %v", appErr)
 	}
-	conversation, appErr := application.Store.CreateConversation(userID, project.ID, "Need content")
+	planTask, appErr := application.Store.CreateTaskPlanning(userID, project.ID, "Need content")
 	if appErr != nil {
-		t.Fatalf("create conversation: %v", appErr)
+		t.Fatalf("create planning task: %v", appErr)
 	}
-	task, appErr := application.Store.CreateTaskByPMNode(pm.NodeID, store.TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Deliver document",
-		Description:    "Upload markdown guide",
+	task, appErr := application.Store.FinalizePlanByPMNode(pm.NodeID, "msg-artifact-finalize", store.TaskPlanReadyInput{
+		TaskID:      planTask.ID,
+		Title:       "Deliver document",
+		Description: "Upload markdown guide",
 		Todos: []store.TaskCreateTodoInput{
 			{
 				ID:             "todo-1",
@@ -1406,7 +1394,7 @@ func TestGetTaskArtifactContent(t *testing.T) {
 		},
 	})
 	if appErr != nil {
-		t.Fatalf("create task: %v", appErr)
+		t.Fatalf("finalize plan: %v", appErr)
 	}
 
 	tmpFile, err := os.CreateTemp(t.TempDir(), "guide-*.md")

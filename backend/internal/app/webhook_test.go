@@ -114,20 +114,14 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 	})
 	projectID := nestedString(decodeBody(t, projectResp), "data", "id")
 
-	conversationResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/projects/"+projectID+"/conversations", token, map[string]any{
-		"content": "Build login flow",
-	})
-	conversationID := nestedString(decodeBody(t, conversationResp), "data", "id")
-
 	mu.Lock()
 	initialPublishCount := len(publishRequests)
 	mu.Unlock()
 
 	taskCreateMessage, err := json.Marshal(map[string]any{
-		"project_id":      projectID,
-		"conversation_id": conversationID,
-		"title":           "Implement login",
-		"description":     "Support email and password login",
+		"project_id":  projectID,
+		"title":       "Implement login",
+		"description": "Support email and password login",
 		"todos": []map[string]any{
 			{
 				"id":               "todo-1",
@@ -336,6 +330,306 @@ func TestWebhookTaskLifecycle(t *testing.T) {
 	updatedArtifact, _ := artifacts3[0].(map[string]any)
 	if updatedArtifact["file_name"] != "login-guide-v2.md" {
 		t.Fatalf("expected overwritten file_name, got %s", updatedArtifact["file_name"])
+	}
+}
+
+func TestWebhookPlanningTaskLifecycle(t *testing.T) {
+	log, err := logger.New("error")
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	defer func() { _ = log.Sync() }()
+
+	var (
+		mu              sync.Mutex
+		publishRequests []map[string]any
+	)
+
+	clawServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/health":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(clawsynapseHealthResponse(t, "n1-local-trustmesh")))
+		case "/v1/peers":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(clawsynapsePeersResponse(t, "node-pm-001", "node-dev-001")))
+		case "/v1/publish":
+			defer r.Body.Close()
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode publish payload: %v", err)
+			}
+			mu.Lock()
+			publishRequests = append(publishRequests, payload)
+			mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"code":"msg.published","message":"ok","data":{"targetNode":"node-dev-001","messageId":"msg-1"},"ts":1}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer clawServer.Close()
+
+	application, err := New(config.Config{
+		Port:               "0",
+		JWTSecret:          "test-secret",
+		AccessTokenTTL:     time.Hour,
+		RefreshTokenTTL:    168 * time.Hour,
+		LogLevel:           "error",
+		AllowAllCORS:       true,
+		ReadTimeout:        3 * time.Second,
+		ShutdownGrace:      3 * time.Second,
+		ClawSynapseAPIURL:  clawServer.URL,
+		ClawSynapseTimeout: time.Second,
+	}, log)
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
+	defer func() {
+		if closeErr := application.Close(); closeErr != nil {
+			t.Fatalf("close app: %v", closeErr)
+		}
+	}()
+
+	testServer := httptest.NewServer(application.Engine)
+	defer testServer.Close()
+
+	registerResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/auth/register", "", map[string]any{
+		"email":    "planning-webhook@example.com",
+		"name":     "Planning User",
+		"password": "StrongPass123!",
+	})
+	token := nestedString(decodeBody(t, registerResp), "data", "access_token")
+
+	pmResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/agents", token, map[string]any{
+		"node_id":      "node-pm-001",
+		"name":         "PM Agent",
+		"role":         "pm",
+		"description":  "PM",
+		"capabilities": []string{"plan"},
+	})
+	pmID := nestedString(decodeBody(t, pmResp), "data", "id")
+
+	devResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/agents", token, map[string]any{
+		"node_id":      "node-dev-001",
+		"name":         "Developer",
+		"role":         "developer",
+		"description":  "Dev",
+		"capabilities": []string{"backend"},
+	})
+	_ = nestedString(decodeBody(t, devResp), "data", "id")
+
+	application.Store.SyncAgentPresence([]store.AgentPresence{
+		{NodeID: "node-pm-001", LastSeenAt: time.Now().UTC()},
+		{NodeID: "node-dev-001", LastSeenAt: time.Now().UTC()},
+	}, time.Now().UTC())
+
+	projectResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/projects", token, map[string]any{
+		"name":        "Planning Webhook Project",
+		"description": "demo",
+		"pm_agent_id": pmID,
+	})
+	projectID := nestedString(decodeBody(t, projectResp), "data", "id")
+
+	planningResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/projects/"+projectID+"/tasks/planning", token, map[string]any{
+		"content": "请规划一个登录流程",
+	})
+	if planningResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create planning task status=%d", planningResp.StatusCode)
+	}
+	planningTaskID := nestedString(decodeBody(t, planningResp), "data", "id")
+	if planningTaskID == "" {
+		t.Fatal("empty planning task id")
+	}
+
+	mu.Lock()
+	initialPublishCount := len(publishRequests)
+	mu.Unlock()
+
+	taskReplyMessage, err := json.Marshal(map[string]any{
+		"task_id": planningTaskID,
+		"content": "先确认是否只支持邮箱密码登录",
+	})
+	if err != nil {
+		t.Fatalf("marshal task.reply: %v", err)
+	}
+
+	replyResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/webhook/clawsynapse", "", map[string]any{
+		"nodeId":  "n1-local-trustmesh",
+		"type":    "task.reply",
+		"from":    "node-pm-001",
+		"message": string(taskReplyMessage),
+	})
+	if replyResp.StatusCode != http.StatusOK {
+		t.Fatalf("task.reply webhook status=%d", replyResp.StatusCode)
+	}
+	replyData := decodeBody(t, replyResp)
+	if nestedString(replyData, "data", "status") != "planning" {
+		t.Fatalf("unexpected task.reply response: %#v", replyData)
+	}
+	if messages, ok := replyData["data"].(map[string]any)["messages"].([]any); !ok || len(messages) != 2 {
+		t.Fatalf("unexpected planning messages after reply: %#v", replyData)
+	}
+
+	taskReadyMessage, err := json.Marshal(map[string]any{
+		"task_id":     planningTaskID,
+		"title":       "实现登录流程",
+		"description": "支持邮箱密码登录",
+		"todos": []map[string]any{
+			{
+				"id":               "todo-1",
+				"order":            1,
+				"title":            "实现认证接口",
+				"description":      "提供登录接口",
+				"assignee_node_id": "node-dev-001",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal task.plan_ready: %v", err)
+	}
+
+	readyResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/webhook/clawsynapse", "", map[string]any{
+		"nodeId":  "n1-local-trustmesh",
+		"type":    "task.plan_ready",
+		"from":    "node-pm-001",
+		"message": string(taskReadyMessage),
+		"metadata": map[string]any{
+			"messageId": "msg-task-plan-ready-1",
+		},
+	})
+	if readyResp.StatusCode != http.StatusOK {
+		t.Fatalf("task.plan_ready webhook status=%d", readyResp.StatusCode)
+	}
+	readyData := decodeBody(t, readyResp)
+	if nestedString(readyData, "data", "status") != "in_progress" {
+		t.Fatalf("unexpected finalized task status: %#v", readyData)
+	}
+
+	mu.Lock()
+	if len(publishRequests) != initialPublishCount+2 {
+		t.Fatalf("expected %d publish requests after task.plan_ready, got %d", initialPublishCount+2, len(publishRequests))
+	}
+	taskCreatedReq := publishRequests[initialPublishCount]
+	todoAssignedReq := publishRequests[initialPublishCount+1]
+	mu.Unlock()
+
+	if taskCreatedReq["type"] != "task.created" || taskCreatedReq["targetNode"] != "node-pm-001" {
+		t.Fatalf("unexpected task.created publish request: %#v", taskCreatedReq)
+	}
+	if todoAssignedReq["type"] != "todo.assigned" || todoAssignedReq["targetNode"] != "node-dev-001" {
+		t.Fatalf("unexpected todo.assigned publish request: %#v", todoAssignedReq)
+	}
+}
+
+func TestWebhookChatMessageDecodesJSONStringContent(t *testing.T) {
+	log, err := logger.New("error")
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	defer func() { _ = log.Sync() }()
+
+	clawServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/health":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(clawsynapseHealthResponse(t, "n1-local-trustmesh")))
+		case "/v1/peers":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(clawsynapsePeersResponse(t, "node-agent-001")))
+		case "/v1/publish":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"code":"msg.published","message":"ok","data":{"targetNode":"node-agent-001","messageId":"msg-1"},"ts":1}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer clawServer.Close()
+
+	application, err := New(config.Config{
+		Port:               "0",
+		JWTSecret:          "test-secret",
+		AccessTokenTTL:     time.Hour,
+		RefreshTokenTTL:    168 * time.Hour,
+		LogLevel:           "error",
+		AllowAllCORS:       true,
+		ReadTimeout:        3 * time.Second,
+		ShutdownGrace:      3 * time.Second,
+		ClawSynapseAPIURL:  clawServer.URL,
+		ClawSynapseTimeout: time.Second,
+	}, log)
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
+	defer func() {
+		if closeErr := application.Close(); closeErr != nil {
+			t.Fatalf("close app: %v", closeErr)
+		}
+	}()
+
+	testServer := httptest.NewServer(application.Engine)
+	defer testServer.Close()
+
+	registerResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/auth/register", "", map[string]any{
+		"email":    "chat-webhook@example.com",
+		"name":     "Chat User",
+		"password": "StrongPass123!",
+	})
+	token := nestedString(decodeBody(t, registerResp), "data", "access_token")
+
+	agentResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/agents", token, map[string]any{
+		"node_id":      "node-agent-001",
+		"name":         "Chat Agent",
+		"role":         "developer",
+		"description":  "Dev",
+		"capabilities": []string{"conversation"},
+	})
+	agentID := nestedString(decodeBody(t, agentResp), "data", "id")
+
+	application.Store.SyncAgentPresence([]store.AgentPresence{
+		{NodeID: "node-agent-001", LastSeenAt: time.Now().UTC()},
+	}, time.Now().UTC())
+
+	sendResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/agents/"+agentID+"/chat/messages", token, map[string]any{
+		"content": "帮我写一个简单的入门 Python 代码",
+	})
+	if sendResp.StatusCode != http.StatusOK {
+		t.Fatalf("send chat message status=%d", sendResp.StatusCode)
+	}
+	sendData := decodeBody(t, sendResp)
+	sessionKey := nestedString(sendData, "data", "session_key")
+	if sessionKey == "" {
+		t.Fatal("empty session key")
+	}
+
+	webhookResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/webhook/clawsynapse", "", map[string]any{
+		"nodeId":     "n1-local-trustmesh",
+		"type":       "chat.message",
+		"from":       "node-agent-001",
+		"sessionKey": sessionKey,
+		"message":    "\"当然可以！\\n\\n# Hello World 程序\\nprint(\\\"Hello, World!\\\")\"",
+		"metadata": map[string]any{
+			"messageId": "msg-chat-reply-1",
+		},
+	})
+	if webhookResp.StatusCode != http.StatusOK {
+		t.Fatalf("chat.message webhook status=%d", webhookResp.StatusCode)
+	}
+
+	chatResp := doJSON(t, testServer.Client(), "GET", testServer.URL+"/api/v1/agents/"+agentID+"/chat", token, nil)
+	if chatResp.StatusCode != http.StatusOK {
+		t.Fatalf("get active chat status=%d", chatResp.StatusCode)
+	}
+	chatData := decodeBody(t, chatResp)
+	data := nestedMap(chatData, "data")
+	messages, _ := data["messages"].([]any)
+	if len(messages) != 2 {
+		t.Fatalf("expected 2 chat messages, got %d", len(messages))
+	}
+	reply, _ := messages[1].(map[string]any)
+	content, _ := reply["content"].(string)
+	if content != "当然可以！\n\n# Hello World 程序\nprint(\"Hello, World!\")" {
+		t.Fatalf("unexpected normalized content: %q", content)
 	}
 }
 

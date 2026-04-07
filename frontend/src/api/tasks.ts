@@ -1,8 +1,11 @@
 import { api } from './client'
 import type {
   AddTaskCommentResult,
+  AppendTaskMessageRequest,
   ApiResponse,
   ApiListResponse,
+  CreatePlanningTaskRequest,
+  RejectPlanRequest,
   TaskListItem,
   TaskDetail,
   TaskPriority,
@@ -22,6 +25,16 @@ export async function createTask(projectId: string, input: CreateTaskInput) {
   return api.post(`projects/${projectId}/tasks`, { json: input }).json<ApiResponse<TaskDetail>>()
 }
 
+export async function createPlanningTask(projectId: string, input: CreatePlanningTaskRequest) {
+  return api.post(`projects/${projectId}/tasks/planning`, { json: input }).json<ApiResponse<TaskDetail>>()
+}
+
+export async function createTaskFromText(projectId: string, content: string, agentId?: string) {
+  return api
+    .post(`projects/${projectId}/tasks/from-text`, { json: { content, agent_id: agentId ?? '' } })
+    .json<ApiResponse<TaskDetail>>()
+}
+
 export async function listProjectTasks(projectId: string, query?: ListProjectTasksQuery) {
   const searchParams: Record<string, string> = {}
   if (query?.status) searchParams.status = query.status
@@ -34,6 +47,10 @@ export async function getTask(id: string) {
   return api.get(`tasks/${id}`).json<ApiResponse<TaskDetail>>()
 }
 
+export async function appendTaskMessage(taskId: string, input: AppendTaskMessageRequest) {
+  return api.post(`tasks/${taskId}/messages`, { json: input }).json<ApiResponse<TaskDetail>>()
+}
+
 export async function listTaskEvents(id: string) {
   return api.get(`tasks/${id}/events`).json<ApiListResponse<Event>>()
 }
@@ -44,6 +61,14 @@ export async function dispatchTodo(taskId: string, todoId: string) {
 
 export async function cancelTask(taskId: string, reason: string) {
   return api.post(`tasks/${taskId}/cancel`, { json: { reason } }).json<ApiResponse<TaskDetail>>()
+}
+
+export async function approvePlan(taskId: string) {
+  return api.post(`tasks/${taskId}/approve`).json<ApiResponse<TaskDetail>>()
+}
+
+export async function rejectPlan(taskId: string, input: RejectPlanRequest) {
+  return api.post(`tasks/${taskId}/reject`, { json: input }).json<ApiResponse<TaskDetail>>()
 }
 
 export async function listTaskComments(taskId: string) {

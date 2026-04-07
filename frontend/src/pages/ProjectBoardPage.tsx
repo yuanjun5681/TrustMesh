@@ -1,16 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { MessageSquarePlus, Plus, MoreHorizontal, Pencil, Archive, Loader2 } from 'lucide-react'
+import { MessageSquarePlus, MoreHorizontal, Pencil, Archive, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { AgentStatusDot, ProjectStatusBadge, ProjectWorkStatusBadge } from '@/components/shared/StatusBadge'
 import { Avatar } from '@/components/ui/avatar'
 import { TaskListView } from '@/components/task/TaskListView'
-import { TaskDetailPanel } from '@/components/task/TaskDetailPanel'
-import { ConversationSheet } from '@/components/conversation/ConversationSheet'
+import { TaskWorkspace } from '@/components/task/TaskWorkspace'
 import { EditProjectDialog } from '@/components/project/EditProjectDialog'
 import { ArchiveProjectDialog } from '@/components/project/ArchiveProjectDialog'
-import { CreateTaskDialog } from '@/components/task/CreateTaskDialog'
 import { useProject } from '@/hooks/useProjects'
 import { useTasks } from '@/hooks/useTasks'
 import { formatDateTime, formatRelativeTime } from '@/lib/utils'
@@ -23,16 +21,19 @@ interface TaskSelectionState {
   autoSelectedTaskId: string | null
 }
 
+type WorkspaceState =
+  | { kind: 'task'; taskId: string }
+  | { kind: 'draft'; projectId: string }
+  | null
+
 export function ProjectBoardPage() {
   const navigate = useNavigate()
   const { projectId } = useParams<{ projectId: string }>()
   const { data: project } = useProject(projectId)
   const { data: tasks, isLoading } = useTasks(projectId)
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
-  const [sheetOpen, setSheetOpen] = useState(false)
+  const [workspace, setWorkspace] = useState<WorkspaceState>(null)
   const [editOpen, setEditOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
-  const [createTaskOpen, setCreateTaskOpen] = useState(false)
   const setFabVisibility = useAssistantStore((state) => state.setFabVisibility)
   const [taskSelectionState, setTaskSelectionState] = useState<TaskSelectionState>({
     observedTasks: undefined,
@@ -60,12 +61,13 @@ export function ProjectBoardPage() {
     })
   }
 
-  const activeSelectedTaskId = taskSelectionState.autoSelectedTaskId ?? selectedTaskId
+  const activeSelectedTaskId = taskSelectionState.autoSelectedTaskId ?? (workspace?.kind === 'task' ? workspace.taskId : null)
+  const hasWorkspace = !!workspace || !!taskSelectionState.autoSelectedTaskId
 
   useEffect(() => {
-    setFabVisibility(activeSelectedTaskId ? 'hidden' : 'visible')
+    setFabVisibility(hasWorkspace ? 'hidden' : 'visible')
     return () => setFabVisibility('visible')
-  }, [activeSelectedTaskId, setFabVisibility])
+  }, [hasWorkspace, setFabVisibility])
 
   const selectTask = (taskId: string | null) => {
     setTaskSelectionState((prev) => (
@@ -73,7 +75,19 @@ export function ProjectBoardPage() {
         ? { ...prev, autoSelectedTaskId: null }
         : prev
     ))
-    setSelectedTaskId(taskId)
+    setWorkspace(taskId ? { kind: 'task', taskId } : null)
+  }
+
+  const openDraftWorkspace = () => {
+    if (!projectId) {
+      return
+    }
+    setTaskSelectionState((prev) => (
+      prev.autoSelectedTaskId
+        ? { ...prev, autoSelectedTaskId: null }
+        : prev
+    ))
+    setWorkspace({ kind: 'draft', projectId })
   }
 
   return (
@@ -130,13 +144,9 @@ export function ProjectBoardPage() {
           )}
           </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" disabled={projectArchived} onClick={() => setCreateTaskOpen(true)}>
-            <Plus className="size-4 mr-1.5" />
-            创建任务
-          </Button>
-          <Button size="sm" disabled={projectArchived} onClick={() => setSheetOpen(true)}>
+          <Button size="sm" disabled={projectArchived} onClick={openDraftWorkspace}>
             <MessageSquarePlus className="size-4 mr-1.5" />
-            {projectArchived ? '项目已归档' : '提交新需求'}
+            {projectArchived ? '项目已归档' : '新任务'}
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger className="p-2 rounded-md hover:bg-muted">
@@ -169,7 +179,7 @@ export function ProjectBoardPage() {
       ) : (
         <div className="flex flex-1 min-h-0">
           {/* Left: Task List */}
-          <div className={`px-6 h-full ${activeSelectedTaskId ? 'w-1/2 border-r' : 'w-full'}`}>
+          <div className={`px-6 h-full ${hasWorkspace ? 'w-1/2 border-r' : 'w-full'}`}>
             <TaskListView
               tasks={tasks ?? []}
               selectedTaskId={activeSelectedTaskId}
@@ -177,40 +187,35 @@ export function ProjectBoardPage() {
             />
           </div>
 
-          {/* Right: Detail Panel */}
-          {activeSelectedTaskId && (
+          {/* Right: Task Workspace */}
+          {hasWorkspace && (
             <div className="w-1/2 h-full">
-              <TaskDetailPanel
-                key={activeSelectedTaskId}
-                taskId={activeSelectedTaskId}
-                onClose={() => selectTask(null)}
-              />
+              {taskSelectionState.autoSelectedTaskId ? (
+                <TaskWorkspace
+                  key={taskSelectionState.autoSelectedTaskId}
+                  taskId={taskSelectionState.autoSelectedTaskId}
+                  onClose={() => selectTask(null)}
+                />
+              ) : workspace?.kind === 'task' ? (
+                <TaskWorkspace
+                  key={workspace.taskId}
+                  taskId={workspace.taskId}
+                  onClose={() => selectTask(null)}
+                />
+              ) : workspace?.kind === 'draft' ? (
+                <TaskWorkspace
+                  key="draft-planning"
+                  projectId={workspace.projectId}
+                  onClose={() => setWorkspace(null)}
+                  onTaskCreated={(taskId) => setWorkspace({ kind: 'task', taskId })}
+                />
+              ) : null
+              }
             </div>
           )}
         </div>
       )}
 
-      {/* Conversation Sheet */}
-      {projectId && (
-        <ConversationSheet
-          projectId={projectId}
-          open={sheetOpen}
-          onOpenChange={setSheetOpen}
-          onTaskCreated={(taskId) => {
-            setSheetOpen(false)
-            selectTask(taskId)
-          }}
-        />
-      )}
-
-      {projectId && (
-        <CreateTaskDialog
-          open={createTaskOpen}
-          onOpenChange={setCreateTaskOpen}
-          projectId={projectId}
-          onCreated={(taskId) => selectTask(taskId)}
-        />
-      )}
       <EditProjectDialog open={editOpen} onOpenChange={setEditOpen} project={project} />
       <ArchiveProjectDialog
         open={archiveOpen}

@@ -63,6 +63,12 @@ JWT_SECRET=你的随机密钥字符串
 
 # ===== 按需修改 =====
 
+# Access Token 有效期，默认 15 分钟
+ACCESS_TOKEN_TTL=15m
+
+# Refresh Token 有效期，默认 7 天
+REFRESH_TOKEN_TTL=168h
+
 # ClawSynapse 节点 ID（TrustMesh 自身作为一个节点的标识，需全网唯一）
 CLAWSYNAPSE_NODE_ID=my-trustmesh
 

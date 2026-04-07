@@ -1,0 +1,417 @@
+package store
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"trustmesh/backend/internal/model"
+	"trustmesh/backend/internal/transport"
+)
+
+// ─── Planning task lifecycle ───
+// CreateTaskPlanning → AppendTaskMessage / AppendPMTaskReply (multi-round) → FinalizePlanByPMNode
+
+type TaskPlanReadyInput struct {
+	TaskID      string
+	Title       string
+	Description string
+	Todos       []TaskCreateTodoInput
+}
+
+func (s *Store) CreateTaskPlanning(userID, projectID, content string) (*model.TaskDetail, *transport.AppError) {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return nil, transport.Validation("invalid content", map[string]any{"content": "required"})
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	project, err := s.projectForUserUnsafe(userID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if project.Status == "archived" {
+		return nil, transport.Conflict("PROJECT_ARCHIVED", "archived project cannot create tasks")
+	}
+	if err := s.validateProjectPMAgentOnlineUnsafe(project); err != nil {
+		return nil, err
+	}
+
+	pmAgent, ok := s.agents[project.PMAgentID]
+	if !ok {
+		return nil, transport.Conflict("PROJECT_PM_AGENT_INVALID", "project bound PM agent is invalid")
+	}
+
+	now := time.Now().UTC()
+	msg := model.TaskMessage{ID: uuid.NewString(), Role: "user", Content: content, CreatedAt: now}
+
+	task := &model.TaskDetail{
+		ID:        newID(),
+		UserID:    userID,
+		ProjectID: project.ID,
+		Title:     content,
+		Status:    "planning",
+		Priority:  "medium",
+		PMAgentID: pmAgent.ID,
+		PMAgent:   toPMSummary(pmAgent),
+		Messages:  []model.TaskMessage{msg},
+		Todos:     []model.Todo{},
+		Result: model.TaskResult{
+			Summary:     "",
+			FinalOutput: "",
+			Metadata:    map[string]any{},
+		},
+		Version:   1,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	s.tasks[task.ID] = task
+	s.projectTasks[task.ProjectID] = append(s.projectTasks[task.ProjectID], task.ID)
+
+	taskTitle := task.Title
+	s.addEventUnsafe(userID, project.ID, task.ID, "", "user", userID, "", "task_created", &taskTitle, map[string]any{
+		"task_title": task.Title,
+		"mode":       "planning",
+	}, now)
+
+	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.publishTaskUnsafe(task.ID)
+
+	return s.copyTaskWithArtifactsUnsafe(task), nil
+}
+
+func (s *Store) AppendTaskMessage(userID, taskID, content string, uiResponse *model.UIResponse) (*model.TaskDetail, *transport.AppError) {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return nil, transport.Validation("invalid content", map[string]any{"content": "required"})
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[taskID]
+	if !ok || task.UserID != userID {
+		return nil, transport.NotFound("task not found")
+	}
+	if task.Status != "planning" {
+		return nil, transport.Conflict("TASK_NOT_PLANNING", "task is not in planning status")
+	}
+	if appErr := s.ensureTaskProjectActiveUnsafe(task); appErr != nil {
+		return nil, appErr
+	}
+	project, ok := s.projects[task.ProjectID]
+	if !ok {
+		return nil, transport.NotFound("project not found")
+	}
+	if err := s.validateProjectPMAgentOnlineUnsafe(project); err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	msg := model.TaskMessage{ID: uuid.NewString(), Role: "user", Content: content, UIResponse: uiResponse, CreatedAt: now}
+	task.Messages = append(task.Messages, msg)
+	task.UpdatedAt = now
+	task.Version++
+
+	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.publishTaskUnsafe(task.ID)
+
+	return s.copyTaskWithArtifactsUnsafe(task), nil
+}
+
+func (s *Store) AppendPMTaskReply(nodeID, taskID, content string, uiBlocks []model.UIBlock) (*model.TaskDetail, *transport.AppError) {
+	taskID = strings.TrimSpace(taskID)
+	content = strings.TrimSpace(content)
+	if taskID == "" || content == "" {
+		return nil, transport.Validation("invalid task.reply payload", map[string]any{"task_id": "required", "content": "required"})
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	pmAgent, err := s.agentByNodeUnsafe(nodeID)
+	if err != nil {
+		return nil, err
+	}
+	if pmAgent.Role != "pm" {
+		return nil, transport.Forbidden("only pm agent can reply to planning task")
+	}
+
+	task, ok := s.tasks[taskID]
+	if !ok {
+		return nil, transport.NotFound("task not found")
+	}
+	if task.Status != "planning" {
+		return nil, transport.Conflict("TASK_NOT_PLANNING", "task is not in planning status")
+	}
+
+	project, ok := s.projects[task.ProjectID]
+	if !ok {
+		return nil, transport.NotFound("project not found")
+	}
+	if project.PMAgentID != pmAgent.ID {
+		return nil, transport.Forbidden("pm agent is not bound to this project")
+	}
+
+	now := time.Now().UTC()
+	s.markAgentSeenUnsafe(pmAgent.ID, now)
+	msg := model.TaskMessage{ID: uuid.NewString(), Role: "pm_agent", Content: content, UIBlocks: uiBlocks, CreatedAt: now}
+	task.Messages = append(task.Messages, msg)
+	task.UpdatedAt = now
+	task.Version++
+
+	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, "", "agent", pmAgent.ID, pmAgent.Name, "planning_reply", &content, map[string]any{
+		"task_id": task.ID,
+	}, now)
+
+	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	if err := s.persistAgentGraphUnsafe(pmAgent.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.publishTaskUnsafe(task.ID)
+
+	return s.copyTaskWithArtifactsUnsafe(task), nil
+}
+
+func (s *Store) FinalizePlanByPMNode(nodeID, messageID string, in TaskPlanReadyInput) (*model.TaskDetail, *transport.AppError) {
+	in.TaskID = strings.TrimSpace(in.TaskID)
+	in.Title = strings.TrimSpace(in.Title)
+	in.Description = strings.TrimSpace(in.Description)
+	if in.TaskID == "" || in.Title == "" || in.Description == "" {
+		return nil, transport.Validation("invalid task.plan_ready payload", map[string]any{
+			"task_id":     "required",
+			"title":       "required",
+			"description": "required",
+		})
+	}
+	if len(in.Todos) == 0 {
+		return nil, transport.Validation("invalid task.plan_ready payload", map[string]any{"todos": "must not be empty"})
+	}
+	normalizedTodos, todoErr := normalizeTaskCreateTodos(in.Todos)
+	if todoErr != nil {
+		return nil, todoErr
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Idempotency: check processedMessages first
+	if task, ok := s.findProcessedTaskUnsafe(processedMessageKey("task.plan_ready", nodeID, messageID)); ok {
+		return task, nil
+	}
+
+	pmAgent, err := s.agentByNodeUnsafe(nodeID)
+	if err != nil {
+		return nil, err
+	}
+	if pmAgent.Role != "pm" {
+		return nil, transport.Forbidden("only pm agent can finalize plan")
+	}
+
+	task, ok := s.tasks[in.TaskID]
+	if !ok {
+		return nil, transport.NotFound("task not found")
+	}
+	// Idempotency: if already finalized, return current state
+	if task.Status != "planning" {
+		return s.copyTaskWithArtifactsUnsafe(task), nil
+	}
+
+	project, ok := s.projects[task.ProjectID]
+	if !ok {
+		return nil, transport.NotFound("project not found")
+	}
+	if project.Status == "archived" {
+		return nil, transport.Conflict("PROJECT_ARCHIVED", "archived project cannot finalize tasks")
+	}
+	if project.PMAgentID != pmAgent.ID {
+		return nil, transport.Forbidden("pm agent is not bound to this project")
+	}
+
+	now := time.Now().UTC()
+	s.markAgentSeenUnsafe(pmAgent.ID, now)
+
+	// Build todos
+	seenTodoIDs := make(map[string]struct{}, len(normalizedTodos))
+	todos := make([]model.Todo, 0, len(normalizedTodos))
+	for i, todoIn := range normalizedTodos {
+		title := strings.TrimSpace(todoIn.Title)
+		desc := strings.TrimSpace(todoIn.Description)
+		assigneeNode := strings.TrimSpace(todoIn.AssigneeNodeID)
+		if title == "" || desc == "" || assigneeNode == "" {
+			return nil, transport.Validation("invalid todo in task.plan_ready", map[string]any{"todo_index": i, "title": "required", "description": "required", "assignee_node_id": "required"})
+		}
+
+		assigneeAgent, assigneeErr := s.agentByNodeUnsafe(assigneeNode)
+		if assigneeErr != nil {
+			return nil, transport.Validation("invalid assignee_node_id", map[string]any{"todo_index": i, "assignee_node_id": assigneeNode})
+		}
+		if assigneeAgent.UserID != project.UserID {
+			return nil, transport.Forbidden("assignee agent does not belong to same user")
+		}
+
+		todoID := strings.TrimSpace(todoIn.ID)
+		if todoID == "" {
+			todoID = uuid.NewString()
+		}
+		if _, dup := seenTodoIDs[todoID]; dup {
+			return nil, transport.Validation("duplicated todo id", map[string]any{"todo_id": todoID})
+		}
+		seenTodoIDs[todoID] = struct{}{}
+
+		todos = append(todos, model.Todo{
+			ID:          todoID,
+			Order:       todoIn.Order,
+			Title:       title,
+			Description: desc,
+			Status:      "pending",
+			Assignee: model.TodoAssignee{
+				AgentID: assigneeAgent.ID,
+				Name:    assigneeAgent.Name,
+				NodeID:  assigneeAgent.NodeID,
+			},
+			Result: model.TodoResult{
+				Summary:  "",
+				Output:   "",
+				Metadata: map[string]any{},
+			},
+			CreatedAt: now,
+		})
+	}
+
+	// Update task: planning → review (awaiting user approval)
+	task.Title = in.Title
+	task.Description = in.Description
+	task.Status = "review"
+	task.Todos = todos
+	task.UpdatedAt = now
+	task.Version++
+
+	taskTitle := task.Title
+	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, "", "agent", pmAgent.ID, pmAgent.Name, "task_plan_ready", &taskTitle, map[string]any{
+		"task_title": task.Title,
+		"todo_count": len(todos),
+	}, now)
+
+	s.rememberProcessedMessageUnsafe(processedMessageKey("task.plan_ready", nodeID, messageID), "task.plan_ready", task.ID)
+	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	if err := s.persistAgentGraphUnsafe(pmAgent.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	if err := s.persistProcessedMessageUnsafe(processedMessageKey("task.plan_ready", nodeID, messageID)); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.publishTaskUnsafe(task.ID)
+
+	return s.copyTaskWithArtifactsUnsafe(task), nil
+}
+
+// ApprovePlan transitions a task from review → pending so todos can be dispatched.
+func (s *Store) ApprovePlan(userID, taskID string) (*model.TaskDetail, *transport.AppError) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[taskID]
+	if !ok || task.UserID != userID {
+		return nil, transport.NotFound("task not found")
+	}
+	if task.Status != "review" {
+		return nil, transport.Conflict("TASK_NOT_IN_REVIEW", "task is not awaiting approval")
+	}
+	if appErr := s.ensureTaskProjectActiveUnsafe(task); appErr != nil {
+		return nil, appErr
+	}
+
+	now := time.Now().UTC()
+	task.Status = "pending"
+	task.UpdatedAt = now
+	task.Version++
+
+	taskTitle := task.Title
+	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, "", "user", userID, "", "task_approved", &taskTitle, map[string]any{
+		"task_title": task.Title,
+	}, now)
+
+	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.publishTaskUnsafe(task.ID)
+
+	return s.copyTaskWithArtifactsUnsafe(task), nil
+}
+
+// RejectPlan transitions a task from review → planning and appends user feedback.
+func (s *Store) RejectPlan(userID, taskID, feedback string) (*model.TaskDetail, *transport.AppError) {
+	feedback = strings.TrimSpace(feedback)
+	if feedback == "" {
+		return nil, transport.Validation("invalid payload", map[string]any{"feedback": "required"})
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[taskID]
+	if !ok || task.UserID != userID {
+		return nil, transport.NotFound("task not found")
+	}
+	if task.Status != "review" {
+		return nil, transport.Conflict("TASK_NOT_IN_REVIEW", "task is not awaiting approval")
+	}
+	if appErr := s.ensureTaskProjectActiveUnsafe(task); appErr != nil {
+		return nil, appErr
+	}
+	project, ok := s.projects[task.ProjectID]
+	if !ok {
+		return nil, transport.NotFound("project not found")
+	}
+	if err := s.validateProjectPMAgentOnlineUnsafe(project); err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	msg := model.TaskMessage{ID: uuid.NewString(), Role: "user", Content: feedback, CreatedAt: now}
+	task.Messages = append(task.Messages, msg)
+	task.Status = "planning"
+	task.UpdatedAt = now
+	task.Version++
+
+	taskTitle := task.Title
+	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, "", "user", userID, "", "task_plan_rejected", &taskTitle, map[string]any{
+		"task_title": task.Title,
+		"feedback":   feedback,
+	}, now)
+
+	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.publishTaskUnsafe(task.ID)
+
+	return s.copyTaskWithArtifactsUnsafe(task), nil
+}
+
+// GetTaskPMNode returns the PM agent node ID for a planning task. Used by handler to send task.message.
+func (s *Store) GetTaskPMNode(userID, taskID string) (string, *transport.AppError) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	task, ok := s.tasks[taskID]
+	if !ok || task.UserID != userID {
+		return "", transport.NotFound("task not found")
+	}
+	if task.PMAgent.NodeID == "" {
+		return "", transport.Conflict("TASK_NO_PM", fmt.Sprintf("task %s has no PM agent", taskID))
+	}
+	return task.PMAgent.NodeID, nil
+}

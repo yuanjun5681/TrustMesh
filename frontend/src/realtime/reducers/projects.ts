@@ -8,6 +8,7 @@ function clampNonNegative(value: number) {
 
 function incrementStatusCount(summary: ProjectTaskSummary, status: TaskStatus) {
   switch (status) {
+    case 'planning':
     case 'pending':
       summary.pending_count += 1
       break
@@ -28,6 +29,7 @@ function incrementStatusCount(summary: ProjectTaskSummary, status: TaskStatus) {
 
 function decrementStatusCount(summary: ProjectTaskSummary, status: TaskStatus) {
   switch (status) {
+    case 'planning':
     case 'pending':
       summary.pending_count = clampNonNegative(summary.pending_count - 1)
       break

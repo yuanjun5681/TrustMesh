@@ -97,7 +97,7 @@ export interface UIResponse {
   blocks: Record<string, UIBlockResponse>
 }
 
-export interface ConversationMessage {
+export interface TaskMessage {
   id: string
   role: 'user' | 'pm_agent'
   content: string
@@ -115,6 +115,15 @@ export interface TaskSummary {
   completed_todo_count: number
   created_at: string
   updated_at: string
+}
+
+export interface ConversationMessage {
+  id: string
+  role: 'user' | 'pm_agent'
+  content: string
+  ui_blocks?: UIBlock[]
+  ui_response?: UIResponse
+  created_at: string
 }
 
 export interface ConversationListItem {
@@ -141,6 +150,38 @@ export interface ConversationStreamSnapshot {
   conversation: ConversationDetail
 }
 
+export interface AgentChatMessage {
+  id: string
+  sender_type: 'user' | 'agent'
+  direction: 'outbound' | 'inbound'
+  content: string
+  status: 'pending' | 'sent' | 'failed'
+  remote_message_id?: string
+  created_at: string
+}
+
+export interface AgentChatDetail {
+  id: string
+  agent_id: string
+  agent_node_id: string
+  session_key: string
+  status: 'active' | 'closed'
+  messages: AgentChatMessage[]
+  created_at: string
+  updated_at: string
+}
+
+export interface AgentChatSessionSummary {
+  id: string
+  agent_id: string
+  session_key: string
+  status: 'active' | 'closed'
+  message_count: number
+  last_message_preview: string
+  last_message_at?: string | null
+  created_at: string
+  updated_at: string
+}
 export type AgentRole = 'pm' | 'developer' | 'reviewer' | 'custom'
 export type AgentStatus = 'online' | 'offline' | 'busy'
 
@@ -179,7 +220,7 @@ export interface TodoResult {
   metadata: Record<string, unknown>
 }
 
-export type TaskStatus = 'pending' | 'in_progress' | 'done' | 'failed' | 'canceled'
+export type TaskStatus = 'planning' | 'review' | 'pending' | 'in_progress' | 'done' | 'failed' | 'canceled'
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
 
 export interface ActorRef {
@@ -226,7 +267,6 @@ export interface TaskResult {
 export interface TaskListItem {
   id: string
   project_id: string
-  conversation_id: string
   title: string
   description: string
   status: TaskStatus
@@ -242,12 +282,12 @@ export interface TaskListItem {
 export interface TaskDetail {
   id: string
   project_id: string
-  conversation_id: string
   title: string
   description: string
   status: TaskStatus
   priority: TaskPriority
   pm_agent: PMAgentSummary
+  messages?: TaskMessage[]
   todos: Todo[]
   artifacts: TaskArtifact[]
   result: TaskResult
@@ -261,6 +301,7 @@ export interface TaskDetail {
 
 export type EventType =
   | 'task_created'
+  | 'task_plan_ready'
   | 'task_status_changed'
   | 'todo_assigned'
   | 'todo_started'
@@ -268,7 +309,7 @@ export type EventType =
   | 'todo_completed'
   | 'todo_failed'
   | 'task_comment'
-  | 'conversation_reply'
+  | 'planning_reply'
   | 'agent_status_changed'
   | 'artifact_received'
 
@@ -327,12 +368,11 @@ export interface Notification {
   event_id: string
   project_id: string
   task_id?: string
-  conversation_id?: string
   actor_type?: string
   actor_name?: string
   title: string
   body: string
-  category: 'task' | 'todo' | 'conversation' | 'system'
+  category: 'task' | 'todo' | 'agent'
   priority: 'low' | 'medium' | 'high'
   is_read: boolean
   read_at: string | null
@@ -376,7 +416,7 @@ export interface AgentStats {
   tasks_in_progress: number
   tasks_pending: number
   task_success_rate: number
-  conversation_replies: number
+  planning_replies: number
 
   daily_activity: DailyActivityItem[]
   current_workload: WorkloadItem[]
@@ -513,13 +553,21 @@ export interface UpdateProjectRequest {
   pm_agent_id?: string
 }
 
-export interface CreateConversationRequest {
+export interface CreatePlanningTaskRequest {
   content: string
 }
 
-export interface AppendConversationMessageRequest {
+export interface AppendTaskMessageRequest {
   content: string
   ui_response?: UIResponse
+}
+
+export interface RejectPlanRequest {
+  feedback: string
+}
+
+export interface SendAgentChatMessageRequest {
+  content: string
 }
 
 export interface ListProjectTasksQuery {

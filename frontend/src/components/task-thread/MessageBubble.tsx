@@ -1,14 +1,13 @@
 import { cn } from '@/lib/utils'
-import type { ConversationMessage } from '@/types'
+import type { TaskMessage } from '@/types'
 import { formatRelativeTime } from '@/lib/utils'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { ChatBubbleContent } from '@/components/shared/ChatBubbleContent'
 import { UIBlockRenderer } from './UIBlockRenderer'
 
 interface MessageBubbleProps {
-  message: ConversationMessage
+  message: TaskMessage
   /** 下一条用户消息的 ui_response（用于回显选择结果） */
-  nextUserResponse?: ConversationMessage
+  nextUserResponse?: TaskMessage
   /** ui_blocks 正在底部交互面板中展示，气泡内隐藏 */
   hideUIBlocks?: boolean
 }
@@ -28,15 +27,7 @@ export function MessageBubble({ message, nextUserResponse, hideUIBlocks }: Messa
               : 'bg-muted'
           )}
         >
-          {isUser ? (
-            <p className="whitespace-pre-wrap wrap-break-word">{message.content}</p>
-          ) : (
-            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {message.content}
-              </ReactMarkdown>
-            </div>
-          )}
+          <ChatBubbleContent content={message.content} markdown={!isUser} />
           {hasUIBlocks && (
             <UIBlockRenderer
               blocks={message.ui_blocks!}

@@ -33,7 +33,6 @@ function toTaskListItem(task: TaskDetail): TaskListItem {
   return {
     id: task.id,
     project_id: task.project_id,
-    conversation_id: task.conversation_id,
     title: task.title,
     description: task.description,
     status: task.status,

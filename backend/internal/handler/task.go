@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -21,13 +22,14 @@ type addTaskCommentResponse struct {
 }
 
 type TaskHandler struct {
-	store     *store.Store
-	publisher *clawsynapse.Client
-	log       *zap.Logger
+	store          *store.Store
+	publisher      *clawsynapse.Client
+	webhookHandler *clawsynapse.WebhookHandler
+	log            *zap.Logger
 }
 
-func NewTaskHandler(s *store.Store, publisher *clawsynapse.Client, log *zap.Logger) *TaskHandler {
-	return &TaskHandler{store: s, publisher: publisher, log: log}
+func NewTaskHandler(s *store.Store, publisher *clawsynapse.Client, wh *clawsynapse.WebhookHandler, log *zap.Logger) *TaskHandler {
+	return &TaskHandler{store: s, publisher: publisher, webhookHandler: wh, log: log}
 }
 
 func (h *TaskHandler) Create(c *gin.Context) {
@@ -59,41 +61,125 @@ func (h *TaskHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// Auto-dispatch the todo to the agent
-	todo := &task.Todos[0]
-	if h.publisher != nil {
-		payload := protocol.TodoAssignedPayload{
-			TaskID:      task.ID,
-			TodoID:      todo.ID,
-			Title:       todo.Title,
-			Description: todo.Description,
-			Content:     "你收到了一个新的 Todo 任务。请使用 /tm-task-exec skill 执行此任务，按要求回报进度和结果。",
-			ExecBrief: &protocol.TodoExecBrief{
-				Objective:    "执行分派的 Todo 任务；及时回报进度；完成后提交结果，失败时说明原因。",
-				MustUseSkill: "tm-task-exec",
-			},
-		}
-		if _, err := h.publisher.Publish(c.Request.Context(), todo.Assignee.NodeID, "todo.assigned", payload, task.ID, map[string]any{"source": "user_created"}); err != nil {
-			if h.log != nil {
-				h.log.Warn("auto dispatch todo failed for user-created task", zap.String("task_id", task.ID), zap.String("todo_id", todo.ID), zap.Error(err))
-			}
-			// Task is created but dispatch failed — return the task anyway
-			transport.WriteData(c, http.StatusCreated, task)
-			return
-		}
+	task = h.autoDispatchFirstTodo(c.Request.Context(), userID, task)
+	transport.WriteData(c, http.StatusCreated, task)
+}
 
-		dispatched, dispatchErr := h.store.RecordTodoDispatch(userID, task.ID, todo.ID)
-		if dispatchErr != nil {
-			if h.log != nil {
-				h.log.Warn("record todo dispatch failed", zap.String("task_id", task.ID), zap.String("todo_id", todo.ID), zap.Error(dispatchErr))
-			}
-			transport.WriteData(c, http.StatusCreated, task)
-			return
-		}
-		task = dispatched
+// CreateFromText creates a task from a free-text description.
+// If agent_id is provided (set by the frontend @mention), the task is created in
+// building mode and dispatched immediately. Otherwise it enters planning mode.
+func (h *TaskHandler) CreateFromText(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
 	}
 
+	var body struct {
+		Content string `json:"content"`
+		AgentID string `json:"agent_id"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.Content) == "" {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "content is required"))
+		return
+	}
+
+	projectID := c.Param("projectId")
+
+	if strings.TrimSpace(body.AgentID) != "" {
+		task, appErr := h.store.CreateTaskByUser(userID, store.UserTaskCreateInput{
+			ProjectID:       projectID,
+			Title:           deriveTitle(body.Content),
+			Description:     body.Content,
+			Priority:        "medium",
+			AssigneeAgentID: body.AgentID,
+		})
+		if appErr != nil {
+			transport.WriteError(c, appErr)
+			return
+		}
+		task = h.autoDispatchFirstTodo(c.Request.Context(), userID, task)
+		transport.WriteData(c, http.StatusCreated, task)
+		return
+	}
+
+	h.createPlanningTask(c, userID, projectID, body.Content)
+}
+
+// deriveTitle extracts a short title from free-form content.
+// Uses the first line if it is short enough, otherwise truncates.
+func deriveTitle(content string) string {
+	content = strings.TrimSpace(content)
+	// Use the first line as the title candidate
+	firstLine := content
+	if idx := strings.IndexAny(content, "\n\r"); idx != -1 {
+		firstLine = strings.TrimSpace(content[:idx])
+	}
+	// Strip leading @mentions so the title reads naturally
+	for strings.HasPrefix(firstLine, "@") {
+		if idx := strings.IndexByte(firstLine, ' '); idx != -1 {
+			firstLine = strings.TrimSpace(firstLine[idx+1:])
+		} else {
+			firstLine = ""
+			break
+		}
+	}
+	if firstLine == "" {
+		firstLine = content
+	}
+	return truncateTitle(firstLine, 30)
+}
+
+func truncateTitle(s string, max int) string {
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max]) + "…"
+}
+
+// createPlanningTask creates a planning-mode task and notifies the PM agent.
+func (h *TaskHandler) createPlanningTask(c *gin.Context, userID, projectID, content string) {
+	task, appErr := h.store.CreateTaskPlanning(userID, projectID, content)
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+	h.notifyPMTaskMessage(c, userID, projectID, task.ID, content, true, nil)
 	transport.WriteData(c, http.StatusCreated, task)
+}
+
+// autoDispatchFirstTodo publishes a todo.assigned event for the first todo and records the dispatch.
+// It returns the updated task if dispatch succeeds, or the original task if it fails (non-fatal).
+func (h *TaskHandler) autoDispatchFirstTodo(ctx context.Context, userID string, task *model.TaskDetail) *model.TaskDetail {
+	if h.publisher == nil || len(task.Todos) == 0 {
+		return task
+	}
+	todo := &task.Todos[0]
+	payload := protocol.TodoAssignedPayload{
+		TaskID:      task.ID,
+		TodoID:      todo.ID,
+		Title:       todo.Title,
+		Description: todo.Description,
+		Content:     "你收到了一个新的 Todo 任务。请使用 /tm-task-exec skill 执行此任务，按要求回报进度和结果。",
+		ExecBrief: &protocol.TodoExecBrief{
+			Objective:    "执行分派的 Todo 任务；及时回报进度；完成后提交结果，失败时说明原因。",
+			MustUseSkill: "tm-task-exec",
+		},
+	}
+	if _, err := h.publisher.Publish(ctx, todo.Assignee.NodeID, "todo.assigned", payload, task.ID, map[string]any{"source": "user_created"}); err != nil {
+		if h.log != nil {
+			h.log.Warn("auto dispatch todo failed", zap.String("task_id", task.ID), zap.String("todo_id", todo.ID), zap.Error(err))
+		}
+		return task
+	}
+	dispatched, dispatchErr := h.store.RecordTodoDispatch(userID, task.ID, todo.ID)
+	if dispatchErr != nil {
+		if h.log != nil {
+			h.log.Warn("record todo dispatch failed", zap.String("task_id", task.ID), zap.String("todo_id", todo.ID), zap.Error(dispatchErr))
+		}
+		return task
+	}
+	return dispatched
 }
 
 func (h *TaskHandler) ListByProject(c *gin.Context) {
@@ -349,7 +435,6 @@ func (h *TaskHandler) buildTaskMentionPayload(task *model.TaskDetail, comment *m
 	payload := protocol.TaskMentionPayload{
 		TaskID:          task.ID,
 		ProjectID:       task.ProjectID,
-		ConversationID:  task.ConversationID,
 		CommentID:       comment.ID,
 		TodoID:          comment.TodoID,
 		TaskTitle:       task.Title,
@@ -370,4 +455,193 @@ func (h *TaskHandler) buildTaskMentionPayload(task *model.TaskDetail, comment *m
 	}
 
 	return payload
+}
+
+func (h *TaskHandler) ApprovePlan(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	taskID := c.Param("id")
+	task, appErr := h.store.ApprovePlan(userID, taskID)
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	if h.webhookHandler != nil {
+		h.webhookHandler.PublishTaskCreated(task)
+		task = h.webhookHandler.DispatchNextTodo(c.Request.Context(), task)
+	}
+	transport.WriteData(c, http.StatusOK, task)
+}
+
+func (h *TaskHandler) RejectPlan(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	var body struct {
+		Feedback string `json:"feedback"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid request body"))
+		return
+	}
+
+	taskID := c.Param("id")
+	task, appErr := h.store.RejectPlan(userID, taskID, body.Feedback)
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	h.notifyPMTaskMessage(c, userID, task.ProjectID, task.ID, body.Feedback, false, nil)
+	transport.WriteData(c, http.StatusOK, task)
+}
+
+func (h *TaskHandler) CreatePlanning(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	var body struct {
+		Content string `json:"content"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid request body"))
+		return
+	}
+
+	projectID := c.Param("projectId")
+	task, appErr := h.store.CreateTaskPlanning(userID, projectID, body.Content)
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	h.notifyPMTaskMessage(c, userID, projectID, task.ID, body.Content, true, nil)
+	transport.WriteData(c, http.StatusCreated, task)
+}
+
+func (h *TaskHandler) AppendTaskMessage(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	var body struct {
+		Content    string            `json:"content"`
+		UIResponse *model.UIResponse `json:"ui_response,omitempty"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid request body"))
+		return
+	}
+
+	taskID := c.Param("id")
+	task, appErr := h.store.AppendTaskMessage(userID, taskID, body.Content, body.UIResponse)
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	h.notifyPMTaskMessage(c, userID, task.ProjectID, task.ID, body.Content, false, body.UIResponse)
+	transport.WriteData(c, http.StatusOK, task)
+}
+
+func (h *TaskHandler) notifyPMTaskMessage(c *gin.Context, userID, projectID, taskID, content string, initial bool, uiResponse *model.UIResponse) {
+	if h.publisher == nil {
+		return
+	}
+	pmNodeID, appErr := h.store.GetTaskPMNode(userID, taskID)
+	if appErr != nil {
+		if h.log != nil {
+			h.log.Warn("skip notify task.message", zap.String("task_id", taskID), zap.String("code", appErr.Code))
+		}
+		return
+	}
+	payload := h.buildPMTaskMessage(userID, projectID, taskID, content, initial, uiResponse)
+	if _, err := h.publisher.Publish(c.Request.Context(), pmNodeID, "task.message", payload, taskID, nil); err != nil {
+		if h.log != nil {
+			h.log.Warn("notify task.message failed", zap.String("task_id", taskID), zap.Error(err))
+		}
+	}
+}
+
+func (h *TaskHandler) buildPMTaskMessage(userID, projectID, taskID, userContent string, initial bool, uiResponse *model.UIResponse) protocol.PMTaskMessage {
+	payload := protocol.PMTaskMessage{
+		SchemaVersion:  "1.0",
+		TaskID:         taskID,
+		ProjectID:      projectID,
+		UserContent:    userContent,
+		IsInitial:      initial,
+		UserUIResponse: uiResponse,
+	}
+	if initial {
+		payload.Content = "请使用 /tm-task-plan skill 处理本次需求。"
+	} else {
+		payload.Content = "用户发送了新消息，请使用 /tm-task-plan skill 继续处理。"
+	}
+
+	if !initial {
+		return payload
+	}
+
+	project, appErr := h.store.GetProject(userID, projectID)
+	if appErr != nil {
+		if h.log != nil {
+			h.log.Warn("build initial pm task message missing project context", zap.String("project_id", projectID))
+		}
+		return payload
+	}
+
+	candidates := buildCandidateAgents(project.PMAgent.ID, h.store.ListAgents(userID))
+	payload.Project = &protocol.PMTaskProject{
+		Name:        project.Name,
+		Description: project.Description,
+	}
+	payload.CandidateAgents = candidates
+	return payload
+}
+
+func buildCandidateAgents(pmAgentID string, agents []model.Agent) []protocol.PMTaskAgent {
+	out := make([]protocol.PMTaskAgent, 0, len(agents))
+	for _, agent := range agents {
+		if agent.ID == pmAgentID {
+			continue
+		}
+		out = append(out, protocol.PMTaskAgent{
+			ID:           agent.ID,
+			Name:         agent.Name,
+			NodeID:       agent.NodeID,
+			Role:         agent.Role,
+			Status:       agent.Status,
+			Capabilities: append([]string(nil), agent.Capabilities...),
+		})
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		left := agentStatusRank(out[i].Status)
+		right := agentStatusRank(out[j].Status)
+		if left != right {
+			return left < right
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+func agentStatusRank(status string) int {
+	switch status {
+	case "online":
+		return 0
+	case "busy":
+		return 1
+	default:
+		return 2
+	}
 }

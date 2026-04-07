@@ -27,6 +27,7 @@ import type { Event } from '@/types'
 
 const eventLabel: Record<string, string> = {
   task_created: '创建任务',
+  task_plan_ready: '规划完成',
   task_status_changed: '更新状态',
   todo_assigned: '分配任务',
   todo_started: '开始执行',
@@ -34,7 +35,7 @@ const eventLabel: Record<string, string> = {
   todo_completed: '完成 Todo',
   todo_failed: '执行失败',
   task_comment: '',
-  conversation_reply: '回复对话',
+  planning_reply: 'PM 回复',
   agent_status_changed: '状态变更',
   artifact_received: '上传文件',
 }
@@ -46,6 +47,7 @@ const actorRoleBadge: Record<string, { label: string; className: string } | null
 }
 
 const taskStatusBadge: Record<string, { label: string; variant: 'secondary' | 'info' | 'success' | 'destructive' }> = {
+  planning: { label: '规划中', variant: 'info' },
   pending: { label: '待处理', variant: 'secondary' },
   in_progress: { label: '进行中', variant: 'info' },
   done: { label: '已完成', variant: 'success' },
@@ -223,7 +225,7 @@ function EventContent({ event }: { event: Event }) {
     )
   }
 
-  if (event.event_type === 'conversation_reply') {
+  if (event.event_type === 'planning_reply') {
     return event.content ? (
       <QuoteBlock color="border-info/30">
         <div className={proseSmall}>

@@ -8,7 +8,7 @@ import (
 )
 
 func TestProjectTaskSummaryReflectsTaskState(t *testing.T) {
-	s, userID, pm, developer, project, conversation := seedWorkflowState(t)
+	s, userID, pm, developer, project := seedWorkflowState(t)
 
 	projectState, appErr := s.GetProject(userID, project.ID)
 	if appErr != nil {
@@ -22,10 +22,9 @@ func TestProjectTaskSummaryReflectsTaskState(t *testing.T) {
 	}
 
 	task, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login",
-		Description:    "Support email password login",
+		ProjectID:   project.ID,
+		Title:       "Implement login",
+		Description: "Support email password login",
 		Todos: []TaskCreateTodoInput{
 			{
 				ID:             "todo-1",
@@ -90,13 +89,12 @@ func TestProjectTaskSummaryReflectsTaskState(t *testing.T) {
 }
 
 func TestProjectTaskSummaryPrioritizesAttentionAndArchive(t *testing.T) {
-	s, userID, pm, developer, project, conversation := seedWorkflowState(t)
+	s, userID, pm, developer, project := seedWorkflowState(t)
 
 	task, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Investigate bug",
-		Description:    "Reproduce flaky test",
+		ProjectID:   project.ID,
+		Title:       "Investigate bug",
+		Description: "Reproduce flaky test",
 		Todos: []TaskCreateTodoInput{
 			{
 				ID:             "todo-1",
@@ -140,13 +138,12 @@ func TestProjectTaskSummaryPrioritizesAttentionAndArchive(t *testing.T) {
 }
 
 func TestProjectTaskSummaryTracksCanceledWithoutAttention(t *testing.T) {
-	s, userID, pm, developer, project, conversation := seedWorkflowState(t)
+	s, userID, pm, developer, project := seedWorkflowState(t)
 
 	task, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login",
-		Description:    "Support email password login",
+		ProjectID:   project.ID,
+		Title:       "Implement login",
+		Description: "Support email password login",
 		Todos: []TaskCreateTodoInput{
 			{
 				ID:             "todo-1",
@@ -176,14 +173,18 @@ func TestProjectTaskSummaryTracksCanceledWithoutAttention(t *testing.T) {
 	}
 }
 
-func TestArchiveProjectBlocksAppendingConversationMessages(t *testing.T) {
-	s, userID, _, _, project, conversation := seedWorkflowState(t)
+func TestArchiveProjectBlocksAppendingPlanningMessages(t *testing.T) {
+	s, userID, _, _, project := seedWorkflowState(t)
+	planningTask, appErr := s.CreateTaskPlanning(userID, project.ID, "Need login")
+	if appErr != nil {
+		t.Fatalf("create planning task: %v", appErr)
+	}
 
 	if _, appErr := s.ArchiveProject(userID, project.ID); appErr != nil {
 		t.Fatalf("archive project: %v", appErr)
 	}
 
-	_, appErr := s.AppendConversationMessage(userID, conversation.ID, "还想补充一个需求", nil)
+	_, appErr = s.AppendTaskMessage(userID, planningTask.ID, "还想补充一个需求", nil)
 	if appErr == nil {
 		t.Fatal("expected append message to fail for archived project")
 	}
@@ -193,13 +194,12 @@ func TestArchiveProjectBlocksAppendingConversationMessages(t *testing.T) {
 }
 
 func TestArchiveProjectResetsInProgressWorkToPending(t *testing.T) {
-	s, userID, pm, developer, project, conversation := seedWorkflowState(t)
+	s, userID, pm, developer, project := seedWorkflowState(t)
 
 	inProgressTask, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login",
-		Description:    "Support email password login",
+		ProjectID:   project.ID,
+		Title:       "Implement login",
+		Description: "Support email password login",
 		Todos: []TaskCreateTodoInput{
 			{
 				ID:             "todo-1",
@@ -216,15 +216,10 @@ func TestArchiveProjectResetsInProgressWorkToPending(t *testing.T) {
 		t.Fatalf("dispatch todo: %v", appErr)
 	}
 
-	doneConversation, appErr := s.CreateConversation(userID, project.ID, "Need metrics dashboard")
-	if appErr != nil {
-		t.Fatalf("create done conversation: %v", appErr)
-	}
 	doneTask, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: doneConversation.ID,
-		Title:          "Implement dashboard",
-		Description:    "Add dashboard page",
+		ProjectID:   project.ID,
+		Title:       "Implement dashboard",
+		Description: "Add dashboard page",
 		Todos: []TaskCreateTodoInput{
 			{
 				ID:             "todo-2",
@@ -248,15 +243,10 @@ func TestArchiveProjectResetsInProgressWorkToPending(t *testing.T) {
 		t.Fatalf("complete todo: %v", appErr)
 	}
 
-	failedConversation, appErr := s.CreateConversation(userID, project.ID, "Need flaky test investigation")
-	if appErr != nil {
-		t.Fatalf("create failed conversation: %v", appErr)
-	}
 	failedTask, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: failedConversation.ID,
-		Title:          "Investigate flaky test",
-		Description:    "Reproduce test issue",
+		ProjectID:   project.ID,
+		Title:       "Investigate flaky test",
+		Description: "Reproduce test issue",
 		Todos: []TaskCreateTodoInput{
 			{
 				ID:             "todo-3",
@@ -325,13 +315,12 @@ func TestArchiveProjectResetsInProgressWorkToPending(t *testing.T) {
 }
 
 func TestArchiveProjectBlocksTaskExecutionMutations(t *testing.T) {
-	s, userID, pm, developer, project, conversation := seedWorkflowState(t)
+	s, userID, pm, developer, project := seedWorkflowState(t)
 
 	task, appErr := s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: conversation.ID,
-		Title:          "Implement login",
-		Description:    "Support email password login",
+		ProjectID:   project.ID,
+		Title:       "Implement login",
+		Description: "Support email password login",
 		Todos: []TaskCreateTodoInput{
 			{
 				ID:             "todo-1",
@@ -343,11 +332,6 @@ func TestArchiveProjectBlocksTaskExecutionMutations(t *testing.T) {
 	})
 	if appErr != nil {
 		t.Fatalf("create task: %v", appErr)
-	}
-
-	extraConversation, appErr := s.CreateConversation(userID, project.ID, "Need dashboard")
-	if appErr != nil {
-		t.Fatalf("create extra conversation: %v", appErr)
 	}
 
 	if _, appErr := s.ArchiveProject(userID, project.ID); appErr != nil {
@@ -388,10 +372,9 @@ func TestArchiveProjectBlocksTaskExecutionMutations(t *testing.T) {
 	assertArchivedError("todo fail", appErr)
 
 	_, appErr = s.CreateTaskByPMNode(pm.NodeID, TaskCreateInput{
-		ProjectID:      project.ID,
-		ConversationID: extraConversation.ID,
-		Title:          "Implement dashboard",
-		Description:    "Add dashboard page",
+		ProjectID:   project.ID,
+		Title:       "Implement dashboard",
+		Description: "Add dashboard page",
 		Todos: []TaskCreateTodoInput{
 			{
 				ID:             "todo-2",

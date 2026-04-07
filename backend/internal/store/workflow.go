@@ -20,11 +20,10 @@ type TaskCreateTodoInput struct {
 }
 
 type TaskCreateInput struct {
-	ProjectID      string
-	ConversationID string
-	Title          string
-	Description    string
-	Todos          []TaskCreateTodoInput
+	ProjectID   string
+	Title       string
+	Description string
+	Todos       []TaskCreateTodoInput
 }
 
 type TodoProgressInput struct {
@@ -193,12 +192,11 @@ func (s *Store) CreateTaskByPMNode(nodeID string, in TaskCreateInput) (*model.Ta
 func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in TaskCreateInput) (*model.TaskDetail, *transport.AppError) {
 	in.Title = strings.TrimSpace(in.Title)
 	in.Description = strings.TrimSpace(in.Description)
-	if strings.TrimSpace(in.ProjectID) == "" || strings.TrimSpace(in.ConversationID) == "" || in.Title == "" || in.Description == "" {
+	if strings.TrimSpace(in.ProjectID) == "" || in.Title == "" || in.Description == "" {
 		return nil, transport.Validation("invalid task.create payload", map[string]any{
-			"project_id":      "required",
-			"conversation_id": "required",
-			"title":           "required",
-			"description":     "required",
+			"project_id":  "required",
+			"title":       "required",
+			"description": "required",
 		})
 	}
 	if len(in.Todos) == 0 {
@@ -233,20 +231,6 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 	}
 	if project.PMAgentID != pmAgent.ID {
 		return nil, transport.Forbidden("pm agent is not bound to this project")
-	}
-
-	conv, ok := s.conversations[in.ConversationID]
-	if !ok {
-		return nil, transport.NotFound("conversation not found")
-	}
-	if conv.ProjectID != project.ID {
-		return nil, transport.Validation("conversation and project mismatch", map[string]any{"conversation_id": "does not belong to project_id"})
-	}
-	if _, exists := s.conversationTasks[in.ConversationID]; exists {
-		return nil, transport.Conflict("CONVERSATION_TASK_EXISTS", "conversation already linked to task")
-	}
-	if conv.Status != "active" {
-		return nil, transport.Conflict("CONVERSATION_RESOLVED", "conversation is resolved")
 	}
 
 	now := time.Now().UTC()
@@ -305,17 +289,16 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 	}
 
 	task := &model.TaskDetail{
-		ID:             newID(),
-		UserID:         project.UserID,
-		ProjectID:      project.ID,
-		ConversationID: in.ConversationID,
-		Title:          in.Title,
-		Description:    in.Description,
-		Status:         "pending",
-		Priority:       "medium",
-		PMAgentID:      pmAgent.ID,
-		PMAgent:        toPMSummary(pmAgent),
-		Todos:          todos,
+		ID:          newID(),
+		UserID:      project.UserID,
+		ProjectID:   project.ID,
+		Title:       in.Title,
+		Description: in.Description,
+		Status:      "pending",
+		Priority:    "medium",
+		PMAgentID:   pmAgent.ID,
+		PMAgent:     toPMSummary(pmAgent),
+		Todos:       todos,
 
 		Result: model.TaskResult{
 			Summary:     "",
@@ -332,18 +315,10 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 
 	s.tasks[task.ID] = task
 	s.projectTasks[task.ProjectID] = append(s.projectTasks[task.ProjectID], task.ID)
-	s.conversationTasks[task.ConversationID] = task.ID
-
-	conv.Status = "resolved"
-	conv.UpdatedAt = now
-
 	taskTitle := task.Title
-	s.addEventUnsafe(project.UserID, project.ID, task.ID, "", "agent", pmAgent.ID, pmAgent.Name, "task_created", &taskTitle, map[string]any{"conversation_id": task.ConversationID, "task_title": task.Title}, now)
+	s.addEventUnsafe(project.UserID, project.ID, task.ID, "", "agent", pmAgent.ID, pmAgent.Name, "task_created", &taskTitle, map[string]any{"task_title": task.Title}, now)
 
 	s.rememberProcessedMessageUnsafe(processedMessageKey("task.create", nodeID, messageID), "task.create", task.ID)
-	if err := s.persistConversationUnsafe(conv); err != nil {
-		return nil, mongoWriteError(err)
-	}
 	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
 		return nil, mongoWriteError(err)
 	}
@@ -353,7 +328,6 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 	if err := s.persistProcessedMessageUnsafe(processedMessageKey("task.create", nodeID, messageID)); err != nil {
 		return nil, mongoWriteError(err)
 	}
-	s.publishConversationUnsafe(conv.ID)
 	s.publishTaskUnsafe(task.ID)
 
 	return s.copyTaskWithArtifactsUnsafe(task), nil
@@ -430,17 +404,16 @@ func (s *Store) CreateTaskByUser(userID string, in UserTaskCreateInput) (*model.
 	}
 
 	task := &model.TaskDetail{
-		ID:             newID(),
-		UserID:         userID,
-		ProjectID:      project.ID,
-		ConversationID: "",
-		Title:          in.Title,
-		Description:    in.Description,
-		Status:         "pending",
-		Priority:       priority,
-		PMAgentID:      "",
-		PMAgent:        model.PMAgentSummary{},
-		Todos:          []model.Todo{todo},
+		ID:          newID(),
+		UserID:      userID,
+		ProjectID:   project.ID,
+		Title:       in.Title,
+		Description: in.Description,
+		Status:      "pending",
+		Priority:    priority,
+		PMAgentID:   "",
+		PMAgent:     model.PMAgentSummary{},
+		Todos:       []model.Todo{todo},
 
 		Result: model.TaskResult{
 			Summary:     "",

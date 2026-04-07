@@ -3,11 +3,12 @@ import * as tasksApi from '@/api/tasks'
 import { usePageVisibility } from './usePageVisibility'
 import { useRealtimeStatus } from '@/realtime/hooks/useRealtimeStatus'
 import type { CreateTaskInput } from '@/api/tasks'
-import type { ListProjectTasksQuery, TaskDetail } from '@/types'
+import type { AppendTaskMessageRequest, CreatePlanningTaskRequest, ListProjectTasksQuery, RejectPlanRequest, TaskDetail } from '@/types'
 
 function normalizeTaskDetail(task: TaskDetail): TaskDetail {
   return {
     ...task,
+    messages: task.messages ?? [],
     todos: task.todos ?? [],
     artifacts: task.artifacts ?? [],
   }
@@ -46,7 +47,7 @@ export function useTask(id: string | undefined) {
       }
 
       const task = currentQuery.state.data as TaskDetail | undefined
-      return !task || task.status === 'pending' || task.status === 'in_progress' ? 3_000 : false
+      return !task || task.status === 'planning' || task.status === 'review' || task.status === 'pending' || task.status === 'in_progress' ? 3_000 : false
     },
     refetchIntervalInBackground: false,
   })
@@ -109,6 +110,48 @@ export function useCreateTask() {
   })
 }
 
+export function useCreatePlanningTask() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ projectId, input }: { projectId: string; input: CreatePlanningTaskRequest }) =>
+      tasksApi.createPlanningTask(projectId, input),
+    onSuccess: (res) => {
+      qc.setQueryData(['tasks', 'detail', res.data.id], normalizeTaskDetail(res.data))
+      qc.invalidateQueries({ queryKey: ['tasks'] })
+      qc.invalidateQueries({ queryKey: ['projects'] })
+      qc.invalidateQueries({ queryKey: ['dashboard', 'tasks'] })
+      qc.invalidateQueries({ queryKey: ['dashboard', 'stats'] })
+    },
+  })
+}
+
+export function useCreateTaskFromText() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ projectId, content, agentId }: { projectId: string; content: string; agentId?: string }) =>
+      tasksApi.createTaskFromText(projectId, content, agentId),
+    onSuccess: (res) => {
+      qc.setQueryData(['tasks', 'detail', res.data.id], normalizeTaskDetail(res.data))
+      qc.invalidateQueries({ queryKey: ['tasks'] })
+      qc.invalidateQueries({ queryKey: ['projects'] })
+      qc.invalidateQueries({ queryKey: ['dashboard', 'tasks'] })
+      qc.invalidateQueries({ queryKey: ['dashboard', 'stats'] })
+    },
+  })
+}
+
+export function useAppendTaskMessage() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ taskId, input }: { taskId: string; input: AppendTaskMessageRequest }) =>
+      tasksApi.appendTaskMessage(taskId, input),
+    onSuccess: (res, { taskId }) => {
+      qc.setQueryData(['tasks', 'detail', taskId], normalizeTaskDetail(res.data))
+      qc.invalidateQueries({ queryKey: ['tasks'] })
+    },
+  })
+}
+
 export function useDispatchTodo() {
   const qc = useQueryClient()
   return useMutation({
@@ -118,6 +161,29 @@ export function useDispatchTodo() {
       qc.invalidateQueries({ queryKey: ['tasks'] })
       qc.invalidateQueries({ queryKey: ['tasks', 'detail', taskId] })
       qc.invalidateQueries({ queryKey: ['tasks', 'events', taskId] })
+    },
+  })
+}
+
+export function useApprovePlan() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ taskId }: { taskId: string }) => tasksApi.approvePlan(taskId),
+    onSuccess: (res, { taskId }) => {
+      qc.setQueryData(['tasks', 'detail', taskId], normalizeTaskDetail(res.data))
+      qc.invalidateQueries({ queryKey: ['tasks'] })
+    },
+  })
+}
+
+export function useRejectPlan() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ taskId, input }: { taskId: string; input: RejectPlanRequest }) =>
+      tasksApi.rejectPlan(taskId, input),
+    onSuccess: (res, { taskId }) => {
+      qc.setQueryData(['tasks', 'detail', taskId], normalizeTaskDetail(res.data))
+      qc.invalidateQueries({ queryKey: ['tasks'] })
     },
   })
 }

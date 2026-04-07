@@ -1,13 +1,13 @@
 ---
 name: tm-task-plan
 description: >
-  PM Agent 专用 skill：需求澄清、任务规划、任务创建。
-  收到 conversation.message 后，通过 ClawSynapse 与 TrustMesh 通信，
-  完成需求理解 → 澄清 → 任务拆分 → task.create 的完整工作流。
-compatibility: Requires clawsynapse CLI and a running clawsynapsed daemon
+  PM Agent 专用 skill：需求澄清、任务规划、任务确认。
+  收到 task.message 后，通过 ClawSynapse 与 TrustMesh 通信，
+  完成需求理解 → 澄清 → 任务拆分 → task.plan_ready 的完整工作流。
+compatibility: Requires clawsynapse CLI
 metadata:
   author: TrustMesh
-  version: "2.2"
+  version: "4.0"
 allowed-tools:
   - "Bash(clawsynapse:*)"
 ---
@@ -19,27 +19,27 @@ allowed-tools:
 ## 一、工作流
 
 ```
-收到 conversation.message
+收到 task.message
   │
   ├─ is_initial_message=true
   │    1. 阅读 user_content（用户原始需求）
   │    2. 复述你的理解，指出缺失信息、歧义或风险
-  │    3. 通过 conversation.reply 向用户提问澄清
-  │    4. 等待用户回复（下一条 conversation.message）
+  │    3. 通过 task.reply 向用户提问澄清
+  │    4. 等待用户回复（下一条 task.message）
   │    5. 重复 2-4，直到需求足够明确
-  │    6. 创建任务：发送 task.create
+  │    6. 确认任务规划：发送 task.plan_ready
   │
   └─ is_initial_message=false（后续消息）
        1. 阅读新的用户输入
        2. 判断需求是否已经明确
-       3. 未明确 → conversation.reply 继续澄清
-       4. 已明确 → 发送 task.create
+       3. 未明确 → task.reply 继续澄清
+       4. 已明确 → 发送 task.plan_ready
 ```
 
 ### 关键规则
 
-1. **先澄清，后创建任务。** 收到首次需求时，不要立刻创建 task.create。先复述理解、提出问题。
-2. **只创建一次任务。** 一个 Conversation 只能对应一个 Task，重复创建会被服务端拒绝（`CONVERSATION_TASK_EXISTS`）。
+1. **先澄清，后确认任务。** 收到首次需求时，不要立刻发送 task.plan_ready。先复述理解、提出问题。
+2. **只确认一次。** 一个 planning Task 只能 finalize 一次，重复发送会被幂等处理。
 3. **Todo 必须有强顺序。** 你产出的 Todo 列表不是无序清单，而是按执行先后排列的工作流。后一个 Todo 必须建立在前一个 Todo 的完成结果之上，避免并行前提不成立。
 4. **Todo 要可独立验收。** 每个 Todo 应有清晰的边界、明确的输入输出，可以由一个执行 Agent 独立完成。
 5. **基于事实分派。** 结合 `candidate_agents` 中的 `role`、`status`、`capabilities` 分派 Todo，不要虚构能力。优先分派给 `status=online` 的 Agent。
@@ -47,12 +47,12 @@ allowed-tools:
 
 ### Todo 顺序规划要求
 
-创建 `task.create` 前，必须先把 Todo 按依赖顺序排好：
+创建 `task.plan_ready` 前，必须先把 Todo 按依赖顺序排好：
 
 1. 先放上游 Todo：需求分析、后端接口、数据结构、协议调整等。
 2. 再放依赖上游产物的 Todo：前端接入、联调、文档、回归验证等。
-3. 不要把“依赖前序结果”的工作放到前面，也不要把只是主题相关但逻辑独立的工作混在同一顺序链里。
-4. 若两个工作确实必须串行，直接按顺序拆成两个 Todo；不要在 description 里写“可以等前一个完成后再做”但列表顺序却无体现。
+3. 不要把"依赖前序结果"的工作放到前面，也不要把只是主题相关但逻辑独立的工作混在同一顺序链里。
+4. 若两个工作确实必须串行，直接按顺序拆成两个 Todo；不要在 description 里写"可以等前一个完成后再做"但列表顺序却无体现。
 5. `order` 必须从 `1` 开始连续递增，并与列表中的逻辑顺序一致。
 6. `id` 使用简单稳定的编号规则，不要混入优先级、状态、assignee 等可变语义。推荐格式：`TD_01`、`TD_02`、`TD_03`。
 
@@ -73,15 +73,15 @@ allowed-tools:
 
 - `from=` 是 TrustMesh 节点，**这是你所有回复的 target**
 - `to=` 是你自己的 node ID，**永远不要用作 target**
-- `session=` 用作 `--session-key`
+- `session=` 用作 `--session-key`（值为 task ID）
 
-### conversation.message payload
+### task.message payload
 
 首次消息（`is_initial_message=true`）包含丰富上下文：
 
 ```json
 {
-  "conversation_id": "conv_123",
+  "task_id": "task_123",
   "project_id": "proj_123",
   "content": "请使用 /tm-task-plan skill 处理本次需求。首先理解用户需求，澄清不明确之处，待需求明确后再创建任务。",
   "user_content": "我需要一个用户登录功能",
@@ -89,11 +89,6 @@ allowed-tools:
   "project": {
     "name": "TrustMesh MVP",
     "description": "multi-agent task orchestration"
-  },
-  "pm_brief": {
-    "objective": "...",
-    "must_clarify_before_task_create": true,
-    "must_use_skill": "tm-task-plan"
   },
   "candidate_agents": [
     {
@@ -112,7 +107,7 @@ allowed-tools:
 
 ```json
 {
-  "conversation_id": "conv_123",
+  "task_id": "task_123",
   "project_id": "proj_123",
   "content": "用户发送了新的消息，请使用 /tm-task-plan skill 继续处理。",
   "user_content": "登录方式只需要邮箱密码，不需要 OAuth",
@@ -134,7 +129,7 @@ allowed-tools:
 3. `--session-key` 使用 incoming header 中的 `session` 值。
 4. payload 用 `jq -nc` 构建，避免手动转义。
 
-### conversation.reply — 回复用户
+### task.reply — 回复用户
 
 用于向用户提问澄清、确认理解、或告知任务已创建。
 
@@ -144,16 +139,17 @@ allowed-tools:
 # TARGET_NODE = incoming header 中 from 的值（TrustMesh 节点）
 # ⚠️ 绝对不能是你自己的 node ID
 TARGET_NODE="trustmesh-server"  # ← 替换为实际 from 值
+SESSION_KEY="task_123"         # ← 替换为 incoming header 中 session 的值
 
-payload="$(jq -nc --arg conversation_id "conv_123" --arg content "我理解你需要用户登录功能，请确认以下问题：..." '{
-  conversation_id: $conversation_id,
+payload="$(jq -nc --arg task_id "task_123" --arg content "我理解你需要用户登录功能，请确认以下问题：..." '{
+  task_id: $task_id,
   content: $content
 }')"
 
 clawsynapse publish \
   --target "$TARGET_NODE" \
-  --type conversation.reply \
-  --session-key conv_123 \
+  --type task.reply \
+  --session-key "$SESSION_KEY" \
   --message "$payload"
 ```
 
@@ -174,6 +170,7 @@ clawsynapse publish \
 
 ```bash
 TARGET_NODE="trustmesh-server"  # ← 替换为实际 from 值
+SESSION_KEY="task_123"         # ← 替换为 incoming header 中 session 的值
 
 ui_blocks='[
   {
@@ -207,15 +204,15 @@ ui_blocks='[
 ]'
 
 payload="$(jq -nc \
-  --arg conversation_id "conv_123" \
+  --arg task_id "task_123" \
   --arg content "我理解你需要用户登录功能。请确认以下几点：" \
   --argjson ui_blocks "$ui_blocks" \
-  '{conversation_id: $conversation_id, content: $content, ui_blocks: $ui_blocks}')"
+  '{task_id: $task_id, content: $content, ui_blocks: $ui_blocks}')"
 
 clawsynapse publish \
   --target "$TARGET_NODE" \
-  --type conversation.reply \
-  --session-key conv_123 \
+  --type task.reply \
+  --session-key "$SESSION_KEY" \
   --message "$payload"
 ```
 
@@ -231,11 +228,11 @@ clawsynapse publish \
 
 #### 用户回复中的 ui_response
 
-用户通过交互式 UI 提交后，后续的 `conversation.message` 会携带 `user_ui_response` 字段：
+用户通过交互式 UI 提交后，后续的 `task.message` 会携带 `user_ui_response` 字段：
 
 ```json
 {
-  "conversation_id": "conv_123",
+  "task_id": "task_123",
   "user_content": "登录方式：邮箱+密码、手机号+短信验证码；需要记住登录；无额外补充",
   "user_ui_response": {
     "blocks": {
@@ -252,23 +249,24 @@ clawsynapse publish \
 - `user_ui_response.blocks` 按 block id 索引，包含结构化选择结果
 - 优先使用 `user_ui_response` 解析用户选择，`user_content` 作为补充
 
-### task.create — 创建任务
+### task.plan_ready — 确认任务规划
 
-需求明确后，创建一个 Task 并拆分为多个 Todo。
+需求明确后，确认任务规划并拆分为多个 Todo。Task 将从 `planning` 状态转为 `pending`，开始逐个派发 Todo 给执行 Agent。
 
 ```bash
 TARGET_NODE="trustmesh-server"  # ← 替换为实际 from 值
+SESSION_KEY="task_123"         # ← 替换为 incoming header 中 session 的值
 
 todos='[
   {
-    "id": "todo_1",
+    "id": "TD_01",
     "order": 1,
     "title": "实现后端登录接口",
     "description": "完成邮箱密码登录 API",
     "assignee_node_id": "node-backend-001"
   },
   {
-    "id": "todo_2",
+    "id": "TD_02",
     "order": 2,
     "title": "实现前端登录页",
     "description": "在后端接口完成后，接入登录页和表单交互",
@@ -277,14 +275,14 @@ todos='[
 ]'
 
 payload="$(jq -nc \
+  --arg task_id "task_123" \
   --arg project_id "proj_123" \
-  --arg conversation_id "conv_123" \
   --arg title "实现用户登录" \
   --arg description "支持邮箱密码和 Google OAuth" \
   --argjson todos "$todos" \
   '{
+    task_id: $task_id,
     project_id: $project_id,
-    conversation_id: $conversation_id,
     title: $title,
     description: $description,
     todos: $todos
@@ -292,8 +290,8 @@ payload="$(jq -nc \
 
 clawsynapse publish \
   --target "$TARGET_NODE" \
-  --type task.create \
-  --session-key conv_123 \
+  --type task.plan_ready \
+  --session-key "$SESSION_KEY" \
   --message "$payload"
 ```
 
@@ -314,28 +312,32 @@ Todo 字段说明：
 ```bash
 clawsynapse --json publish \
   --target "$TARGET_NODE" \
-  --type conversation.reply \
-  --session-key conv_123 \
+  --type task.reply \
+  --session-key "$SESSION_KEY" \
   --message "$payload"
 ```
 
 ## 四、你可能收到的通知
 
-创建任务后，TrustMesh 会向你推送状态更新：
+任务确认后，TrustMesh 会向你推送状态更新：
 
 | type | 含义 |
 |------|------|
-| `task.created` | 你创建的任务已被服务端确认 |
+| `task.created` | 你确认的任务已被服务端接受并开始执行 |
 | `task.status_changed` | 任务状态变化（如 `in_progress`, `done`, `failed`） |
 | `todo.status_changed` | 某个 Todo 的状态变化 |
 
-这些通知供你了解任务进展。你可以根据 `task.status_changed` 的状态决定是否需要通过 `conversation.reply` 向用户汇报。
+这些通知供你了解任务进展。你可以根据 `task.status_changed` 的状态决定是否需要通过 `task.reply` 向用户汇报。
 
 ## 五、Guardrails
 
 - **永远不要用你自己的 node ID 作为 `--target`。** target 是 TrustMesh 节点（incoming `from`）。
 - **不要发送 `todo.progress`、`todo.complete`、`todo.fail`。** 这些是执行 Agent 的消息类型，不是 PM 的。
-- 不要在聊天界面直接回复，必须使用 `clawsynapse publish`。
+- 业务回复必须通过 `clawsynapse publish` 发送；不要在聊天界面复述 payload、澄清内容、任务摘要或 Todo 规划。
+- 在聊天界面中，除发送确认外不要输出任何业务内容。成功发送后只允许输出一行极简确认：`ACK <message_type>`。
+- 如果当前是在等待用户新回复或等待后续系统消息，只输出：`WAITING`。
+- 如果发送失败或命令报错，只输出：`ERR <reason>` 或 `ERR publish failed: <code>`。
+- 不要输出多余解释，不要粘贴 JSON，不要再次总结"我刚刚发送了什么"。
 - 不要丢弃 `--session-key`。
 - 不要发送协议中未定义的字段。
 - payload 较大时用 `jq -nc` 构建。
@@ -348,19 +350,5 @@ clawsynapse --json publish \
 | `VALIDATION_ERROR` | 业务参数校验失败 |
 | `FORBIDDEN` | 无权执行该操作 |
 | `NOT_FOUND` | 目标资源不存在 |
-| `CONVERSATION_TASK_EXISTS` | 该对话已关联 Task，不能重复创建 |
-| `CONVERSATION_RESOLVED` | 对话已关闭 |
-
-## 七、Peer 发现
-
-如果需要确认 TrustMesh 节点信息：
-
-```bash
-clawsynapse --json peers
-```
-
-## 八、重要提示
-
-- 不要运行 `clawsynapsed`，它由系统管理。
-- 你只能发送 `conversation.reply` 和 `task.create` 两种消息类型。
-- 任务创建后，Todo 的执行和状态回报由执行 Agent 负责，不需要你介入。
+| `TASK_NOT_PLANNING` | 任务不在规划阶段，无法追加消息或确认 |
+| `PM_AGENT_OFFLINE` | PM Agent 不在线 |
