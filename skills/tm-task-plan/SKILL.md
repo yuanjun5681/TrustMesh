@@ -90,11 +90,6 @@ allowed-tools:
     "name": "TrustMesh MVP",
     "description": "multi-agent task orchestration"
   },
-  "pm_brief": {
-    "objective": "...",
-    "must_clarify_before_task_create": true,
-    "must_use_skill": "tm-task-plan"
-  },
   "candidate_agents": [
     {
       "id": "agent_dev_1",
