@@ -35,14 +35,14 @@ export function TaskDetailResultCard({ task }: Props) {
         {description && (
           <div className="rounded-lg bg-muted/50 p-2.5">
             <p className="text-[11px] font-medium text-muted-foreground mb-1">任务描述</p>
-            <p className="text-xs whitespace-pre-wrap break-words">{description}</p>
+            <p className="text-xs whitespace-pre-wrap wrap-break-word">{description}</p>
           </div>
         )}
 
         {summary && (
           <div className="rounded-lg bg-muted/50 p-2.5">
             <p className="text-[11px] font-medium text-muted-foreground mb-1">结果摘要</p>
-            <p className="text-xs whitespace-pre-wrap break-words">{summary}</p>
+            <p className="text-xs whitespace-pre-wrap wrap-break-word">{summary}</p>
           </div>
         )}
       </div>
