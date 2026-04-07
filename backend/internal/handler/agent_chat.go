@@ -95,7 +95,8 @@ func (h *AgentChatHandler) SendMessage(c *gin.Context) {
 		return
 	}
 
-	result, err := h.publisher.Publish(context.Background(), detail.AgentNodeID, "chat.message", req.Content, detail.SessionKey, map[string]any{
+	payloadContent := "[使用 clawsynapse skill 回复以下消息]\n" + req.Content
+	result, err := h.publisher.Publish(context.Background(), detail.AgentNodeID, "chat.message", payloadContent, detail.SessionKey, map[string]any{
 		"agentId":   detail.AgentID,
 		"chatId":    detail.ID,
 		"messageId": msg.ID,
