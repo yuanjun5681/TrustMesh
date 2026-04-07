@@ -52,7 +52,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	agentChatHandler := handler.NewAgentChatHandler(s, clawClient, log)
 	projectHandler := handler.NewProjectHandler(s)
 
-	taskHandler := handler.NewTaskHandler(s, clawClient, log)
+	taskHandler := handler.NewTaskHandler(s, clawClient, webhookHandler, log)
 	transferHandler := handler.NewTransferHandler(s)
 	dashboardHandler := handler.NewDashboardHandler(s)
 	clawSynapseHandler := handler.NewClawSynapseHandler(clawClient)
@@ -133,6 +133,8 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	authed.GET("/tasks/:id", taskHandler.Get)
 	authed.GET("/tasks/:id/events", taskHandler.ListEvents)
 	authed.POST("/tasks/:id/messages", taskHandler.AppendTaskMessage)
+	authed.POST("/tasks/:id/approve", taskHandler.ApprovePlan)
+	authed.POST("/tasks/:id/reject", taskHandler.RejectPlan)
 	authed.POST("/tasks/:id/cancel", taskHandler.Cancel)
 	authed.POST("/tasks/:id/todos/:todoId/dispatch", taskHandler.DispatchTodo)
 	authed.GET("/tasks/:id/comments", taskHandler.ListComments)

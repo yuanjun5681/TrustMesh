@@ -21,6 +21,7 @@ const statusFilters: { label: string; value: TaskStatus | 'all' }[] = [
 
 const statusIcon: Record<TaskStatus, { icon: typeof Circle; className: string }> = {
   planning: { icon: MessageSquareMore, className: 'text-info' },
+  review: { icon: MessageSquareMore, className: 'text-warning' },
   pending: { icon: Circle, className: 'text-muted-foreground' },
   in_progress: { icon: CircleDot, className: 'text-info animate-pulse' },
   done: { icon: CheckCircle2, className: 'text-success' },

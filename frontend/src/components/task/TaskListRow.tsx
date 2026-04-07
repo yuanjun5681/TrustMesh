@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Circle, CircleDot, CheckCircle2, Loader2, XCircle, CircleSlash2, MessageSquareMore } from 'lucide-react'
+import { ChevronDown, ChevronRight, Circle, CheckCircle2, Loader2, XCircle, CircleSlash2, MessageSquareMore } from 'lucide-react'
 import { useTask } from '@/hooks/useTasks'
 import { TodoList } from './TodoList'
 import { cn } from '@/lib/utils'
@@ -7,10 +7,12 @@ import { formatRelativeTime } from '@/lib/utils'
 import { PriorityBadge } from '@/components/shared/StatusBadge'
 import type { TaskListItem, TaskStatus } from '@/types'
 
+
 const statusIcon: Record<TaskStatus, { icon: typeof Circle; className: string }> = {
   planning: { icon: MessageSquareMore, className: 'text-info' },
+  review: { icon: MessageSquareMore, className: 'text-warning' },
   pending: { icon: Circle, className: 'text-muted-foreground' },
-  in_progress: { icon: CircleDot, className: 'text-info animate-pulse' },
+  in_progress: { icon: Loader2, className: 'text-info animate-spin' },
   done: { icon: CheckCircle2, className: 'text-success' },
   failed: { icon: XCircle, className: 'text-destructive' },
   canceled: { icon: CircleSlash2, className: 'text-muted-foreground' },
@@ -23,7 +25,17 @@ interface TaskListRowProps {
 }
 
 export function TaskListRow({ task, isSelected, onClick }: TaskListRowProps) {
-  const [todosExpanded, setTodosExpanded] = useState(false)
+  const [todosExpanded, setTodosExpanded] = useState(task.status === 'in_progress')
+  const [prevStatus, setPrevStatus] = useState(task.status)
+
+  // 任务状态变化时同步展开（在 render 阶段处理，避免 effect 中 setState）
+  if (prevStatus !== task.status) {
+    setPrevStatus(task.status)
+    if (task.status === 'in_progress') {
+      setTodosExpanded(true)
+    }
+  }
+
   const { data: taskDetail, isLoading } = useTask(todosExpanded ? task.id : undefined)
   const progress = task.todo_count > 0
     ? Math.round((task.completed_todo_count / task.todo_count) * 100)

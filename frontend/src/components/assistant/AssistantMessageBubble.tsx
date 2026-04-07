@@ -6,9 +6,11 @@ import remarkGfm from 'remark-gfm'
 import { Loader2, ExternalLink, ChevronRight, Brain } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { normalizeEscapedText } from '@/lib/utils'
 import { KnowledgeResultCard } from './results/KnowledgeResultCard'
 import { TaskResultCard } from './results/TaskResultCard'
 import { StatsResultCard } from './results/StatsResultCard'
+import { TaskDetailResultCard } from './results/TaskDetailResultCard'
 
 interface Props {
   message: AssistantMessage
@@ -47,10 +49,11 @@ export function AssistantMessageBubble({ message, getToolLabel }: Props) {
   const navigate = useNavigate()
   const isUser = message.role === 'user'
   const [thinkExpanded, setThinkExpanded] = useState(false)
+  const normalizedContent = useMemo(() => normalizeEscapedText(message.content), [message.content])
 
   const { thinking, reply, isThinking } = useMemo(
-    () => (!isUser && message.content ? parseThinkBlocks(message.content) : { thinking: '', reply: message.content, isThinking: false }),
-    [isUser, message.content]
+    () => (!isUser && normalizedContent ? parseThinkBlocks(normalizedContent) : { thinking: '', reply: normalizedContent, isThinking: false }),
+    [isUser, normalizedContent]
   )
 
   return (
@@ -81,6 +84,8 @@ export function AssistantMessageBubble({ message, getToolLabel }: Props) {
                   return <KnowledgeResultCard key={i} items={result.items} />
                 case 'tasks':
                   return <TaskResultCard key={i} items={result.items} />
+                case 'task_detail':
+                  return <TaskDetailResultCard key={i} task={result.task} />
                 case 'stats':
                   return <StatsResultCard key={i} stats={result.stats} />
                 default:
@@ -128,7 +133,7 @@ export function AssistantMessageBubble({ message, getToolLabel }: Props) {
             )}
           >
             {isUser ? (
-              <p className="whitespace-pre-wrap wrap-break-word">{message.content}</p>
+              <p className="whitespace-pre-wrap wrap-break-word">{normalizedContent}</p>
             ) : (
               <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>

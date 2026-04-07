@@ -4,8 +4,10 @@ import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import type { Todo, TaskArtifact } from '@/types'
 
+
 const statusIcons = {
   planning: MessageSquareMore,
+  review: MessageSquareMore,
   pending: Circle,
   in_progress: Loader2,
   done: CheckCircle2,
@@ -15,6 +17,7 @@ const statusIcons = {
 
 const statusColors = {
   planning: 'text-info',
+  review: 'text-warning',
   pending: 'text-muted-foreground',
   in_progress: 'text-info animate-spin',
   done: 'text-success',

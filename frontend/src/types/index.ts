@@ -220,7 +220,7 @@ export interface TodoResult {
   metadata: Record<string, unknown>
 }
 
-export type TaskStatus = 'planning' | 'pending' | 'in_progress' | 'done' | 'failed' | 'canceled'
+export type TaskStatus = 'planning' | 'review' | 'pending' | 'in_progress' | 'done' | 'failed' | 'canceled'
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
 
 export interface ActorRef {
@@ -560,6 +560,10 @@ export interface CreatePlanningTaskRequest {
 export interface AppendTaskMessageRequest {
   content: string
   ui_response?: UIResponse
+}
+
+export interface RejectPlanRequest {
+  feedback: string
 }
 
 export interface SendAgentChatMessageRequest {
