@@ -209,7 +209,7 @@ export function RoleDetailPage() {
         </div>
 
         {/* 右侧边栏：安装说明 + 元信息 */}
-        <aside className="w-[32rem] xl:w-[34rem] shrink-0 border-l flex flex-col min-h-0">
+        <aside className="w-lg xl:w-136 shrink-0 border-l flex flex-col min-h-0">
           <div className="flex-1 min-h-0 p-5">
             <InstallGuide role={role} />
           </div>

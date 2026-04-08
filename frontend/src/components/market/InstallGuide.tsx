@@ -201,7 +201,7 @@ export function InstallGuide({ role }: InstallGuideProps) {
         </div>
 
         <div className="mt-4 min-h-0 flex-1 overflow-auto rounded-lg bg-muted">
-          <pre className="px-3 py-3 text-xs leading-5 text-foreground whitespace-pre-wrap break-words">
+          <pre className="px-3 py-3 text-xs leading-5 text-foreground whitespace-pre-wrap wrap-break-word">
             {prompt}
           </pre>
         </div>
