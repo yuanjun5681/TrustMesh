@@ -71,7 +71,7 @@ func Load() Config {
 		AssistantAPIKey: getEnv("ASSISTANT_API_KEY", ""),
 		AssistantModel:  getEnv("ASSISTANT_MODEL", "gpt-4o-mini"),
 
-		MarketDataPath: getEnv("MARKET_DATA_PATH", "data"),
+		MarketDataPath: getEnv("MARKET_DATA_PATH", "data/roles_index.json"),
 	}
 }
 

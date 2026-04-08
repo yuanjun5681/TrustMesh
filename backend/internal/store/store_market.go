@@ -20,11 +20,11 @@ import (
 // 目录前缀 → 部门 ID（优先匹配双段前缀）
 var deptPrefixMap = map[string]string{
 	// 双段前缀（优先）
-	"paid-media":          "sales-marketing",
-	"supply-chain":        "supply-chain",
-	"project-management":  "project-management",
-	"project-manager":     "project-management",
-	"technical-artist":    "creative-tech",
+	"paid-media":         "sales-marketing",
+	"supply-chain":       "supply-chain",
+	"project-management": "project-management",
+	"project-manager":    "project-management",
+	"technical-artist":   "creative-tech",
 	// 单段前缀
 	"academic":    "academic",
 	"engineering": "engineering",
@@ -92,61 +92,16 @@ var deptOrder = []string{
 	"other",
 }
 
-// roleEntry 内存中的角色条目（含部门信息）
-type roleEntry struct {
-	role     *model.MarketRole
-	deptID   string
-	deptName string
-}
+// ── 独立函数：供生成脚本调用 ──
 
-// MarketStore 工作岗位市场的数据层，独立于主 Store
-type MarketStore struct {
-	mu      sync.RWMutex
-	dataDir string               // 指向 backend/data/ 目录
-	index   *model.RolesIndex    // 完整两层结构（直接对应 JSON）
-	byID    map[string]roleEntry // role id → entry（含部门信息，O(1) 查找）
-}
-
-// NewMarketStore 创建 MarketStore，优先从 roles_index.json 加载
-func NewMarketStore(dataDir string) (*MarketStore, error) {
-	ms := &MarketStore{
-		dataDir: dataDir,
-		byID:    make(map[string]roleEntry),
-	}
-
-	indexPath := filepath.Join(dataDir, "roles_index.json")
-	if data, err := os.ReadFile(indexPath); err == nil {
-		var idx model.RolesIndex
-		if err := json.Unmarshal(data, &idx); err == nil {
-			ms.index = &idx
-			ms.buildByID()
-			return ms, nil
-		}
-	}
-
-	// JSON 不存在或损坏，重新扫描目录
-	if err := ms.rebuild(); err != nil {
-		return nil, fmt.Errorf("market store init: %w", err)
-	}
-	return ms, nil
-}
-
-// RebuildIndex 重新扫描 roles 目录，更新内存索引并写入 JSON 文件
-func (ms *MarketStore) RebuildIndex() error {
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
-	return ms.rebuild()
-}
-
-// rebuild 扫描 roles 目录，构建内存索引并持久化到 JSON（调用方持有写锁或初始化时调用）
-func (ms *MarketStore) rebuild() error {
-	rolesDir := filepath.Join(ms.dataDir, "roles")
+// BuildRolesIndex 扫描 rolesDir 目录，构建并返回角色索引。
+// filePathPrefix 是写入 JSON 中 files 字段的路径前缀（相对于后端工作目录，如 "data/roles"）。
+func BuildRolesIndex(rolesDir, filePathPrefix string) (*model.RolesIndex, error) {
 	entries, err := os.ReadDir(rolesDir)
 	if err != nil {
-		return fmt.Errorf("read roles dir %q: %w", rolesDir, err)
+		return nil, fmt.Errorf("read roles dir %q: %w", rolesDir, err)
 	}
 
-	// 按部门 ID 收集角色
 	deptRoles := make(map[string][]model.MarketRole)
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -155,10 +110,9 @@ func (ms *MarketStore) rebuild() error {
 		dirName := entry.Name()
 		deptID := resolveDeptID(dirName)
 
-		identityPath := filepath.Join(rolesDir, dirName, "IDENTITY.md")
-		name, desc := parseIdentityFile(identityPath)
+		name, desc := parseIdentityFile(filepath.Join(rolesDir, dirName, "IDENTITY.md"))
 		if name == "" {
-			name = dirName // 解析失败时回退到目录名
+			name = dirName
 		}
 
 		role := model.MarketRole{
@@ -166,15 +120,14 @@ func (ms *MarketStore) rebuild() error {
 			Name:        name,
 			Description: desc,
 			Files: model.MarketRoleFiles{
-				Identity: filepath.Join("data", "roles", dirName, "IDENTITY.md"),
-				Soul:     filepath.Join("data", "roles", dirName, "SOUL.md"),
-				Agents:   filepath.Join("data", "roles", dirName, "AGENTS.md"),
+				Identity: filePathPrefix + "/" + dirName + "/IDENTITY.md",
+				Soul:     filePathPrefix + "/" + dirName + "/SOUL.md",
+				Agents:   filePathPrefix + "/" + dirName + "/AGENTS.md",
 			},
 		}
 		deptRoles[deptID] = append(deptRoles[deptID], role)
 	}
 
-	// 按 deptOrder 组装有序部门列表
 	var departments []model.MarketDepartment
 	for _, deptID := range deptOrder {
 		roles, ok := deptRoles[deptID]
@@ -190,7 +143,7 @@ func (ms *MarketStore) rebuild() error {
 		delete(deptRoles, deptID)
 	}
 
-	// 剩余未匹配的归入 other
+	// 未匹配前缀的归入 other
 	var otherRoles []model.MarketRole
 	for _, roles := range deptRoles {
 		otherRoles = append(otherRoles, roles...)
@@ -204,23 +157,50 @@ func (ms *MarketStore) rebuild() error {
 		})
 	}
 
-	idx := &model.RolesIndex{
+	return &model.RolesIndex{
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
 		Departments: departments,
-	}
-
-	// 持久化到 JSON
-	indexPath := filepath.Join(ms.dataDir, "roles_index.json")
-	if data, err := json.MarshalIndent(idx, "", "  "); err == nil {
-		_ = os.WriteFile(indexPath, data, 0644)
-	}
-
-	ms.index = idx
-	ms.buildByID()
-	return nil
+	}, nil
 }
 
-// buildByID 从 index 构建 byID 索引（调用方持有锁）
+// ── MarketStore：只负责加载 JSON，不做扫描 ──
+
+// roleEntry 内存中的角色条目（含部门信息）
+type roleEntry struct {
+	role     *model.MarketRole
+	deptID   string
+	deptName string
+}
+
+// MarketStore 工作岗位市场的数据层，独立于主 Store
+type MarketStore struct {
+	mu    sync.RWMutex
+	index *model.RolesIndex    // 完整两层结构（直接对应 JSON）
+	byID  map[string]roleEntry // role id → entry（O(1) 查找）
+}
+
+// NewMarketStore 从 indexPath 加载角色索引 JSON，找不到或格式错误直接返回错误。
+// 需要先运行 gen-roles-index 命令生成该文件。
+func NewMarketStore(indexPath string) (*MarketStore, error) {
+	data, err := os.ReadFile(indexPath)
+	if err != nil {
+		return nil, fmt.Errorf("roles index not found at %q: run 'go run ./cmd/gen-roles-index' first: %w", indexPath, err)
+	}
+
+	var idx model.RolesIndex
+	if err := json.Unmarshal(data, &idx); err != nil {
+		return nil, fmt.Errorf("invalid roles index JSON at %q: %w", indexPath, err)
+	}
+
+	ms := &MarketStore{
+		index: &idx,
+		byID:  make(map[string]roleEntry),
+	}
+	ms.buildByID()
+	return ms, nil
+}
+
+// buildByID 从 index 构建 byID 索引（调用方持有锁或初始化时调用）
 func (ms *MarketStore) buildByID() {
 	ms.byID = make(map[string]roleEntry)
 	for i := range ms.index.Departments {
@@ -236,7 +216,7 @@ func (ms *MarketStore) buildByID() {
 	}
 }
 
-// ListDepts 返回所有有角色的部门摘要列表
+// ListDepts 返回所有部门摘要列表
 func (ms *MarketStore) ListDepts() []model.MarketDeptSummary {
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
@@ -297,14 +277,8 @@ func (ms *MarketStore) GetRole(id string) (*model.MarketRoleDetail, *transport.A
 	if err != nil {
 		return nil, transport.NotFound("role files not found")
 	}
-	soul, err := os.ReadFile(entry.role.Files.Soul)
-	if err != nil {
-		soul = []byte("")
-	}
-	agents, err := os.ReadFile(entry.role.Files.Agents)
-	if err != nil {
-		agents = []byte("")
-	}
+	soul, _ := os.ReadFile(entry.role.Files.Soul)
+	agents, _ := os.ReadFile(entry.role.Files.Agents)
 
 	return &model.MarketRoleDetail{
 		MarketRoleListItem: model.MarketRoleListItem{
@@ -320,7 +294,7 @@ func (ms *MarketStore) GetRole(id string) (*model.MarketRoleDetail, *transport.A
 	}, nil
 }
 
-// WriteRoleZip 将角色包三个文件打包为 zip 并写入 http.ResponseWriter（流式，无临时文件）
+// WriteRoleZip 将角色包三个文件打包为 zip 并写入 ResponseWriter（流式，无临时文件）
 func (ms *MarketStore) WriteRoleZip(w http.ResponseWriter, id string) *transport.AppError {
 	ms.mu.RLock()
 	entry, ok := ms.byID[id]
@@ -330,11 +304,8 @@ func (ms *MarketStore) WriteRoleZip(w http.ResponseWriter, id string) *transport
 		return transport.NotFound("role not found")
 	}
 
-	files := map[string]string{
-		"IDENTITY.md": entry.role.Files.Identity,
-		"SOUL.md":     entry.role.Files.Soul,
-		"AGENTS.md":   entry.role.Files.Agents,
-	}
+	fileNames := []string{"IDENTITY.md", "SOUL.md", "AGENTS.md"}
+	filePaths := []string{entry.role.Files.Identity, entry.role.Files.Soul, entry.role.Files.Agents}
 
 	// 响应头必须在 zip.NewWriter 之前设置
 	w.Header().Set("Content-Type", "application/zip")
@@ -344,10 +315,10 @@ func (ms *MarketStore) WriteRoleZip(w http.ResponseWriter, id string) *transport
 	zw := zip.NewWriter(w)
 	defer zw.Close()
 
-	for name, path := range files {
-		data, err := os.ReadFile(path)
+	for i, name := range fileNames {
+		data, err := os.ReadFile(filePaths[i])
 		if err != nil {
-			continue // 文件不存在则跳过
+			continue
 		}
 		f, err := zw.Create(filepath.Join(id, name))
 		if err != nil {
@@ -362,8 +333,7 @@ func (ms *MarketStore) WriteRoleZip(w http.ResponseWriter, id string) *transport
 func resolveDeptID(dirName string) string {
 	parts := strings.SplitN(dirName, "-", 3)
 	if len(parts) >= 2 {
-		twoSeg := parts[0] + "-" + parts[1]
-		if id, ok := deptPrefixMap[twoSeg]; ok {
+		if id, ok := deptPrefixMap[parts[0]+"-"+parts[1]]; ok {
 			return id
 		}
 	}
@@ -374,7 +344,6 @@ func resolveDeptID(dirName string) string {
 }
 
 // parseIdentityFile 解析 IDENTITY.md，返回角色名称和描述
-// 格式：第一行 "# 名称"，第二行一句话描述
 func parseIdentityFile(path string) (name, desc string) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -389,8 +358,7 @@ func parseIdentityFile(path string) (name, desc string) {
 			continue
 		}
 		if name == "" {
-			name = strings.TrimPrefix(line, "# ")
-			name = strings.TrimSpace(name)
+			name = strings.TrimSpace(strings.TrimPrefix(line, "# "))
 			continue
 		}
 		desc = line

@@ -165,6 +165,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	kb.POST("/search", knowledgeHandler.Search)
 
 	// Market (job role marketplace)
+	// roles_index.json 需要先运行 go run ./cmd/gen-roles-index 生成
 	if marketStore, err := store.NewMarketStore(cfg.MarketDataPath); err != nil {
 		log.Warn("market store init failed, market disabled", zap.Error(err))
 	} else {
