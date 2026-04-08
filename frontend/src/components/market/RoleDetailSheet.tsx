@@ -129,7 +129,7 @@ export function RoleDetailSheet({ roleId, open, onOpenChange }: RoleDetailSheetP
 
             {/* 安装说明 */}
             <div className="px-6 pb-6 pt-3 border-t mt-auto">
-              <InstallGuide roleId={role.id} />
+              <InstallGuide role={role} />
             </div>
           </>
         )}

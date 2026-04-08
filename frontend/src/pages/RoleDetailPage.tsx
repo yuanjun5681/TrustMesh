@@ -1,17 +1,17 @@
 import { useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, Download, FileText, Brain, BookOpen, Terminal } from 'lucide-react'
+import { ArrowLeft, Download, FileText, Brain, BookOpen } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { useMarketRole } from '@/hooks/useMarket'
 import { downloadRole } from '@/api/market'
 import { toast } from 'sonner'
+import { InstallGuide } from '@/components/market/InstallGuide'
 
 const deptColorMap: Record<string, string> = {
   engineering:        'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
@@ -45,17 +45,6 @@ function MarkdownBody({ content }: { content: string }) {
       '[&>*:first-child]:mt-0',
     )}>
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-    </div>
-  )
-}
-
-function InstallStep({ num, children }: { num: number; children: React.ReactNode }) {
-  return (
-    <div className="flex gap-3">
-      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary mt-0.5">
-        {num}
-      </span>
-      <div className="flex-1 text-sm text-muted-foreground">{children}</div>
     </div>
   )
 }
@@ -141,13 +130,31 @@ export function RoleDetailPage() {
 
       {/* Hero：角色名 + 描述 */}
       <div className="border-b px-6 py-5 shrink-0">
-        <div className="flex items-start gap-3">
+        <div className="flex items-start justify-between gap-6">
           <div className="flex-1 min-w-0">
             <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium mb-2', deptColor)}>
               {role.dept_name}
             </span>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">{role.name}</h1>
             <p className="mt-1 text-sm text-muted-foreground leading-relaxed">{role.description}</p>
+          </div>
+          <div className="shrink-0 rounded-lg border bg-muted/20 px-4 py-3">
+            <div className="space-y-1.5 text-xs text-muted-foreground">
+              <div className="flex items-start justify-between gap-4">
+                <span>ID</span>
+                <code className="font-mono text-[11px] text-foreground/80 max-w-[220px] break-all text-right">
+                  {role.id}
+                </code>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span>部门</span>
+                <span className="text-foreground/80">{role.dept_name}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span>格式</span>
+                <span className="text-foreground/80">OpenClaw Agent</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -202,73 +209,10 @@ export function RoleDetailPage() {
         </div>
 
         {/* 右侧边栏：安装说明 + 元信息 */}
-        <aside className="w-96 shrink-0 border-l flex flex-col min-h-0">
-          <ScrollArea className="flex-1">
-            <div className="p-5 space-y-5">
-
-              {/* 安装说明（默认展开） */}
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Terminal className="size-3.5 text-muted-foreground" />
-                  <span className="text-sm font-medium">安装说明</span>
-                </div>
-                <div className="space-y-3">
-                  <InstallStep num={1}>
-                    下载角色包{' '}
-                    <code className="text-xs bg-muted px-1 py-0.5 rounded font-mono">{role.id}.zip</code>
-                  </InstallStep>
-                  <InstallStep num={2}>
-                    解压后将角色目录复制到本地 OpenClaw：
-                    <pre className="mt-2 rounded-md bg-muted px-3 py-2 text-xs font-mono overflow-x-auto whitespace-pre-wrap break-all">
-                      {`cp -r ${role.id} ~/.openclaw/agents/`}
-                    </pre>
-                  </InstallStep>
-                  <InstallStep num={3}>
-                    重启 OpenClaw 网关，角色自动激活
-                  </InstallStep>
-                  <InstallStep num={4}>
-                    在 TrustMesh 项目团队中邀请该智能体加入，即可参与协作
-                  </InstallStep>
-                </div>
-                <p className="mt-3 text-xs text-muted-foreground">
-                  需要安装{' '}
-                  <a
-                    href="https://docs.openclaw.ai"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-primary hover:underline"
-                  >
-                    OpenClaw
-                  </a>{' '}
-                  并通过 Clawsynapse 连接到 TrustMesh。
-                </p>
-              </div>
-
-              <Separator />
-
-              {/* 角色元信息 */}
-              <div className="space-y-2">
-                <span className="text-sm font-medium">角色信息</span>
-                <div className="space-y-1.5 text-xs text-muted-foreground">
-                  <div className="flex justify-between">
-                    <span>ID</span>
-                    <code className="font-mono text-[11px] text-foreground/70 max-w-[160px] truncate" title={role.id}>
-                      {role.id}
-                    </code>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>部门</span>
-                    <span className="text-foreground/70">{role.dept_name}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>格式</span>
-                    <span className="text-foreground/70">OpenClaw Agent</span>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </ScrollArea>
+        <aside className="w-[32rem] xl:w-[34rem] shrink-0 border-l flex flex-col min-h-0">
+          <div className="flex-1 min-h-0 p-5">
+            <InstallGuide role={role} />
+          </div>
         </aside>
 
       </div>
