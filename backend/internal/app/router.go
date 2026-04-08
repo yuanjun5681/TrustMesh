@@ -164,6 +164,18 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	kb.POST("/documents/:id/reprocess", knowledgeHandler.Reprocess)
 	kb.POST("/search", knowledgeHandler.Search)
 
+	// Market (job role marketplace)
+	if marketStore, err := store.NewMarketStore(cfg.MarketDataPath); err != nil {
+		log.Warn("market store init failed, market disabled", zap.Error(err))
+	} else {
+		marketHandler := handler.NewMarketHandler(marketStore)
+		mkt := authed.Group("/market")
+		mkt.GET("/departments", marketHandler.ListDepts)
+		mkt.GET("/roles", marketHandler.ListRoles)
+		mkt.GET("/roles/:id", marketHandler.GetRole)
+		mkt.GET("/roles/:id/download", marketHandler.DownloadRole)
+	}
+
 	// Assistant (LLM-powered, optional)
 	if cfg.AssistantAPIKey != "" {
 		llmClient := assistant.NewLLMClient(cfg.AssistantAPIURL, cfg.AssistantAPIKey, cfg.AssistantModel)

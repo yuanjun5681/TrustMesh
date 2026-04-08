@@ -712,3 +712,25 @@ export interface AssistantSSEEvent {
   event: string
   data: Record<string, unknown>
 }
+
+// ─── 工作岗位市场 ───
+
+export interface MarketDeptSummary {
+  id: string
+  name: string
+  count: number
+}
+
+export interface MarketRoleListItem {
+  id: string
+  name: string
+  description: string
+  dept_id: string
+  dept_name: string
+}
+
+export interface MarketRoleDetail extends MarketRoleListItem {
+  identity_content: string
+  soul_content: string
+  agents_content: string
+}

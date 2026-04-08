@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   Inbox,
   BookOpen,
+  Briefcase,
   Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -165,6 +166,17 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
           >
             <BookOpen className="size-4 shrink-0" />
             {!collapsed && <span>知识库</span>}
+          </Link>
+
+          <Link
+            to="/market"
+            className={cn(
+              'flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+              isActive('/market') && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+            )}
+          >
+            <Briefcase className="size-4 shrink-0" />
+            {!collapsed && <span>岗位市场</span>}
           </Link>
         </div>
 

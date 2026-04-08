@@ -36,6 +36,9 @@ type Config struct {
 	AssistantAPIURL string
 	AssistantAPIKey string
 	AssistantModel  string
+
+	// Market
+	MarketDataPath string
 }
 
 func Load() Config {
@@ -67,6 +70,8 @@ func Load() Config {
 		AssistantAPIURL: getEnv("ASSISTANT_API_URL", "https://api.openai.com/v1"),
 		AssistantAPIKey: getEnv("ASSISTANT_API_KEY", ""),
 		AssistantModel:  getEnv("ASSISTANT_MODEL", "gpt-4o-mini"),
+
+		MarketDataPath: getEnv("MARKET_DATA_PATH", "data"),
 	}
 }
 
