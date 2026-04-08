@@ -12,6 +12,7 @@ import { AgentInvitePage } from '@/pages/AgentInvitePage'
 import { InboxPage } from '@/pages/InboxPage'
 import { KnowledgePage } from '@/pages/KnowledgePage'
 import { MarketPage } from '@/pages/MarketPage'
+import { RoleDetailPage } from '@/pages/RoleDetailPage'
 import { useAuthStore } from '@/stores/authStore'
 import { Toaster } from '@/components/ui/sonner'
 import { RealtimeProvider } from '@/realtime/provider'
@@ -93,6 +94,7 @@ export default function App() {
               <Route path="/agents/:id" element={<AgentDetailPage />} />
               <Route path="/knowledge" element={<KnowledgePage />} />
               <Route path="/market" element={<MarketPage />} />
+              <Route path="/market/roles/:id" element={<RoleDetailPage />} />
             </Route>
 
             {/* Redirect */}

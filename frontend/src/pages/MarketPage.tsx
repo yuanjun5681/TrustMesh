@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -7,15 +7,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { useMarketDepts, useMarketRoles } from '@/hooks/useMarket'
 import { RoleCard } from '@/components/market/RoleCard'
-import { RoleDetailSheet } from '@/components/market/RoleDetailSheet'
 import { useDebounce } from '@/hooks/useDebounce'
 
 export function MarketPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [inputValue, setInputValue] = useState(searchParams.get('q') ?? '')
   const debouncedQuery = useDebounce(inputValue, 300)
-  const [selectedRoleId, setSelectedRoleId] = useState<string>()
-  const [sheetOpen, setSheetOpen] = useState(false)
 
   const activeDept = searchParams.get('dept') ?? ''
 
@@ -50,11 +47,6 @@ export function MarketPage() {
     })
   }
 
-  const handleViewDetail = useCallback((id: string) => {
-    setSelectedRoleId(id)
-    setSheetOpen(true)
-  }, [])
-
   const totalCount = roles?.length ?? 0
   const activeDeptName = depts?.find(d => d.id === activeDept)?.name
 
@@ -66,7 +58,7 @@ export function MarketPage() {
           <div>
             <h1 className="text-xl font-semibold">岗位市场</h1>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              浏览 191 个预置 AI 智能体角色，下载到本地即可接入团队
+              191 个预置 AI 智能体角色，下载到本地即可接入团队
             </p>
           </div>
           <div className="relative w-64">
@@ -163,7 +155,7 @@ export function MarketPage() {
             ) : roles && roles.length > 0 ? (
               <div className="grid grid-cols-2 gap-4 p-5 xl:grid-cols-3 2xl:grid-cols-4">
                 {roles.map(role => (
-                  <RoleCard key={role.id} role={role} onViewDetail={handleViewDetail} />
+                  <RoleCard key={role.id} role={role} />
                 ))}
               </div>
             ) : (
@@ -185,12 +177,6 @@ export function MarketPage() {
           </ScrollArea>
         </div>
       </div>
-
-      <RoleDetailSheet
-        roleId={selectedRoleId}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-      />
     </div>
   )
 }
