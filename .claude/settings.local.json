@@ -84,7 +84,11 @@
       "Bash(git -C /Volumes/UWorks/Projects/TrustMesh/backend stash)",
       "Bash(git:*)",
       "Bash(go clean:*)",
-      "Bash(gofmt -e /Volumes/UWorks/Projects/TrustMesh/backend/internal/app/router_test.go)"
+      "Bash(gofmt -e /Volumes/UWorks/Projects/TrustMesh/backend/internal/app/router_test.go)",
+      "Bash(sed 's/-[^-]*$//')",
+      "Bash(cat /Volumes/UWorks/Projects/TrustMesh/backend/internal/transport/*.go)",
+      "Bash(rm:*)",
+      "Bash(python3 -c ':*)"
     ]
   }
 }

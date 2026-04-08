@@ -39,7 +39,7 @@ function MarkdownBody({ content }: { content: string }) {
       'prose-p:text-muted-foreground prose-p:leading-relaxed',
       'prose-li:text-muted-foreground',
       'prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono',
-      'prose-pre:bg-muted prose-pre:rounded-lg',
+      'prose-pre:bg-muted prose-pre:text-foreground prose-pre:rounded-lg',
       'prose-strong:text-foreground',
       'prose-a:text-primary',
       '[&>*:first-child]:mt-0',
@@ -147,7 +147,7 @@ export function RoleDetailPage() {
               {role.dept_name}
             </span>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">{role.name}</h1>
-            <p className="mt-1 text-sm text-muted-foreground leading-relaxed max-w-2xl">{role.description}</p>
+            <p className="mt-1 text-sm text-muted-foreground leading-relaxed">{role.description}</p>
           </div>
         </div>
       </div>
@@ -177,7 +177,7 @@ export function RoleDetailPage() {
 
             <TabsContent value="identity" className="flex-1 min-h-0 mt-0">
               <ScrollArea className="h-full">
-                <div className="px-6 py-6 max-w-3xl">
+                <div className="px-6 py-6">
                   <MarkdownBody content={role.identity_content} />
                 </div>
               </ScrollArea>
@@ -185,7 +185,7 @@ export function RoleDetailPage() {
 
             <TabsContent value="soul" className="flex-1 min-h-0 mt-0">
               <ScrollArea className="h-full">
-                <div className="px-6 py-6 max-w-3xl">
+                <div className="px-6 py-6">
                   <MarkdownBody content={role.soul_content} />
                 </div>
               </ScrollArea>
@@ -193,7 +193,7 @@ export function RoleDetailPage() {
 
             <TabsContent value="agents" className="flex-1 min-h-0 mt-0">
               <ScrollArea className="h-full">
-                <div className="px-6 py-6 max-w-3xl">
+                <div className="px-6 py-6">
                   <MarkdownBody content={role.agents_content} />
                 </div>
               </ScrollArea>
@@ -202,7 +202,7 @@ export function RoleDetailPage() {
         </div>
 
         {/* 右侧边栏：安装说明 + 元信息 */}
-        <aside className="w-72 shrink-0 border-l flex flex-col min-h-0">
+        <aside className="w-96 shrink-0 border-l flex flex-col min-h-0">
           <ScrollArea className="flex-1">
             <div className="p-5 space-y-5">
 
