@@ -269,9 +269,10 @@ func (s *Store) CreateTaskByPMNodeWithMessageID(nodeID, messageID string, in Tas
 			Description: desc,
 			Status:      "pending",
 			Assignee: model.TodoAssignee{
-				AgentID: assigneeAgent.ID,
-				Name:    assigneeAgent.Name,
-				NodeID:  assigneeAgent.NodeID,
+				AgentID:     assigneeAgent.ID,
+				Name:        assigneeAgent.Name,
+				NodeID:      assigneeAgent.NodeID,
+				ClawAgentID: assigneeAgent.ClawAgentID,
 			},
 			StartedAt:    nil,
 			CompletedAt:  nil,
@@ -391,9 +392,10 @@ func (s *Store) CreateTaskByUser(userID string, in UserTaskCreateInput) (*model.
 		Description: in.Description,
 		Status:      "pending",
 		Assignee: model.TodoAssignee{
-			AgentID: assignee.ID,
-			Name:    assignee.Name,
-			NodeID:  assignee.NodeID,
+			AgentID:     assignee.ID,
+			Name:        assignee.Name,
+			NodeID:      assignee.NodeID,
+			ClawAgentID: assignee.ClawAgentID,
 		},
 		Result: model.TodoResult{
 			Summary:  "",
@@ -947,10 +949,11 @@ func (s *Store) taskCommentMentionTargetsUnsafe(task *model.TaskDetail) map[stri
 	targets := make(map[string]model.CommentMention, len(task.Todos)+1)
 	if task.PMAgent.ID != "" {
 		targets[task.PMAgent.ID] = model.CommentMention{
-			AgentID:   task.PMAgent.ID,
-			AgentName: task.PMAgent.Name,
-			NodeID:    task.PMAgent.NodeID,
-			Role:      "pm",
+			AgentID:     task.PMAgent.ID,
+			AgentName:   task.PMAgent.Name,
+			NodeID:      task.PMAgent.NodeID,
+			ClawAgentID: task.PMAgent.ClawAgentID,
+			Role:        "pm",
 		}
 	}
 	for _, todo := range task.Todos {
@@ -962,10 +965,11 @@ func (s *Store) taskCommentMentionTargetsUnsafe(task *model.TaskDetail) map[stri
 			continue
 		}
 		targets[agentID] = model.CommentMention{
-			AgentID:   agentID,
-			AgentName: todo.Assignee.Name,
-			NodeID:    todo.Assignee.NodeID,
-			Role:      "executor",
+			AgentID:     agentID,
+			AgentName:   todo.Assignee.Name,
+			NodeID:      todo.Assignee.NodeID,
+			ClawAgentID: todo.Assignee.ClawAgentID,
+			Role:        "executor",
 		}
 	}
 	return targets

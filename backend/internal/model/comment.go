@@ -3,10 +3,11 @@ package model
 import "time"
 
 type CommentMention struct {
-	AgentID   string `json:"agent_id" bson:"agent_id"`
-	AgentName string `json:"agent_name" bson:"agent_name"`
-	NodeID    string `json:"node_id" bson:"node_id"`
-	Role      string `json:"role" bson:"role"`
+	AgentID     string `json:"agent_id" bson:"agent_id"`
+	AgentName   string `json:"agent_name" bson:"agent_name"`
+	NodeID      string `json:"node_id" bson:"node_id"`
+	ClawAgentID string `json:"claw_agent_id,omitempty" bson:"claw_agent_id,omitempty"`
+	Role        string `json:"role" bson:"role"`
 }
 
 type CommentMentionDelivery struct {

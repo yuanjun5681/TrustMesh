@@ -166,7 +166,7 @@ func (h *TaskHandler) autoDispatchFirstTodo(ctx context.Context, userID string, 
 			MustUseSkill: "tm-task-exec",
 		},
 	}
-	if _, err := h.publisher.Publish(ctx, todo.Assignee.NodeID, "todo.assigned", payload, task.ID, map[string]any{"source": "user_created"}); err != nil {
+	if _, err := h.publisher.Publish(ctx, todo.Assignee.NodeID, "todo.assigned", payload, task.ID, todo.Assignee.ClawAgentID, map[string]any{"source": "user_created"}); err != nil {
 		if h.log != nil {
 			h.log.Warn("auto dispatch todo failed", zap.String("task_id", task.ID), zap.String("todo_id", todo.ID), zap.Error(err))
 		}
@@ -267,7 +267,7 @@ func (h *TaskHandler) DispatchTodo(c *gin.Context) {
 			MustUseSkill: "tm-task-exec",
 		},
 	}
-	if _, err := h.publisher.Publish(context.Background(), todo.Assignee.NodeID, "todo.assigned", payload, task.ID, map[string]any{"source": "manual_dispatch"}); err != nil {
+	if _, err := h.publisher.Publish(context.Background(), todo.Assignee.NodeID, "todo.assigned", payload, task.ID, todo.Assignee.ClawAgentID, map[string]any{"source": "manual_dispatch"}); err != nil {
 		if h.log != nil {
 			h.log.Warn("manual todo dispatch failed", zap.String("task_id", task.ID), zap.String("todo_id", todo.ID), zap.String("target_node", todo.Assignee.NodeID), zap.Error(err))
 		}
@@ -406,7 +406,7 @@ func (h *TaskHandler) publishTaskCommentMentions(ctx context.Context, task *mode
 		}
 
 		payload := h.buildTaskMentionPayload(task, comment, mention)
-		if _, err := h.publisher.Publish(ctx, mention.NodeID, "task.mention", payload, task.ID, map[string]any{
+		if _, err := h.publisher.Publish(ctx, mention.NodeID, "task.mention", payload, task.ID, mention.ClawAgentID, map[string]any{
 			"source":     "task_comment_mention",
 			"task_id":    task.ID,
 			"comment_id": comment.ID,
@@ -557,7 +557,7 @@ func (h *TaskHandler) notifyPMTaskMessage(c *gin.Context, userID, projectID, tas
 	if h.publisher == nil {
 		return
 	}
-	pmNodeID, appErr := h.store.GetTaskPMNode(userID, taskID)
+	pmNodeID, pmAgentID, appErr := h.store.GetTaskPMPublishTarget(userID, taskID)
 	if appErr != nil {
 		if h.log != nil {
 			h.log.Warn("skip notify task.message", zap.String("task_id", taskID), zap.String("code", appErr.Code))
@@ -565,7 +565,7 @@ func (h *TaskHandler) notifyPMTaskMessage(c *gin.Context, userID, projectID, tas
 		return
 	}
 	payload := h.buildPMTaskMessage(userID, projectID, taskID, content, initial, uiResponse)
-	if _, err := h.publisher.Publish(c.Request.Context(), pmNodeID, "task.message", payload, taskID, nil); err != nil {
+	if _, err := h.publisher.Publish(c.Request.Context(), pmNodeID, "task.message", payload, taskID, pmAgentID, nil); err != nil {
 		if h.log != nil {
 			h.log.Warn("notify task.message failed", zap.String("task_id", taskID), zap.Error(err))
 		}

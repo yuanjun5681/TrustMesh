@@ -37,6 +37,7 @@ func (s *Store) enableMongo(cfg config.Config, log *zap.Logger) error {
 	s.mongoClient = client
 	s.mongoUsers = db.Collection("users")
 	s.mongoAgents = db.Collection("agents")
+	s.mongoJoinRequests = db.Collection("join_requests")
 	s.mongoProjects = db.Collection("projects")
 	s.mongoAgentChats = db.Collection("agent_chats")
 	s.mongoTasks = db.Collection("tasks")
@@ -84,6 +85,7 @@ func (s *Store) clearMongoCollections() {
 	s.mongoClient = nil
 	s.mongoUsers = nil
 	s.mongoAgents = nil
+	s.mongoJoinRequests = nil
 	s.mongoProjects = nil
 	s.mongoAgentChats = nil
 	s.mongoTasks = nil
@@ -111,6 +113,11 @@ func (s *Store) ensureMongoIndexes() error {
 			{Keys: bson.D{{Key: "status", Value: 1}}},
 			{Keys: bson.D{{Key: "role", Value: 1}}},
 			{Keys: bson.D{{Key: "capabilities", Value: 1}}},
+		},
+		s.mongoJoinRequests: {
+			{Keys: bson.D{{Key: "trust_request_id", Value: 1}}, Options: options.Index().SetUnique(true)},
+			{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "status", Value: 1}, {Key: "created_at", Value: -1}}},
+			{Keys: bson.D{{Key: "node_id", Value: 1}, {Key: "status", Value: 1}}},
 		},
 		s.mongoProjects: {
 			{Keys: bson.D{{Key: "user_id", Value: 1}}},
@@ -182,6 +189,10 @@ func (s *Store) loadMongoState() error {
 	if err != nil {
 		return err
 	}
+	joinRequests, userJoinRequests, trustRequestIndex, err := s.loadJoinRequests(users)
+	if err != nil {
+		return err
+	}
 	projects, err := s.loadProjects()
 	if err != nil {
 		return err
@@ -235,6 +246,9 @@ func (s *Store) loadMongoState() error {
 	s.usersByMail = usersByMail
 	s.agents = agents
 	s.agentByNode = agentByNode
+	s.joinRequests = joinRequests
+	s.userJoinRequests = userJoinRequests
+	s.trustRequestIndex = trustRequestIndex
 	s.projects = projects
 	s.agentChats = agentChats
 	s.activeAgentChats = activeAgentChats
@@ -300,6 +314,42 @@ func (s *Store) loadAgents() (map[string]*model.Agent, error) {
 		items[agent.ID] = copyAgent(&agent)
 	}
 	return items, nil
+}
+
+func (s *Store) loadJoinRequests(users map[string]*model.User) (map[string]*model.JoinRequest, map[string][]string, map[string]string, error) {
+	items := make(map[string]*model.JoinRequest)
+	userJoinRequests := make(map[string][]string)
+	trustRequestIndex := make(map[string]string)
+	if s.mongoJoinRequests == nil {
+		return items, userJoinRequests, trustRequestIndex, nil
+	}
+	ctx, cancel := s.mongoContext()
+	defer cancel()
+	cursor, err := s.mongoJoinRequests.Find(ctx, bson.D{}, options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}}))
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var joinRequests []model.JoinRequest
+	if err := cursor.All(ctx, &joinRequests); err != nil {
+		return nil, nil, nil, err
+	}
+	for i := range joinRequests {
+		jr := joinRequests[i]
+		items[jr.ID] = copyJoinRequest(&jr)
+		trustRequestIndex[jr.TrustRequestID] = jr.ID
+		if strings.TrimSpace(jr.UserID) != "" {
+			if _, exists := users[jr.UserID]; exists {
+				userJoinRequests[jr.UserID] = append(userJoinRequests[jr.UserID], jr.ID)
+			}
+			continue
+		}
+		for _, user := range users {
+			userJoinRequests[user.ID] = append(userJoinRequests[user.ID], jr.ID)
+		}
+	}
+	return items, userJoinRequests, trustRequestIndex, nil
 }
 
 func (s *Store) loadProjects() (map[string]*model.Project, error) {
@@ -490,6 +540,16 @@ func (s *Store) persistAgentUnsafe(agent *model.Agent) error {
 	ctx, cancel := s.mongoContext()
 	defer cancel()
 	_, err := s.mongoAgents.ReplaceOne(ctx, bson.M{"_id": agent.ID}, copyAgent(agent), options.Replace().SetUpsert(true))
+	return err
+}
+
+func (s *Store) persistJoinRequestUnsafe(jr *model.JoinRequest) error {
+	if !s.mongoEnabled || s.mongoJoinRequests == nil || jr == nil {
+		return nil
+	}
+	ctx, cancel := s.mongoContext()
+	defer cancel()
+	_, err := s.mongoJoinRequests.ReplaceOne(ctx, bson.M{"_id": jr.ID}, copyJoinRequest(jr), options.Replace().SetUpsert(true))
 	return err
 }
 

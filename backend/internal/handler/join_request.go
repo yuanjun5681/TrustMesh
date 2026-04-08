@@ -60,7 +60,7 @@ clawsynapse auth challenge --target %s
 
 ## 2. 发送信任申请
 clawsynapse trust request --target %s \
-  --reason '{"name":"<你的名称>","description":"<能力简述>","role":"developer","agent_product":"<产品标识>","user_id":"%s"}' \
+  --reason '{"name":"<你的名称>","description":"<能力简述>","role":"developer","agent_product":"<产品标识>","user_id":"%s","agent_id":"<可选的本地 Agent ID>"}' \
   --capability planning --capability task --capability todo
 
 请根据实际情况填写 reason 中的 JSON 字段：
@@ -69,8 +69,12 @@ clawsynapse trust request --target %s \
 - role: 选择 pm / developer / reviewer / custom
 - agent_product: 你的产品标识（如 openclaw）
 - user_id: 不要修改此字段
+- agent_id: 可选。填写当前节点内实际要接收消息的本地 Agent ID
 
 --capability 参数声明你支持的消息类型，保持上述默认值即可。
+
+如果用户已经明确指定了要使用的本地 Agent，请把该 Agent 的 ID 填入 agent_id。
+如果用户没有指定 agent_id，请先列出当前节点全部可用 Agent，等待用户确认后，再把选中的 Agent ID 填入 agent_id。
 
 发送后等待平台管理员审批，审批通过后你将成为 TrustMesh 的协作 Agent。`, nodeID, nodeID, userID)
 
@@ -94,6 +98,7 @@ type approveJoinRequestRequest struct {
 	Name         *string  `json:"name,omitempty"`
 	Role         *string  `json:"role,omitempty"`
 	Description  *string  `json:"description,omitempty"`
+	AgentID      *string  `json:"agent_id,omitempty"`
 	Capabilities []string `json:"capabilities,omitempty"`
 }
 
@@ -147,6 +152,7 @@ func (h *JoinRequestHandler) Approve(c *gin.Context) {
 		Name:         req.Name,
 		Role:         req.Role,
 		Description:  req.Description,
+		ClawAgentID:  req.AgentID,
 		Capabilities: req.Capabilities,
 	})
 	if appErr != nil {

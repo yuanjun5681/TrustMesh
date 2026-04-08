@@ -3,6 +3,7 @@ package clawsynapse
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -65,12 +66,16 @@ func (s *TrustRequestSyncer) Close() {
 
 // trustRequestReason is the JSON structure embedded in the trust request reason field.
 type trustRequestReason struct {
-	Name         string   `json:"name"`
-	Description  string   `json:"description"`
-	Role         string   `json:"role"`
-	Capabilities []string `json:"capabilities"`
-	AgentProduct string   `json:"agent_product"`
-	UserID       string   `json:"user_id"`
+	Name               string   `json:"name"`
+	Description        string   `json:"description"`
+	Role               string   `json:"role"`
+	Capabilities       []string `json:"capabilities"`
+	AgentProduct       string   `json:"agent_product"`
+	UserID             string   `json:"user_id"`
+	ClawAgentID        string   `json:"clawAgentId"`
+	ClawAgentIDSnake   string   `json:"claw_agent_id"`
+	LegacyAgentID      string   `json:"agentId"`
+	LegacyAgentIDSnake string   `json:"agent_id"`
 }
 
 func (s *TrustRequestSyncer) sync() {
@@ -109,6 +114,7 @@ func (s *TrustRequestSyncer) sync() {
 			TrustRequestID: item.RequestID,
 			UserID:         profile.UserID,
 			NodeID:         item.From,
+			ClawAgentID:    firstNonEmpty(profile.ClawAgentID, profile.ClawAgentIDSnake, profile.LegacyAgentID, profile.LegacyAgentIDSnake),
 			Name:           profile.Name,
 			Description:    profile.Description,
 			Role:           profile.Role,
@@ -131,4 +137,14 @@ func (s *TrustRequestSyncer) sync() {
 	if s.log != nil && created > 0 {
 		s.log.Info("clawsynapse trust sync created join requests", zap.Int("count", created))
 	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
