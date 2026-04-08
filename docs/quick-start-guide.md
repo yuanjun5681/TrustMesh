@@ -54,7 +54,7 @@ curl -fsSL https://raw.githubusercontent.com/yuanjun5681/clawsynapse/main/script
 | 参数 | 操作 | 说明 |
 |------|------|------|
 | `AGENT_ADAPTER` | 输入 `openclaw` | 使用 OpenClaw 作为 Agent 适配器 |
-| `DELIVERABLE_PREFIXES` | 输入 `chat,task,todo,conversation` | 定义消息类型前缀 |
+| `DELIVERABLE_PREFIXES` | 输入 `chat,task,todo` | 定义消息类型前缀 |
 | 其他参数 | 直接回车 | 保持默认值即可 |
 
 验证安装：
@@ -76,7 +76,7 @@ curl -fsSL https://raw.githubusercontent.com/yuanjun5681/clawsynapse/main/script
 | 参数 | 操作 |
 |------|------|
 | `AGENT_ADAPTER` | 输入 `openclaw` |
-| `DELIVERABLE_PREFIXES` | 输入 `chat,task,todo,conversation` |
+| `DELIVERABLE_PREFIXES` | 输入 `chat,task,todo` |
 | 其他参数 | 直接回车 |
 
 验证安装：
