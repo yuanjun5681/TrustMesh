@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { cn } from '@/lib/utils'
+import { cn, normalizeEscapedText } from '@/lib/utils'
 import { ChevronDown } from 'lucide-react'
 
 const COLLAPSED_HEIGHT_PX = 48 // ~2 lines of text-sm (14px * 1.43 line-height * 2 ≈ 40, +8 for margin)
@@ -14,12 +14,13 @@ export function TaskDescription({ description }: TaskDescriptionProps) {
   const [expanded, setExpanded] = useState(false)
   const [overflows, setOverflows] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
+  const displayDescription = normalizeEscapedText(description, { preserveMarkdownCode: true })
 
   useEffect(() => {
     const el = contentRef.current
     if (!el) return
     setOverflows(el.scrollHeight > COLLAPSED_HEIGHT_PX + 4)
-  }, [description])
+  }, [displayDescription])
 
   return (
     <div className="mt-1.5">
@@ -34,7 +35,7 @@ export function TaskDescription({ description }: TaskDescriptionProps) {
         style={!expanded && overflows ? { maxHeight: `${COLLAPSED_HEIGHT_PX}px` } : undefined}
       >
         <ReactMarkdown remarkPlugins={[remarkGfm]}>
-          {description}
+          {displayDescription}
         </ReactMarkdown>
       </div>
       {overflows && (

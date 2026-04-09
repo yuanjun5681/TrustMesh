@@ -1,6 +1,7 @@
 import { CheckCircle2, Circle, Loader2, XCircle, ChevronDown, ChevronRight, CircleSlash2, MessageSquareMore } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { normalizeEscapedText } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import type { Todo, TaskArtifact } from '@/types'
 
@@ -113,11 +114,11 @@ function TodoItem({
           )}
         >
           {todo.description && (
-            <p className="text-muted-foreground whitespace-pre-wrap">{todo.description}</p>
+            <p className="text-muted-foreground whitespace-pre-wrap">{normalizeEscapedText(todo.description)}</p>
           )}
           {todo.error && (
-            <p className="rounded-md bg-destructive/10 p-2 text-xs text-destructive">
-              {todo.error}
+            <p className="rounded-md bg-destructive/10 p-2 text-xs text-destructive whitespace-pre-wrap">
+              {normalizeEscapedText(todo.error)}
             </p>
           )}
           {relatedArtifacts.length > 0 && (

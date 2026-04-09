@@ -18,6 +18,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { ApiRequestError } from '@/api/client'
 import { useMemo, useState } from 'react'
 import type { TaskMessage, TaskDetail, UIResponse, Todo } from '@/types'
+import { normalizeEscapedText } from '@/lib/utils'
 
 type TaskWorkspaceProps = {
   onClose: () => void
@@ -94,7 +95,7 @@ function PlanReviewPanel({
             <div className="min-w-0 flex-1">
               <p className="font-medium">{todo.title}</p>
               {todo.description && (
-                <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap">{todo.description}</p>
+                <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap">{normalizeEscapedText(todo.description)}</p>
               )}
             </div>
             <span className="shrink-0 text-xs text-muted-foreground pt-0.5">{todo.assignee.name}</span>

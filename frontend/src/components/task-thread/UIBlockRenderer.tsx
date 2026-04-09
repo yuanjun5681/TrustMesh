@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import type { UIBlock, UIBlockResponse } from '@/types'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { normalizeEscapedText } from '@/lib/utils'
 
 interface UIBlockRendererProps {
   blocks: UIBlock[]
@@ -120,7 +121,9 @@ function InfoBlockReadonly({ block }: { block: UIBlock }) {
       </div>
       {block.content && (
         <div className="text-xs bg-blue-500/5 rounded-lg px-3 py-2 prose prose-sm dark:prose-invert max-w-none prose-p:my-0.5">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{block.content}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {normalizeEscapedText(block.content, { preserveMarkdownCode: true })}
+          </ReactMarkdown>
         </div>
       )}
     </div>

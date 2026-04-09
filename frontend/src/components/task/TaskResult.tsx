@@ -21,7 +21,7 @@ interface TaskResultViewProps {
 export function TaskResultView({ taskId, result, artifacts }: TaskResultViewProps) {
   const safeArtifacts = artifacts ?? []
   const summaryText = normalizeEscapedText(result.summary)
-  const finalOutputText = normalizeEscapedText(result.final_output)
+  const finalOutputText = normalizeEscapedText(result.final_output, { preserveMarkdownCode: true })
   const hasResult = summaryText || finalOutputText
   const hasArtifacts = safeArtifacts.length > 0
   const [loadingArtifactId, setLoadingArtifactId] = useState<string | null>(null)
