@@ -38,11 +38,6 @@ func (s *Store) maybeCreateNotificationUnsafe(event *model.Event) {
 		body = stringOrDefault(event.Content, "新的回复")
 		category = "task"
 		priority = "medium"
-	case "join_request_received":
-		title = "Agent 加入申请"
-		body = stringOrDefault(event.Content, "收到新的 Agent 加入申请")
-		category = "agent"
-		priority = "high"
 	default:
 		return
 	}

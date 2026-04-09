@@ -3,10 +3,11 @@ package model
 import "time"
 
 type PMAgentSummary struct {
-	ID     string `json:"id" bson:"id"`
-	Name   string `json:"name" bson:"name"`
-	NodeID string `json:"node_id" bson:"node_id"`
-	Status string `json:"status" bson:"status"`
+	ID          string `json:"id" bson:"id"`
+	Name        string `json:"name" bson:"name"`
+	NodeID      string `json:"node_id" bson:"node_id"`
+	ClawAgentID string `json:"claw_agent_id,omitempty" bson:"claw_agent_id,omitempty"`
+	Status      string `json:"status" bson:"status"`
 }
 
 type Agent struct {
@@ -17,6 +18,7 @@ type Agent struct {
 	Role         string     `json:"role" bson:"role"`
 	Capabilities []string   `json:"capabilities" bson:"capabilities"`
 	NodeID       string     `json:"node_id" bson:"node_id"`
+	ClawAgentID  string     `json:"claw_agent_id,omitempty" bson:"claw_agent_id,omitempty"`
 	Status       string     `json:"status" bson:"status"`
 	Archived     bool       `json:"archived" bson:"archived"`
 	LastSeenAt   *time.Time `json:"last_seen_at" bson:"last_seen_at"`

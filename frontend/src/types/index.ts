@@ -35,6 +35,7 @@ export interface PMAgentSummary {
   id: string
   name: string
   node_id: string
+  claw_agent_id?: string
   status: 'online' | 'offline' | 'busy'
 }
 
@@ -200,6 +201,7 @@ export interface Agent {
   role: AgentRole
   capabilities: string[]
   node_id: string
+  claw_agent_id?: string
   status: AgentStatus
   archived: boolean
   last_seen_at: string | null
@@ -212,6 +214,7 @@ export interface TodoAssignee {
   agent_id: string
   name: string
   node_id: string
+  claw_agent_id?: string
 }
 
 export interface TodoResult {
@@ -603,7 +606,8 @@ export interface JoinRequest {
   capabilities: string[]
   agent_product: string
   status: JoinRequestStatus
-  agent_id?: string
+  claw_agent_id?: string
+  approved_trustmesh_agent_id?: string
   created_at: string
   resolved_at?: string
 }
@@ -617,6 +621,7 @@ export interface JoinRequestOverrides {
   name?: string
   role?: AgentRole
   description?: string
+  claw_agent_id?: string
   capabilities?: string[]
 }
 
@@ -711,4 +716,26 @@ export interface AssistantChatRequest {
 export interface AssistantSSEEvent {
   event: string
   data: Record<string, unknown>
+}
+
+// ─── 工作岗位市场 ───
+
+export interface MarketDeptSummary {
+  id: string
+  name: string
+  count: number
+}
+
+export interface MarketRoleListItem {
+  id: string
+  name: string
+  description: string
+  dept_id: string
+  dept_name: string
+}
+
+export interface MarketRoleDetail extends MarketRoleListItem {
+  identity_content: string
+  soul_content: string
+  agents_content: string
 }

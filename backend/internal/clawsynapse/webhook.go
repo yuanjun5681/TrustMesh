@@ -87,7 +87,7 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 }
 
 func (h *WebhookHandler) handleChatMessage(c *gin.Context, webhook protocol.WebhookPayload) {
-	content := strings.TrimSpace(normalizeChatMessageContent(webhook.Message))
+	content := strings.TrimSpace(webhook.Message)
 	if content == "" {
 		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "invalid chat.message payload"))
 		return
@@ -99,22 +99,6 @@ func (h *WebhookHandler) handleChatMessage(c *gin.Context, webhook protocol.Webh
 		return
 	}
 	transport.WriteData(c, http.StatusOK, detail)
-}
-
-func normalizeChatMessageContent(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ""
-	}
-
-	var decoded string
-	if len(raw) >= 2 && raw[0] == '"' && raw[len(raw)-1] == '"' {
-		if err := json.Unmarshal([]byte(raw), &decoded); err == nil {
-			return decoded
-		}
-	}
-
-	return raw
 }
 
 func (h *WebhookHandler) resolveLocalNodeID(ctx context.Context) (string, *transport.AppError) {
@@ -328,12 +312,12 @@ func (h *WebhookHandler) handleContextQuery(c *gin.Context, webhook protocol.Web
 		}
 	}
 
-	h.publish(context.Background(), webhook.From, "task.context.result", resultPayload, task.ID)
+	h.publish(context.Background(), webhook.From, "", "task.context.result", resultPayload, task.ID)
 	transport.WriteData(c, http.StatusOK, gin.H{"status": "ok", "task_id": task.ID})
 }
 
 func (h *WebhookHandler) publishTaskCreated(task *model.TaskDetail) {
-	h.publish(context.Background(), task.PMAgent.NodeID, "task.created", protocol.TaskCreatedPayload{
+	h.publish(context.Background(), task.PMAgent.NodeID, task.PMAgent.ClawAgentID, "task.created", protocol.TaskCreatedPayload{
 		TaskID:    task.ID,
 		ProjectID: task.ProjectID,
 		Title:     task.Title,
@@ -370,7 +354,7 @@ func (h *WebhookHandler) dispatchNextTodo(ctx context.Context, task *model.TaskD
 	}
 
 	payload := h.buildTodoAssignedPayload(task, todo)
-	if _, err := h.client.Publish(ctx, todo.Assignee.NodeID, "todo.assigned", payload, task.ID, nil); err != nil {
+	if _, err := h.client.Publish(ctx, todo.Assignee.NodeID, "todo.assigned", payload, task.ID, todo.Assignee.ClawAgentID, nil); err != nil {
 		if h.log != nil {
 			h.log.Warn("sequential todo dispatch failed", zap.String("task_id", task.ID), zap.String("todo_id", todo.ID), zap.String("target_node", todo.Assignee.NodeID), zap.Error(err))
 		}
@@ -488,7 +472,7 @@ func buildPriorResult(todo *model.Todo) protocol.TodoPriorResult {
 }
 
 func (h *WebhookHandler) publishTaskAndTodoStatusChanges(task *model.TaskDetail, todoID, message, actorNodeID, cause string) {
-	h.publish(context.Background(), task.PMAgent.NodeID, "task.status_changed", protocol.TaskStatusChangedPayload{
+	h.publish(context.Background(), task.PMAgent.NodeID, task.PMAgent.ClawAgentID, "task.status_changed", protocol.TaskStatusChangedPayload{
 		TaskID:      task.ID,
 		Status:      task.Status,
 		ActorNodeID: strings.TrimSpace(actorNodeID),
@@ -513,18 +497,18 @@ func (h *WebhookHandler) publishTaskAndTodoStatusChanges(task *model.TaskDetail,
 		Message:     message,
 	}
 	if task.PMAgent.NodeID != "" {
-		h.publish(context.Background(), task.PMAgent.NodeID, "todo.status_changed", payload, task.ID)
+		h.publish(context.Background(), task.PMAgent.NodeID, task.PMAgent.ClawAgentID, "todo.status_changed", payload, task.ID)
 	}
 	if todo.Assignee.NodeID != "" && todo.Assignee.NodeID != strings.TrimSpace(actorNodeID) && todo.Assignee.NodeID != task.PMAgent.NodeID {
-		h.publish(context.Background(), todo.Assignee.NodeID, "todo.status_changed", payload, task.ID)
+		h.publish(context.Background(), todo.Assignee.NodeID, todo.Assignee.ClawAgentID, "todo.status_changed", payload, task.ID)
 	}
 }
 
-func (h *WebhookHandler) publish(ctx context.Context, targetNode, msgType string, payload any, sessionKey string) {
+func (h *WebhookHandler) publish(ctx context.Context, targetNode, targetAgentID, msgType string, payload any, sessionKey string) {
 	if h.client == nil {
 		return
 	}
-	if _, err := h.client.Publish(ctx, targetNode, msgType, payload, sessionKey, nil); err != nil && h.log != nil {
+	if _, err := h.client.Publish(ctx, targetNode, msgType, payload, sessionKey, targetAgentID, nil); err != nil && h.log != nil {
 		h.log.Warn("clawsynapse publish failed", zap.String("target_node", targetNode), zap.String("type", msgType), zap.Error(err))
 	}
 }
@@ -656,7 +640,7 @@ func (h *WebhookHandler) handleKnowledgeQuery(c *gin.Context, webhook protocol.W
 		ProjectID: payload.ProjectID,
 		Results:   results,
 	}
-	h.publish(context.Background(), webhook.From, "knowledge.result", resultPayload, payload.QueryID)
+	h.publish(context.Background(), webhook.From, "", "knowledge.result", resultPayload, payload.QueryID)
 	transport.WriteData(c, http.StatusOK, gin.H{"status": "ok", "results_count": len(results)})
 }
 
@@ -741,7 +725,7 @@ func (h *WebhookHandler) knowledgeSearch(ctx context.Context, userID string, pay
 }
 
 func (h *WebhookHandler) sendKnowledgeError(targetNode string, payload protocol.KnowledgeQueryPayload, errMsg string) {
-	h.publish(context.Background(), targetNode, "knowledge.result", protocol.KnowledgeResultPayload{
+	h.publish(context.Background(), targetNode, "", "knowledge.result", protocol.KnowledgeResultPayload{
 		QueryID:   payload.QueryID,
 		ProjectID: payload.ProjectID,
 		Error:     errMsg,

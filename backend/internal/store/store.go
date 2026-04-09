@@ -26,15 +26,15 @@ type Store struct {
 
 	projects map[string]*model.Project
 
-	agentChats           map[string]*model.AgentChat
-	activeAgentChats     map[string]string
-	agentChatBySession   map[string]string
-	tasks             map[string]*model.TaskDetail
-	projectTasks      map[string][]string
-	taskEvents        map[string][]model.Event
-	userEvents        map[string][]*model.Event
-	agentEvents       map[string][]*model.Event
-	processedMessages map[string]processedMessage
+	agentChats         map[string]*model.AgentChat
+	activeAgentChats   map[string]string
+	agentChatBySession map[string]string
+	tasks              map[string]*model.TaskDetail
+	projectTasks       map[string][]string
+	taskEvents         map[string][]model.Event
+	userEvents         map[string][]*model.Event
+	agentEvents        map[string][]*model.Event
+	processedMessages  map[string]processedMessage
 
 	taskArtifacts map[string][]model.TaskArtifact // taskID → []TaskArtifact
 
@@ -54,6 +54,7 @@ type Store struct {
 	mongoClient            *mongo.Client
 	mongoUsers             *mongo.Collection
 	mongoAgents            *mongo.Collection
+	mongoJoinRequests      *mongo.Collection
 	mongoProjects          *mongo.Collection
 	mongoAgentChats        *mongo.Collection
 	mongoTasks             *mongo.Collection
@@ -130,6 +131,19 @@ func copyAgent(a *model.Agent) *model.Agent {
 	if a.LastSeenAt != nil {
 		t := *a.LastSeenAt
 		clone.LastSeenAt = &t
+	}
+	return &clone
+}
+
+func copyJoinRequest(jr *model.JoinRequest) *model.JoinRequest {
+	clone := *jr
+	if jr.Capabilities != nil {
+		clone.Capabilities = append([]string(nil), jr.Capabilities...)
+	}
+	clone.Metadata = copyMap(jr.Metadata)
+	if jr.ResolvedAt != nil {
+		t := *jr.ResolvedAt
+		clone.ResolvedAt = &t
 	}
 	return &clone
 }

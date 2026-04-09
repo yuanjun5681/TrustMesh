@@ -326,6 +326,112 @@ func TestInvitePromptUsesNodeIDFromClawSynapseHealth(t *testing.T) {
 	if !strings.Contains(prompt, "--target "+localNodeID) {
 		t.Fatalf("invite prompt does not use local node id from health: %s", prompt)
 	}
+	if !strings.Contains(prompt, "\"clawAgentId\":\"<可选的本地 Claw Agent ID>\"") {
+		t.Fatalf("invite prompt missing clawAgentId guidance: %s", prompt)
+	}
+	if !strings.Contains(prompt, "如果用户没有指定 clawAgentId") {
+		t.Fatalf("invite prompt missing clawAgentId selection instructions: %s", prompt)
+	}
+}
+
+func TestApproveJoinRequestParsesAgentIDAndReturnsPersistedAgent(t *testing.T) {
+	log, err := logger.New("error")
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	defer func() { _ = log.Sync() }()
+
+	clawServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/peers":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(clawsynapsePeersResponse(t)))
+		case "/v1/trust/pending":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"code":"OK","message":"ok","data":{"items":[]},"ts":1}`))
+		case "/v1/auth/challenge", "/v1/trust/approve":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"code":"OK","message":"ok","ts":1}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer clawServer.Close()
+
+	application, err := New(config.Config{
+		Port:               "0",
+		JWTSecret:          "test-secret",
+		AccessTokenTTL:     time.Hour,
+		RefreshTokenTTL:    168 * time.Hour,
+		LogLevel:           "error",
+		AllowAllCORS:       true,
+		ReadTimeout:        3 * time.Second,
+		ShutdownGrace:      3 * time.Second,
+		ClawSynapseAPIURL:  clawServer.URL,
+		ClawSynapseTimeout: time.Second,
+	}, log)
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
+	defer func() {
+		if closeErr := application.Close(); closeErr != nil {
+			t.Fatalf("close app: %v", closeErr)
+		}
+	}()
+
+	testServer := httptest.NewServer(application.Engine)
+	defer testServer.Close()
+
+	registerResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/auth/register", "", map[string]any{
+		"email":    "approve@example.com",
+		"name":     "Approve User",
+		"password": "StrongPass123!",
+	})
+	token := nestedString(decodeBody(t, registerResp), "data", "access_token")
+
+	jr, appErr := application.Store.CreateJoinRequest(store.CreateJoinRequestInput{
+		TrustRequestID: "trust-req-001",
+		NodeID:         "node-remote-001",
+		Name:           "Remote Agent",
+		Description:    "remote",
+		Role:           "developer",
+		Capabilities:   []string{"task"},
+		AgentProduct:   "openclaw",
+	})
+	if appErr != nil {
+		t.Fatalf("create join request: %v", appErr)
+	}
+
+	approveResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/agents/join-requests/"+jr.ID+"/approve", token, map[string]any{
+		"claw_agent_id": "agent-42",
+	})
+	if approveResp.StatusCode != http.StatusOK {
+		t.Fatalf("approve join request status=%d", approveResp.StatusCode)
+	}
+	approveBody := decodeBody(t, approveResp)
+	if nestedString(approveBody, "data", "claw_agent_id") != "agent-42" {
+		t.Fatalf("expected approved agent claw_agent_id to persist, got %#v", approveBody)
+	}
+
+	listResp := doJSON(t, testServer.Client(), "GET", testServer.URL+"/api/v1/agents/join-requests", token, nil)
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("list join requests status=%d", listResp.StatusCode)
+	}
+	listBody := decodeBody(t, listResp)
+	items, ok := nestedMap(listBody, "data")["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("expected one join request, got %#v", listBody)
+	}
+	item, ok := items[0].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected join request item: %#v", items[0])
+	}
+	if item["claw_agent_id"] != "agent-42" {
+		t.Fatalf("expected join request claw_agent_id=agent-42, got %#v", item["claw_agent_id"])
+	}
+	if item["approved_trustmesh_agent_id"] == "" {
+		t.Fatalf("expected approved_trustmesh_agent_id to be set, got %#v", item)
+	}
 }
 
 func TestCreatePlanningTaskPublishesInitialPMBrief(t *testing.T) {

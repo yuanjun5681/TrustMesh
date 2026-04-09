@@ -49,7 +49,10 @@ export function AssistantMessageBubble({ message, getToolLabel }: Props) {
   const navigate = useNavigate()
   const isUser = message.role === 'user'
   const [thinkExpanded, setThinkExpanded] = useState(false)
-  const normalizedContent = useMemo(() => normalizeEscapedText(message.content), [message.content])
+  const normalizedContent = useMemo(
+    () => normalizeEscapedText(message.content, { preserveMarkdownCode: true }),
+    [message.content]
+  )
 
   const { thinking, reply, isThinking } = useMemo(
     () => (!isUser && normalizedContent ? parseThinkBlocks(normalizedContent) : { thinking: '', reply: normalizedContent, isThinking: false }),

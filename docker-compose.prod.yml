@@ -40,9 +40,12 @@ services:
       ASSISTANT_API_URL: ${ASSISTANT_API_URL:-https://api.openai.com/v1}
       ASSISTANT_API_KEY: ${ASSISTANT_API_KEY:-}
       ASSISTANT_MODEL: ${ASSISTANT_MODEL:-gpt-4o-mini}
+      MARKET_DATA_PATH: ${MARKET_DATA_PATH:-/app/data/roles_index.json}
     volumes:
       - trustmesh-transfer-data:/var/lib/trustmesh-transfers:ro
       - trustmesh-knowledge-data:/var/lib/trustmesh-knowledge
+      - ./data/roles_index.json:/app/data/roles_index.json:ro
+      - ./data/roles:/app/data/roles:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1"]
       interval: 10s

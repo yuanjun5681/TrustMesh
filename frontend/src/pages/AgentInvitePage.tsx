@@ -280,6 +280,9 @@ export function AgentInvitePage() {
                             <Network className="size-3" />
                             {jr.node_id}
                           </span>
+                          {jr.claw_agent_id && (
+                            <span>ClawAgentID: {jr.claw_agent_id}</span>
+                          )}
                           {jr.capabilities?.length > 0 && (
                             <span>能力: {jr.capabilities.join(', ')}</span>
                           )}

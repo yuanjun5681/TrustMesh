@@ -36,16 +36,40 @@ export function formatDateTime(dateStr: string): string {
   })
 }
 
-export function normalizeEscapedText(value: string | null | undefined) {
-  if (!value) {
-    return ''
-  }
+interface NormalizeEscapedTextOptions {
+  preserveMarkdownCode?: boolean
+}
 
+function decodeEscapedControlChars(value: string) {
   return value
     .replace(/\\r\\n/g, '\n')
     .replace(/\\n/g, '\n')
     .replace(/\\r/g, '\r')
     .replace(/\\t/g, '\t')
+}
+
+export function normalizeEscapedText(value: string | null | undefined, options: NormalizeEscapedTextOptions = {}) {
+  if (!value) {
+    return ''
+  }
+
+  if (!options.preserveMarkdownCode) {
+    return decodeEscapedControlChars(value)
+  }
+
+  const markdownCodePattern = /```[\s\S]*?```|`[^`\n]*`/g
+  let result = ''
+  let lastIndex = 0
+
+  for (const match of value.matchAll(markdownCodePattern)) {
+    const index = match.index ?? 0
+    result += decodeEscapedControlChars(value.slice(lastIndex, index))
+    result += match[0]
+    lastIndex = index + match[0].length
+  }
+
+  result += decodeEscapedControlChars(value.slice(lastIndex))
+  return result
 }
 
 export function stripMessagePrefix(content: string): string {

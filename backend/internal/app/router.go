@@ -99,6 +99,15 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	v1.POST("/auth/login", authHandler.Login)
 	v1.POST("/auth/refresh", authHandler.Refresh)
 
+	// Market public download endpoint for external installers like OpenClaw.
+	// Listing/detail APIs remain authenticated.
+	if marketStore, err := store.NewMarketStore(cfg.MarketDataPath); err != nil {
+		log.Warn("market store init failed, market disabled", zap.Error(err))
+	} else {
+		marketHandler := handler.NewMarketHandler(marketStore)
+		v1.GET("/market/roles/:id/download", marketHandler.DownloadRole)
+	}
+
 	authed := v1.Group("")
 	authed.Use(middleware.RequireAuth(jwtManager))
 
@@ -163,6 +172,18 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	kb.GET("/documents/:id/chunks", knowledgeHandler.ListChunks)
 	kb.POST("/documents/:id/reprocess", knowledgeHandler.Reprocess)
 	kb.POST("/search", knowledgeHandler.Search)
+
+	// Market (job role marketplace)
+	// roles_index.json 需要先运行 go run ./cmd/gen-roles-index 生成
+	if marketStore, err := store.NewMarketStore(cfg.MarketDataPath); err != nil {
+		log.Warn("market store init failed, market disabled", zap.Error(err))
+	} else {
+		marketHandler := handler.NewMarketHandler(marketStore)
+		mkt := authed.Group("/market")
+		mkt.GET("/departments", marketHandler.ListDepts)
+		mkt.GET("/roles", marketHandler.ListRoles)
+		mkt.GET("/roles/:id", marketHandler.GetRole)
+	}
 
 	// Assistant (LLM-powered, optional)
 	if cfg.AssistantAPIKey != "" {

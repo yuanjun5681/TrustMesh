@@ -274,6 +274,7 @@ func (s *Store) rebuildTodoAssigneeUnsafe(agentID string) {
 			if t.Todos[i].Assignee.AgentID == agentID {
 				t.Todos[i].Assignee.Name = a.Name
 				t.Todos[i].Assignee.NodeID = a.NodeID
+				t.Todos[i].Assignee.ClawAgentID = a.ClawAgentID
 			}
 		}
 	}

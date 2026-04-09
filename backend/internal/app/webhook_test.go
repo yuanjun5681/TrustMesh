@@ -522,7 +522,7 @@ func TestWebhookPlanningTaskLifecycle(t *testing.T) {
 	}
 }
 
-func TestWebhookChatMessageDecodesJSONStringContent(t *testing.T) {
+func TestWebhookChatMessagePreservesRawJSONStringContent(t *testing.T) {
 	log, err := logger.New("error")
 	if err != nil {
 		t.Fatalf("new logger: %v", err)
@@ -628,8 +628,8 @@ func TestWebhookChatMessageDecodesJSONStringContent(t *testing.T) {
 	}
 	reply, _ := messages[1].(map[string]any)
 	content, _ := reply["content"].(string)
-	if content != "当然可以！\n\n# Hello World 程序\nprint(\"Hello, World!\")" {
-		t.Fatalf("unexpected normalized content: %q", content)
+	if content != "\"当然可以！\\n\\n# Hello World 程序\\nprint(\\\"Hello, World!\\\")\"" {
+		t.Fatalf("unexpected raw content: %q", content)
 	}
 }
 

@@ -85,6 +85,11 @@ func (h *AgentChatHandler) SendMessage(c *gin.Context) {
 		transport.WriteError(c, appErr)
 		return
 	}
+	agent, appErr := h.store.GetAgent(userID, c.Param("id"))
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
 
 	if h.publisher == nil {
 		updated, markErr := h.store.UpdateAgentChatMessageStatus(userID, detail.ID, msg.ID, "failed", "")
@@ -96,10 +101,10 @@ func (h *AgentChatHandler) SendMessage(c *gin.Context) {
 	}
 
 	payloadContent := "[使用 clawsynapse skill 回复以下消息]\n" + req.Content
-	result, err := h.publisher.Publish(context.Background(), detail.AgentNodeID, "chat.message", payloadContent, detail.SessionKey, map[string]any{
-		"agentId":   detail.AgentID,
-		"chatId":    detail.ID,
-		"messageId": msg.ID,
+	result, err := h.publisher.Publish(context.Background(), detail.AgentNodeID, "chat.message", payloadContent, detail.SessionKey, agent.ClawAgentID, map[string]any{
+		"trustmeshAgentId": detail.AgentID,
+		"chatId":           detail.ID,
+		"messageId":        msg.ID,
 	})
 	if err != nil {
 		updated, markErr := h.store.UpdateAgentChatMessageStatus(userID, detail.ID, msg.ID, "failed", "")

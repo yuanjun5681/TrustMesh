@@ -163,7 +163,7 @@ func toTaskListItem(task model.TaskDetail) model.TaskListItem {
 }
 
 func toPMSummary(a *model.Agent) model.PMAgentSummary {
-	return model.PMAgentSummary{ID: a.ID, Name: a.Name, NodeID: a.NodeID, Status: a.Status}
+	return model.PMAgentSummary{ID: a.ID, Name: a.Name, NodeID: a.NodeID, ClawAgentID: a.ClawAgentID, Status: a.Status}
 }
 
 func isValidTaskStatus(status string) bool {

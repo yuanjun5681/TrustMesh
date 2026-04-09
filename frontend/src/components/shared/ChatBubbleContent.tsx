@@ -1,6 +1,6 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { cn } from '@/lib/utils'
+import { cn, normalizeEscapedText } from '@/lib/utils'
 
 interface ChatBubbleContentProps {
   content: string
@@ -9,10 +9,12 @@ interface ChatBubbleContentProps {
 }
 
 export function ChatBubbleContent({ content, markdown = false, className }: ChatBubbleContentProps) {
+  const displayContent = normalizeEscapedText(content, { preserveMarkdownCode: markdown })
+
   if (!markdown) {
     return (
       <p className={cn('whitespace-pre-wrap wrap-break-word', className)}>
-        {content}
+        {displayContent}
       </p>
     )
   }
@@ -25,7 +27,7 @@ export function ChatBubbleContent({ content, markdown = false, className }: Chat
       )}
     >
       <ReactMarkdown remarkPlugins={[remarkGfm]}>
-        {content}
+        {displayContent}
       </ReactMarkdown>
     </div>
   )

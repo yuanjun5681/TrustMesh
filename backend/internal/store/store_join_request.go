@@ -13,6 +13,7 @@ type CreateJoinRequestInput struct {
 	TrustRequestID string
 	UserID         string
 	NodeID         string
+	ClawAgentID    string
 	Name           string
 	Description    string
 	Role           string
@@ -25,6 +26,7 @@ type JoinRequestOverrides struct {
 	Name         *string  `json:"name,omitempty"`
 	Role         *string  `json:"role,omitempty"`
 	Description  *string  `json:"description,omitempty"`
+	ClawAgentID  *string  `json:"claw_agent_id,omitempty"`
 	Capabilities []string `json:"capabilities,omitempty"`
 }
 
@@ -84,6 +86,7 @@ func (s *Store) CreateJoinRequest(in CreateJoinRequestInput) (*model.JoinRequest
 		UserID:         userID,
 		TrustRequestID: in.TrustRequestID,
 		NodeID:         in.NodeID,
+		ClawAgentID:    strings.TrimSpace(in.ClawAgentID),
 		Name:           name,
 		Description:    strings.TrimSpace(in.Description),
 		Role:           role,
@@ -96,6 +99,9 @@ func (s *Store) CreateJoinRequest(in CreateJoinRequestInput) (*model.JoinRequest
 
 	s.joinRequests[jr.ID] = jr
 	s.trustRequestIndex[in.TrustRequestID] = jr.ID
+	if err := s.persistJoinRequestUnsafe(jr); err != nil {
+		return nil, mongoWriteError(err)
+	}
 
 	if userID != "" {
 		// Associate with the specific user who generated the invite
@@ -106,7 +112,6 @@ func (s *Store) CreateJoinRequest(in CreateJoinRequestInput) (*model.JoinRequest
 			s.userJoinRequests[u.ID] = append(s.userJoinRequests[u.ID], jr.ID)
 		}
 	}
-
 
 	// Notify relevant users
 	notifyUsers := make([]string, 0)
@@ -136,8 +141,7 @@ func (s *Store) CreateJoinRequest(in CreateJoinRequestInput) (*model.JoinRequest
 		}, now)
 	}
 
-	clone := *jr
-	return &clone, nil
+	return copyJoinRequest(jr), nil
 }
 
 func (s *Store) ListJoinRequests(userID, status string) []model.JoinRequest {
@@ -154,7 +158,7 @@ func (s *Store) ListJoinRequests(userID, status string) []model.JoinRequest {
 		if status != "" && jr.Status != status {
 			continue
 		}
-		items = append(items, *jr)
+		items = append(items, *copyJoinRequest(jr))
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.After(items[j].CreatedAt) })
 	return items
@@ -168,8 +172,7 @@ func (s *Store) GetJoinRequest(userID, requestID string) (*model.JoinRequest, *t
 	if !ok {
 		return nil, transport.NotFound("join request not found")
 	}
-	clone := *jr
-	return &clone, nil
+	return copyJoinRequest(jr), nil
 }
 
 func (s *Store) ApproveJoinRequest(userID, requestID string, overrides JoinRequestOverrides) (*model.Agent, *transport.AppError) {
@@ -202,6 +205,10 @@ func (s *Store) ApproveJoinRequest(userID, requestID string, overrides JoinReque
 	if overrides.Description != nil && strings.TrimSpace(*overrides.Description) != "" {
 		description = strings.TrimSpace(*overrides.Description)
 	}
+	clawAgentID := jr.ClawAgentID
+	if overrides.ClawAgentID != nil {
+		clawAgentID = strings.TrimSpace(*overrides.ClawAgentID)
+	}
 	capabilities := normalizeCapabilities(jr.Capabilities)
 	if overrides.Capabilities != nil {
 		capabilities = normalizeCapabilities(overrides.Capabilities)
@@ -217,6 +224,7 @@ func (s *Store) ApproveJoinRequest(userID, requestID string, overrides JoinReque
 			a.Description = description
 			a.Role = role
 			a.Capabilities = capabilities
+			a.ClawAgentID = clawAgentID
 			a.Archived = false
 			a.Status = "offline"
 			a.UpdatedAt = now
@@ -235,6 +243,7 @@ func (s *Store) ApproveJoinRequest(userID, requestID string, overrides JoinReque
 			Role:         role,
 			Capabilities: capabilities,
 			NodeID:       jr.NodeID,
+			ClawAgentID:  clawAgentID,
 			Status:       "offline",
 			CreatedAt:    now,
 			UpdatedAt:    now,
@@ -243,16 +252,23 @@ func (s *Store) ApproveJoinRequest(userID, requestID string, overrides JoinReque
 	}
 
 	s.agentByNode[jr.NodeID] = agent.ID
-	if err := s.persistAgentUnsafe(agent); err != nil {
+	s.rebuildProjectPMSummariesUnsafe(agent.ID)
+	s.rebuildTaskPMSummariesUnsafe(agent.ID)
+	s.rebuildTodoAssigneeUnsafe(agent.ID)
+	if err := s.persistAgentGraphUnsafe(agent.ID); err != nil {
 		return nil, mongoWriteError(err)
 	}
 
 	// Mark join request as approved
 	jr.Status = "approved"
-	jr.AgentID = agent.ID
+	jr.ClawAgentID = clawAgentID
+	jr.ApprovedTrustMeshAgentID = agent.ID
 	jr.UserID = userID
 	resolvedAt := now
 	jr.ResolvedAt = &resolvedAt
+	if err := s.persistJoinRequestUnsafe(jr); err != nil {
+		return nil, mongoWriteError(err)
+	}
 
 	clone := copyAgent(agent)
 	clone.Usage = s.agentUsageUnsafe(agent.ID)
@@ -275,6 +291,9 @@ func (s *Store) RejectJoinRequest(userID, requestID string) *transport.AppError 
 	jr.Status = "rejected"
 	jr.UserID = userID
 	jr.ResolvedAt = &now
+	if err := s.persistJoinRequestUnsafe(jr); err != nil {
+		return mongoWriteError(err)
+	}
 	return nil
 }
 

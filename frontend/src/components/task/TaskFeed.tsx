@@ -14,7 +14,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
-import { cn, formatRelativeTime } from '@/lib/utils'
+import { cn, formatRelativeTime, normalizeEscapedText } from '@/lib/utils'
 import { TrustMeshLogo } from '@/components/shared/TrustMeshLogo'
 import { useTaskEvents } from '@/hooks/useTasks'
 import { getTaskArtifactContent } from '@/api/tasks'
@@ -135,6 +135,8 @@ const proseSmall = cn(
 function EventContent({ event }: { event: Event }) {
   const todoTitle = event.metadata.todo_title as string | undefined
   const taskTitle = event.metadata.task_title as string | undefined
+  const markdownContent = normalizeEscapedText(event.content ?? '', { preserveMarkdownCode: true })
+  const plainContent = normalizeEscapedText(event.content ?? '')
 
   if (event.event_type === 'task_comment') {
     return (
@@ -148,7 +150,7 @@ function EventContent({ event }: { event: Event }) {
         '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
       )}>
         <ReactMarkdown remarkPlugins={[remarkGfm]}>
-          {event.content ?? ''}
+          {markdownContent}
         </ReactMarkdown>
       </div>
     )
@@ -171,7 +173,7 @@ function EventContent({ event }: { event: Event }) {
   if (event.event_type === 'todo_assigned') {
     return (
       <div>
-        <p className="text-sm">{event.content || '分配了 Todo'}</p>
+        <p className="text-sm whitespace-pre-wrap">{plainContent || '分配了 Todo'}</p>
         {todoTitle && (
           <QuoteBlock color="border-info/30">
             <p className="text-xs text-muted-foreground">{todoTitle}</p>
@@ -191,14 +193,14 @@ function EventContent({ event }: { event: Event }) {
     return (
       <div>
         {todoTitle && <p className="text-xs font-medium text-muted-foreground">{todoTitle}</p>}
-        {event.content && (
+        {plainContent && (
           <div className={cn(proseSmall, todoTitle ? 'mt-0.5' : '')}>
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {event.content}
+              {markdownContent}
             </ReactMarkdown>
           </div>
         )}
-        {!event.content && !todoTitle && <p className="text-sm text-muted-foreground">进度已更新</p>}
+        {!plainContent && !todoTitle && <p className="text-sm text-muted-foreground">进度已更新</p>}
       </div>
     )
   }
@@ -213,24 +215,24 @@ function EventContent({ event }: { event: Event }) {
   }
 
   if (event.event_type === 'todo_failed') {
-    const error = event.metadata.error as string | undefined
+    const error = normalizeEscapedText((event.metadata.error as string | undefined) ?? '')
     return (
       <div className="flex items-start gap-1.5">
         <AlertCircle className="size-3.5 text-destructive shrink-0 mt-0.5" />
         <div className="min-w-0">
           {todoTitle && <p className="text-sm text-muted-foreground">{todoTitle}</p>}
-          {error && <p className="text-xs text-destructive mt-0.5">{error}</p>}
+          {error && <p className="text-xs text-destructive mt-0.5 whitespace-pre-wrap">{error}</p>}
         </div>
       </div>
     )
   }
 
   if (event.event_type === 'planning_reply') {
-    return event.content ? (
+    return plainContent ? (
       <QuoteBlock color="border-info/30">
         <div className={proseSmall}>
           <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {event.content}
+            {markdownContent}
           </ReactMarkdown>
         </div>
       </QuoteBlock>

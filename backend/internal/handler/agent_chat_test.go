@@ -23,9 +23,23 @@ func TestSendMessagePublishesChatMessageType(t *testing.T) {
 	if appErr != nil {
 		t.Fatalf("create user: %v", appErr)
 	}
-	agent, appErr := st.CreateAgent(user.ID, "node-chat-001", "Chat Agent", "developer", "dev", []string{"conversation"})
+	jr, appErr := st.CreateJoinRequest(store.CreateJoinRequestInput{
+		TrustRequestID: "trust-req-chat-001",
+		UserID:         user.ID,
+		NodeID:         "node-chat-001",
+		ClawAgentID:    "agent-42",
+		Name:           "Chat Agent",
+		Description:    "dev",
+		Role:           "developer",
+		Capabilities:   []string{"conversation"},
+		AgentProduct:   "openclaw",
+	})
 	if appErr != nil {
-		t.Fatalf("create agent: %v", appErr)
+		t.Fatalf("create join request: %v", appErr)
+	}
+	agent, appErr := st.ApproveJoinRequest(user.ID, jr.ID, store.JoinRequestOverrides{})
+	if appErr != nil {
+		t.Fatalf("approve join request: %v", appErr)
 	}
 	now := time.Now().UTC()
 	st.SyncAgentPresence([]store.AgentPresence{{NodeID: agent.NodeID, LastSeenAt: now}}, now)
@@ -58,6 +72,9 @@ func TestSendMessagePublishesChatMessageType(t *testing.T) {
 	}
 	if publishReq["type"] != "chat.message" {
 		t.Fatalf("expected publish type chat.message, got %#v", publishReq["type"])
+	}
+	if publishReq["agentId"] != "agent-42" {
+		t.Fatalf("expected publish agentId agent-42, got %#v", publishReq["agentId"])
 	}
 	if publishReq["sessionKey"] == "" {
 		t.Fatalf("expected sessionKey to be set, got %#v", publishReq["sessionKey"])

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ChevronDown, ChevronRight, Circle, CheckCircle2, Loader2, XCircle, CircleSlash2, MessageSquareMore } from 'lucide-react'
 import { useTask } from '@/hooks/useTasks'
 import { TodoList } from './TodoList'
-import { cn } from '@/lib/utils'
+import { cn, normalizeEscapedText } from '@/lib/utils'
 import { formatRelativeTime } from '@/lib/utils'
 import { PriorityBadge } from '@/components/shared/StatusBadge'
 import type { TaskListItem, TaskStatus } from '@/types'
@@ -80,7 +80,7 @@ export function TaskListRow({ task, isSelected, onClick }: TaskListRowProps) {
           <div className="min-w-0">
             <div className="truncate text-sm font-medium">{task.title}</div>
             {task.description && (
-              <div className="text-xs text-muted-foreground truncate mt-0.5">{task.description}</div>
+              <div className="text-xs text-muted-foreground truncate mt-0.5">{normalizeEscapedText(task.description)}</div>
             )}
           </div>
         </div>

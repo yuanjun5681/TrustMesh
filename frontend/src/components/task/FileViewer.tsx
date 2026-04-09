@@ -9,7 +9,7 @@ import {
 import { Button } from '@/components/ui/button'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { cn } from '@/lib/utils'
+import { cn, normalizeEscapedText } from '@/lib/utils'
 
 type FileCategory = 'text' | 'markdown' | 'code' | 'image' | 'pdf' | 'unknown'
 
@@ -151,7 +151,7 @@ export function FileViewer({ open, onOpenChange, blob, fileName, onDownload }: F
               <Loader2 className="size-6 animate-spin text-muted-foreground" />
             </div>
           ) : category === 'text' || category === 'code' ? (
-            <pre className="rounded-md bg-muted p-4 text-xs leading-relaxed overflow-x-auto whitespace-pre-wrap break-words font-mono">
+            <pre className="rounded-md bg-muted p-4 text-xs leading-relaxed overflow-x-auto whitespace-pre-wrap wrap-break-word font-mono">
               {textContent}
             </pre>
           ) : category === 'markdown' ? (
@@ -166,7 +166,7 @@ export function FileViewer({ open, onOpenChange, blob, fileName, onDownload }: F
               )}
             >
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {textContent ?? ''}
+                {normalizeEscapedText(textContent ?? '', { preserveMarkdownCode: true })}
               </ReactMarkdown>
             </div>
           ) : category === 'image' && objectUrl ? (
