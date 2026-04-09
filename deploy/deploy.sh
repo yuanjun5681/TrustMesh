@@ -102,7 +102,7 @@ docker save \
 
 echo "==> 传输镜像到 ${REMOTE_HOST}:${REMOTE_DIR}/"
 
-scp "/tmp/${IMAGES_FILE}" "${REMOTE_HOST}:${REMOTE_DIR}/${IMAGES_FILE}"
+rsync -avz --progress --partial "/tmp/${IMAGES_FILE}" "${REMOTE_HOST}:${REMOTE_DIR}/${IMAGES_FILE}"
 
 echo "==> 在远程服务器加载镜像并启动服务"
 
