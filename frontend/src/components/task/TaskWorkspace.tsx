@@ -16,7 +16,7 @@ import { useTask, useAddTaskComment, useAppendTaskMessage, useCreateTaskFromText
 import { useAgents } from '@/hooks/useAgents'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ApiRequestError } from '@/api/client'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { TaskMessage, TaskDetail, UIResponse, Todo } from '@/types'
 import { normalizeEscapedText } from '@/lib/utils'
 
@@ -196,6 +196,7 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
   const [chatOpen, setChatOpen] = useState(false)
   const [resultOpen, setResultOpen] = useState(false)
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
+  const planningScrollRef = useRef<HTMLDivElement>(null)
   const addComment = useAddTaskComment()
   const appendTaskMessage = useAppendTaskMessage()
   const createTaskFromText = useCreateTaskFromText()
@@ -219,6 +220,16 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
     }
     return null
   }, [isPlanning, task?.messages])
+
+  useEffect(() => {
+    if (!isPlanning && !isReview) {
+      return
+    }
+    planningScrollRef.current?.scrollTo({
+      top: planningScrollRef.current.scrollHeight,
+      behavior: 'smooth',
+    })
+  }, [isPlanning, isReview, task?.messages, pendingUIBlocks])
 
   const findNextUserResponse = (messages: TaskMessage[], index: number): TaskMessage | undefined => {
     if (index + 1 < messages.length && messages[index + 1].role === 'user') {
@@ -383,7 +394,7 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
       {/* Feed */}
       <div className="flex-1 min-h-0">
         {isPlanning || isReview ? (
-          <ScrollArea className="h-full px-5 py-4">
+          <ScrollArea ref={planningScrollRef} className="h-full px-5 py-4">
             <div className="flex flex-col gap-4">
               {(task.messages ?? []).map((message, index, messages) => {
                 const isLastMessage = index === messages.length - 1
