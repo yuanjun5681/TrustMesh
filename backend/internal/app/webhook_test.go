@@ -502,13 +502,29 @@ func TestWebhookPlanningTaskLifecycle(t *testing.T) {
 		t.Fatalf("task.plan_ready webhook status=%d", readyResp.StatusCode)
 	}
 	readyData := decodeBody(t, readyResp)
-	if nestedString(readyData, "data", "status") != "in_progress" {
-		t.Fatalf("unexpected finalized task status: %#v", readyData)
+	if nestedString(readyData, "data", "status") != "review" {
+		t.Fatalf("unexpected task.plan_ready status (want review): %#v", readyData)
+	}
+
+	mu.Lock()
+	if len(publishRequests) != initialPublishCount {
+		t.Fatalf("expected no new publish requests after task.plan_ready (review), got %d", len(publishRequests)-initialPublishCount)
+	}
+	mu.Unlock()
+
+	// User approves the plan → task.created + todo.assigned published, status in_progress
+	approveResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/tasks/"+planningTaskID+"/approve", token, nil)
+	if approveResp.StatusCode != http.StatusOK {
+		t.Fatalf("approve plan status=%d", approveResp.StatusCode)
+	}
+	approveData := decodeBody(t, approveResp)
+	if nestedString(approveData, "data", "status") != "in_progress" {
+		t.Fatalf("unexpected task status after approve (want in_progress): %#v", approveData)
 	}
 
 	mu.Lock()
 	if len(publishRequests) != initialPublishCount+2 {
-		t.Fatalf("expected %d publish requests after task.plan_ready, got %d", initialPublishCount+2, len(publishRequests))
+		t.Fatalf("expected %d publish requests after approve, got %d", initialPublishCount+2, len(publishRequests))
 	}
 	taskCreatedReq := publishRequests[initialPublishCount]
 	todoAssignedReq := publishRequests[initialPublishCount+1]

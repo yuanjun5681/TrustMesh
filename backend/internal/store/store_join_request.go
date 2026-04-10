@@ -13,7 +13,6 @@ type CreateJoinRequestInput struct {
 	TrustRequestID string
 	UserID         string
 	NodeID         string
-	ClawAgentID    string
 	Name           string
 	Description    string
 	Role           string
@@ -26,7 +25,6 @@ type JoinRequestOverrides struct {
 	Name         *string  `json:"name,omitempty"`
 	Role         *string  `json:"role,omitempty"`
 	Description  *string  `json:"description,omitempty"`
-	ClawAgentID  *string  `json:"claw_agent_id,omitempty"`
 	Capabilities []string `json:"capabilities,omitempty"`
 }
 
@@ -86,7 +84,6 @@ func (s *Store) CreateJoinRequest(in CreateJoinRequestInput) (*model.JoinRequest
 		UserID:         userID,
 		TrustRequestID: in.TrustRequestID,
 		NodeID:         in.NodeID,
-		ClawAgentID:    strings.TrimSpace(in.ClawAgentID),
 		Name:           name,
 		Description:    strings.TrimSpace(in.Description),
 		Role:           role,
@@ -205,10 +202,6 @@ func (s *Store) ApproveJoinRequest(userID, requestID string, overrides JoinReque
 	if overrides.Description != nil && strings.TrimSpace(*overrides.Description) != "" {
 		description = strings.TrimSpace(*overrides.Description)
 	}
-	clawAgentID := jr.ClawAgentID
-	if overrides.ClawAgentID != nil {
-		clawAgentID = strings.TrimSpace(*overrides.ClawAgentID)
-	}
 	capabilities := normalizeCapabilities(jr.Capabilities)
 	if overrides.Capabilities != nil {
 		capabilities = normalizeCapabilities(overrides.Capabilities)
@@ -224,7 +217,6 @@ func (s *Store) ApproveJoinRequest(userID, requestID string, overrides JoinReque
 			a.Description = description
 			a.Role = role
 			a.Capabilities = capabilities
-			a.ClawAgentID = clawAgentID
 			a.Archived = false
 			a.Status = "offline"
 			a.UpdatedAt = now
@@ -243,7 +235,6 @@ func (s *Store) ApproveJoinRequest(userID, requestID string, overrides JoinReque
 			Role:         role,
 			Capabilities: capabilities,
 			NodeID:       jr.NodeID,
-			ClawAgentID:  clawAgentID,
 			Status:       "offline",
 			CreatedAt:    now,
 			UpdatedAt:    now,
@@ -261,7 +252,6 @@ func (s *Store) ApproveJoinRequest(userID, requestID string, overrides JoinReque
 
 	// Mark join request as approved
 	jr.Status = "approved"
-	jr.ClawAgentID = clawAgentID
 	jr.ApprovedTrustMeshAgentID = agent.ID
 	jr.UserID = userID
 	resolvedAt := now

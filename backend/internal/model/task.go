@@ -14,10 +14,9 @@ type TaskSummary struct {
 }
 
 type TodoAssignee struct {
-	AgentID     string `json:"agent_id" bson:"agent_id"`
-	Name        string `json:"name" bson:"name"`
-	NodeID      string `json:"node_id" bson:"node_id"`
-	ClawAgentID string `json:"claw_agent_id,omitempty" bson:"claw_agent_id,omitempty"`
+	AgentID string `json:"agent_id" bson:"agent_id"`
+	Name    string `json:"name" bson:"name"`
+	NodeID  string `json:"node_id" bson:"node_id"`
 }
 
 type TodoResult struct {

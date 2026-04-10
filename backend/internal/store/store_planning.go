@@ -276,10 +276,9 @@ func (s *Store) FinalizePlanByPMNode(nodeID, messageID string, in TaskPlanReadyI
 			Description: desc,
 			Status:      "pending",
 			Assignee: model.TodoAssignee{
-				AgentID:     assigneeAgent.ID,
-				Name:        assigneeAgent.Name,
-				NodeID:      assigneeAgent.NodeID,
-				ClawAgentID: assigneeAgent.ClawAgentID,
+				AgentID: assigneeAgent.ID,
+				Name:    assigneeAgent.Name,
+				NodeID:  assigneeAgent.NodeID,
 			},
 			Result: model.TodoResult{
 				Summary:  "",
@@ -402,17 +401,17 @@ func (s *Store) RejectPlan(userID, taskID, feedback string) (*model.TaskDetail, 
 	return s.copyTaskWithArtifactsUnsafe(task), nil
 }
 
-// GetTaskPMPublishTarget returns the PM agent routing target for a planning task.
-func (s *Store) GetTaskPMPublishTarget(userID, taskID string) (string, string, *transport.AppError) {
+// GetTaskPMPublishTarget returns the PM agent node ID for a planning task.
+func (s *Store) GetTaskPMPublishTarget(userID, taskID string) (string, *transport.AppError) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	task, ok := s.tasks[taskID]
 	if !ok || task.UserID != userID {
-		return "", "", transport.NotFound("task not found")
+		return "", transport.NotFound("task not found")
 	}
 	if task.PMAgent.NodeID == "" {
-		return "", "", transport.Conflict("TASK_NO_PM", fmt.Sprintf("task %s has no PM agent", taskID))
+		return "", transport.Conflict("TASK_NO_PM", fmt.Sprintf("task %s has no PM agent", taskID))
 	}
-	return task.PMAgent.NodeID, task.PMAgent.ClawAgentID, nil
+	return task.PMAgent.NodeID, nil
 }
