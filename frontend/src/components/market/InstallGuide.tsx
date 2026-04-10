@@ -41,8 +41,8 @@ function buildOpenClawPrompt(role: MarketRoleDetail) {
 # 下载角色包（如果需要）
 curl -L -o /tmp/${agentId}.zip "${zipUrl}"
 
-# 解压并覆盖到 workspace 目录
-unzip -o /tmp/${agentId}.zip -d ${workspacePath}
+# 解压并覆盖到 workspace 目录（-j 忽略 zip 内子目录，直接平铺）
+unzip -o -j /tmp/${agentId}.zip -d ${workspacePath}
 \`\`\`
 
 解压完成后直接生效，无需额外配置。
