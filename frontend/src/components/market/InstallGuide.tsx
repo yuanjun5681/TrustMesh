@@ -18,146 +18,36 @@ function buildLocalZipPath(roleId: string) {
   return `~/Downloads/${roleId}.zip`
 }
 
-function escapePromptValue(value: string) {
-  return value.replace(/`/g, '\\`')
-}
 
 function buildOpenClawPrompt(role: MarketRoleDetail) {
   const agentId = role.id
-  const displayName = escapePromptValue(role.name)
-  const department = escapePromptValue(role.dept_name)
-  const description = escapePromptValue(role.description)
-  const jsonDisplayName = JSON.stringify(role.name)
-  const jsonDepartment = JSON.stringify(role.dept_name)
-  const jsonDescription = JSON.stringify(role.description)
   const zipUrl = buildDownloadUrl(role.id)
   const localZipPath = buildLocalZipPath(role.id)
-  const workspaceName = `workspace-${agentId}`
-  const workspacePath = `~/.openclaw/${workspaceName}`
+  const workspacePath = `~/.openclaw/workspace`
 
-  return `## 创建新 Agent（Multi-Agent 模式）
+  return `## 安装角色包
 
-我需要你帮我创建一个新的独立 Agent，并把下面这个角色注册到 Openclaw 中。
+我需要你帮我安装一个角色包到 Openclaw workspace。
 
-### Agent 角色信息
+### 角色包信息
 
 - Agent ID: \`${agentId}\`
-- Display Name: \`${displayName}\`
-- Department: \`${department}\`
-- Description: \`${description}\`
-- Workspace: \`${workspacePath}\`
-- Agent Dir: \`~/.openclaw/agents/${agentId}/agent\`
-- Sessions Dir: \`~/.openclaw/agents/${agentId}/sessions\`
-
-### 第一步：下载并解压 Agent 包
-
-请优先使用下面的角色包来源：
-
 - URL: \`${zipUrl}\`
 - 本地路径（如果我已经下载完成）: \`${localZipPath}\`
 
-下载后解压到临时目录：
+### 安装步骤
 
 \`\`\`bash
-# 下载（如果需要）
+# 下载角色包（如果需要）
 curl -L -o /tmp/${agentId}.zip "${zipUrl}"
 
-# 解压到临时目录
-mkdir -p /tmp/agent-package
-unzip -o /tmp/${agentId}.zip -d /tmp/agent-package
-
-# 查看解压后的文件
-ls -la /tmp/agent-package/
+# 解压并覆盖到 workspace 目录
+unzip -o /tmp/${agentId}.zip -d ${workspacePath}
 \`\`\`
 
-### 第二步：检查压缩包内容
+解压完成后直接生效，无需额外配置。
 
-解压后应该包含以下 3 个文件（可能还有子文件夹 memory/ 等）：
-
-\`\`\`
-${agentId}/
-├── AGENTS.md
-├── IDENTITY.md
-└── SOUL.md
-\`\`\`
-
-如果文件不在根目录，而是直接平铺在 zip 中，请将它们移动到 \`${agentId}/\` 子文件夹下。
-
-### 第三步：创建 Agent 工作区
-
-\`\`\`bash
-# 1. 创建工作区目录
-mkdir -p ${workspacePath}
-
-# 2. 将解压的文件复制到工作区
-cp /tmp/agent-package/AGENTS.md   ${workspacePath}/
-cp /tmp/agent-package/IDENTITY.md ${workspacePath}/
-cp /tmp/agent-package/SOUL.md     ${workspacePath}/
-
-# 3. 可选：创建 memory 目录
-mkdir -p ${workspacePath}/memory
-
-# 4. 可选：初始化 Git（用于备份）
-cd ${workspacePath}
-git init 2>/dev/null || true
-git add AGENTS.md IDENTITY.md SOUL.md memory/
-git commit -m "Add ${agentId} workspace" 2>/dev/null || true
-\`\`\`
-
-### 第四步：注册 Agent 到配置
-
-打开 \`~/.openclaw/openclaw.json\`，在 \`agents.list\` 中添加新 Agent：
-
-\`\`\`json5
-{
-  agents: {
-    list: [
-      // ... 你现有的 agents ...
-
-      {
-        id: "${agentId}",
-        name: ${jsonDisplayName},
-        workspace: "${workspacePath}",
-        agentDir: "~/.openclaw/agents/${agentId}/agent",
-        role: ${jsonDepartment},
-        description: ${jsonDescription},
-        // 可选：指定模型
-        // model: "anthropic/claude-sonnet-4-6",
-        // 可选：工具限制
-        // tools: { allow: ["read", "exec"], deny: ["write", "edit"] },
-      },
-    ],
-  },
-}
-\`\`\`
-
-### 第五步：创建 Agent 状态目录
-
-\`\`\`bash
-mkdir -p ~/.openclaw/agents/${agentId}/agent
-mkdir -p ~/.openclaw/agents/${agentId}/sessions
-\`\`\`
-
-### 第六步：重启 Gateway
-
-\`\`\`bash
-openclaw gateway restart
-\`\`\`
-
-### 第七步：验证
-
-\`\`\`bash
-openclaw agents list --bindings
-\`\`\`
-
-### 注意事项
-
-1. AGENTS.md 每次会话都会加载，是最重要的运营文件
-2. SOUL.md 定义人格，必须保留
-3. IDENTITY.md 定义名字、定位和基础身份，建议保留完整内容
-4. 如需长期记忆，在 \`memory/\` 目录下创建 MEMORY.md
-
-如果 URL 无法直接访问，请改用我本地已下载的 zip 文件继续安装。完成后告诉我修改了哪些目录和配置项。`
+如果 URL 无法直接访问，请改用我本地已下载的 zip 文件路径继续安装。`
 }
 
 export function InstallGuide({ role }: InstallGuideProps) {
@@ -207,7 +97,7 @@ export function InstallGuide({ role }: InstallGuideProps) {
         </div>
 
         <p className="mt-4 text-xs text-muted-foreground">
-          如果你已经通过当前页面下载了角色包，也可以把本地 zip 路径改成实际下载位置后再发给 Openclaw。
+          如果你已经在当前页面下载了角色包，可以把提示词中的本地路径改成实际下载位置后再发给 Openclaw。
         </p>
       </div>
     </div>
