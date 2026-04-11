@@ -326,12 +326,6 @@ func TestInvitePromptUsesNodeIDFromClawSynapseHealth(t *testing.T) {
 	if !strings.Contains(prompt, "--target "+localNodeID) {
 		t.Fatalf("invite prompt does not use local node id from health: %s", prompt)
 	}
-	if !strings.Contains(prompt, "\"clawAgentId\":\"<可选的本地 Claw Agent ID>\"") {
-		t.Fatalf("invite prompt missing clawAgentId guidance: %s", prompt)
-	}
-	if !strings.Contains(prompt, "如果用户没有指定 clawAgentId") {
-		t.Fatalf("invite prompt missing clawAgentId selection instructions: %s", prompt)
-	}
 }
 
 func TestApproveJoinRequestParsesAgentIDAndReturnsPersistedAgent(t *testing.T) {
@@ -402,15 +396,9 @@ func TestApproveJoinRequestParsesAgentIDAndReturnsPersistedAgent(t *testing.T) {
 		t.Fatalf("create join request: %v", appErr)
 	}
 
-	approveResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/agents/join-requests/"+jr.ID+"/approve", token, map[string]any{
-		"claw_agent_id": "agent-42",
-	})
+	approveResp := doJSON(t, testServer.Client(), "POST", testServer.URL+"/api/v1/agents/join-requests/"+jr.ID+"/approve", token, map[string]any{})
 	if approveResp.StatusCode != http.StatusOK {
 		t.Fatalf("approve join request status=%d", approveResp.StatusCode)
-	}
-	approveBody := decodeBody(t, approveResp)
-	if nestedString(approveBody, "data", "claw_agent_id") != "agent-42" {
-		t.Fatalf("expected approved agent claw_agent_id to persist, got %#v", approveBody)
 	}
 
 	listResp := doJSON(t, testServer.Client(), "GET", testServer.URL+"/api/v1/agents/join-requests", token, nil)
@@ -425,9 +413,6 @@ func TestApproveJoinRequestParsesAgentIDAndReturnsPersistedAgent(t *testing.T) {
 	item, ok := items[0].(map[string]any)
 	if !ok {
 		t.Fatalf("unexpected join request item: %#v", items[0])
-	}
-	if item["claw_agent_id"] != "agent-42" {
-		t.Fatalf("expected join request claw_agent_id=agent-42, got %#v", item["claw_agent_id"])
 	}
 	if item["approved_trustmesh_agent_id"] == "" {
 		t.Fatalf("expected approved_trustmesh_agent_id to be set, got %#v", item)

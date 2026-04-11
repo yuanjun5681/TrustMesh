@@ -28,7 +28,9 @@ export function TaskThreadSheet({ taskId, open, onOpenChange }: TaskThreadSheetP
   const { data: task } = useTask(open ? taskId : undefined)
   const appendTaskMessage = useAppendTaskMessage()
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollAreaRef = useRef<HTMLDivElement>(null)
   const isPlanning = task?.status === 'planning'
+  const isReview = task?.status === 'review'
   const messageList = task?.messages
   const messages = messageList ?? []
 
@@ -46,6 +48,16 @@ export function TaskThreadSheet({ taskId, open, onOpenChange }: TaskThreadSheetP
     }
     return null
   }, [isPlanning, messageList])
+
+  useEffect(() => {
+    if (!open || (!isPlanning && !isReview)) {
+      return
+    }
+    scrollAreaRef.current?.scrollTo({
+      top: scrollAreaRef.current.scrollHeight,
+      behavior: 'smooth',
+    })
+  }, [open, isPlanning, isReview, messageList, pendingUIBlocks])
 
   const handleSend = async (content: string, uiResponse?: UIResponse) => {
     try {
@@ -72,7 +84,7 @@ export function TaskThreadSheet({ taskId, open, onOpenChange }: TaskThreadSheetP
         ) : messages.length === 0 ? (
           <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">暂无需求对话</div>
         ) : (
-          <ScrollArea className="flex-1 min-h-0 p-4">
+          <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0 p-4">
             <div className="flex flex-col gap-4">
               {messages.map((message, index) => {
                 const isLastMessage = index === messages.length - 1

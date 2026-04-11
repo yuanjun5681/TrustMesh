@@ -14,7 +14,6 @@ type JoinRequest struct {
 	AgentProduct             string         `json:"agent_product" bson:"agent_product"`
 	Status                   string         `json:"status" bson:"status"` // pending | approved | rejected
 	Metadata                 map[string]any `json:"metadata,omitempty" bson:"metadata,omitempty"`
-	ClawAgentID              string         `json:"claw_agent_id,omitempty" bson:"claw_agent_id,omitempty"`
 	ApprovedTrustMeshAgentID string         `json:"approved_trustmesh_agent_id,omitempty" bson:"approved_trustmesh_agent_id,omitempty"`
 	CreatedAt                time.Time      `json:"created_at" bson:"created_at"`
 	ResolvedAt               *time.Time     `json:"resolved_at,omitempty" bson:"resolved_at,omitempty"`

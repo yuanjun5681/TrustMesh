@@ -38,7 +38,6 @@ type publishRequest struct {
 	Type       string         `json:"type"`
 	Message    string         `json:"message"`
 	SessionKey string         `json:"sessionKey,omitempty"`
-	AgentID    string         `json:"agentId,omitempty"`
 	Metadata   map[string]any `json:"metadata,omitempty"`
 }
 
@@ -170,7 +169,7 @@ func NewClient(baseURL string, timeout time.Duration) *Client {
 	}
 }
 
-func (c *Client) Publish(ctx context.Context, targetNode, msgType string, payload any, sessionKey, clawAgentID string, metadata map[string]any) (*PublishResult, error) {
+func (c *Client) Publish(ctx context.Context, targetNode, msgType string, payload any, sessionKey string, metadata map[string]any) (*PublishResult, error) {
 	if c == nil {
 		return nil, fmt.Errorf("clawsynapse client is disabled")
 	}
@@ -184,7 +183,6 @@ func (c *Client) Publish(ctx context.Context, targetNode, msgType string, payloa
 		Type:       strings.TrimSpace(msgType),
 		Message:    string(messageBytes),
 		SessionKey: strings.TrimSpace(sessionKey),
-		AgentID:    strings.TrimSpace(clawAgentID),
 		Metadata:   metadata,
 	})
 	if err != nil {

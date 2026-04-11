@@ -35,7 +35,6 @@ export interface PMAgentSummary {
   id: string
   name: string
   node_id: string
-  claw_agent_id?: string
   status: 'online' | 'offline' | 'busy'
 }
 
@@ -201,7 +200,6 @@ export interface Agent {
   role: AgentRole
   capabilities: string[]
   node_id: string
-  claw_agent_id?: string
   status: AgentStatus
   archived: boolean
   last_seen_at: string | null
@@ -214,7 +212,6 @@ export interface TodoAssignee {
   agent_id: string
   name: string
   node_id: string
-  claw_agent_id?: string
 }
 
 export interface TodoResult {
@@ -606,7 +603,6 @@ export interface JoinRequest {
   capabilities: string[]
   agent_product: string
   status: JoinRequestStatus
-  claw_agent_id?: string
   approved_trustmesh_agent_id?: string
   created_at: string
   resolved_at?: string
@@ -621,7 +617,6 @@ export interface JoinRequestOverrides {
   name?: string
   role?: AgentRole
   description?: string
-  claw_agent_id?: string
   capabilities?: string[]
 }
 

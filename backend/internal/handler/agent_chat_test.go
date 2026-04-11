@@ -27,7 +27,6 @@ func TestSendMessagePublishesChatMessageType(t *testing.T) {
 		TrustRequestID: "trust-req-chat-001",
 		UserID:         user.ID,
 		NodeID:         "node-chat-001",
-		ClawAgentID:    "agent-42",
 		Name:           "Chat Agent",
 		Description:    "dev",
 		Role:           "developer",
@@ -72,9 +71,6 @@ func TestSendMessagePublishesChatMessageType(t *testing.T) {
 	}
 	if publishReq["type"] != "chat.message" {
 		t.Fatalf("expected publish type chat.message, got %#v", publishReq["type"])
-	}
-	if publishReq["agentId"] != "agent-42" {
-		t.Fatalf("expected publish agentId agent-42, got %#v", publishReq["agentId"])
 	}
 	if publishReq["sessionKey"] == "" {
 		t.Fatalf("expected sessionKey to be set, got %#v", publishReq["sessionKey"])
