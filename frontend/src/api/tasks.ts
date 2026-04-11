@@ -55,12 +55,12 @@ export async function listTaskEvents(id: string) {
   return api.get(`tasks/${id}/events`).json<ApiListResponse<Event>>()
 }
 
-export async function dispatchTodo(taskId: string, todoId: string) {
-  return api.post(`tasks/${taskId}/todos/${todoId}/dispatch`).json<ApiResponse<TaskDetail>>()
-}
-
 export async function cancelTask(taskId: string, reason: string) {
   return api.post(`tasks/${taskId}/cancel`, { json: { reason } }).json<ApiResponse<TaskDetail>>()
+}
+
+export async function resumeTask(taskId: string) {
+  return api.post(`tasks/${taskId}/resume`).json<ApiResponse<TaskDetail>>()
 }
 
 export async function approvePlan(taskId: string) {

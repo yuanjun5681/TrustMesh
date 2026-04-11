@@ -83,6 +83,16 @@ export function applyTaskUpdated(queryClient: QueryClient, payload: { task: Task
   const { task } = payload
   const listItem = toTaskListItem(task)
   const previousTaskDetail = queryClient.getQueryData<TaskDetail>(['tasks', 'detail', task.id])
+  if (previousTaskDetail) {
+    const incomingVersion = typeof task.version === 'number' ? task.version : 0
+    const currentVersion = typeof previousTaskDetail.version === 'number' ? previousTaskDetail.version : 0
+    if (incomingVersion < currentVersion) {
+      return
+    }
+    if (incomingVersion === currentVersion && task.updated_at < previousTaskDetail.updated_at) {
+      return
+    }
+  }
   const taskQueries = queryClient.getQueriesData<TaskListItem[]>({ queryKey: ['tasks', task.project_id] })
   const previousTaskStatus = findPreviousTaskStatus(task, taskQueries, previousTaskDetail)
   const hasFullListSnapshot = hasFullProjectTaskListSnapshot(task, taskQueries)

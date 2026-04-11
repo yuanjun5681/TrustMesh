@@ -152,10 +152,10 @@ export interface ConversationStreamSnapshot {
 
 export interface AgentChatMessage {
   id: string
-  sender_type: 'user' | 'agent'
+  sender_type: 'user' | 'agent' | 'system'
   direction: 'outbound' | 'inbound'
   content: string
-  status: 'pending' | 'sent' | 'failed'
+  status: 'pending' | 'sent' | 'failed' | 'error'
   remote_message_id?: string
   created_at: string
 }
@@ -220,7 +220,7 @@ export interface TodoResult {
   metadata: Record<string, unknown>
 }
 
-export type TaskStatus = 'planning' | 'review' | 'pending' | 'in_progress' | 'done' | 'failed' | 'canceled'
+export type TaskStatus = 'planning' | 'review' | 'pending' | 'in_progress' | 'done' | 'failed' | 'canceled' | 'interrupted'
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
 
 export interface ActorRef {
@@ -239,6 +239,8 @@ export interface Todo {
   completed_at: string | null
   failed_at: string | null
   canceled_at: string | null
+  interrupted_at: string | null
+  interrupt_reason: string | null
   error: string | null
   cancel_reason: string | null
   result: TodoResult
@@ -295,6 +297,10 @@ export interface TaskDetail {
   canceled_at: string | null
   canceled_by: ActorRef | null
   cancel_reason: string | null
+  interrupted_at: string | null
+  interrupt_reason: string | null
+  interrupted_from_status?: TaskStatus | null
+  interrupt_count: number
   created_at: string
   updated_at: string
 }
@@ -308,6 +314,9 @@ export type EventType =
   | 'todo_progress'
   | 'todo_completed'
   | 'todo_failed'
+  | 'todo_interrupted'
+  | 'task_interrupted'
+  | 'task_resumed'
   | 'task_comment'
   | 'planning_reply'
   | 'agent_status_changed'

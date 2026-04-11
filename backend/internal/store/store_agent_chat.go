@@ -243,6 +243,67 @@ func (s *Store) AppendAgentChatMessageByNode(nodeID, sessionKey, content, remote
 	return &detail, nil
 }
 
+// AppendAgentChatSystemError 记录 PM Agent 处理 chat 消息时的错误，
+// 作为一条 SenderType=system / Status=error 的消息插入对话流。
+//
+// 不改变 chat 状态（保持 active），让用户可以"重新发送"。
+// 仅在 chat 仍然 active 时写入；找不到 / 已关闭则忽略并仅返回 nil。
+func (s *Store) AppendAgentChatSystemError(nodeID, sessionKey, errMsg string) (*model.AgentChatDetail, *transport.AppError) {
+	sessionKey = strings.TrimSpace(sessionKey)
+	errMsg = strings.TrimSpace(errMsg)
+	if sessionKey == "" {
+		return nil, transport.Validation("invalid agent chat error payload", map[string]any{"session_key": "required"})
+	}
+	if errMsg == "" {
+		errMsg = "agent reported error without message"
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	agent, err := s.agentByNodeUnsafe(nodeID)
+	if err != nil {
+		return nil, err
+	}
+	chatID := s.agentChatBySession[sessionKey]
+	if chatID == "" {
+		return nil, transport.NotFound("agent chat not found")
+	}
+	chat, ok := s.agentChats[chatID]
+	if !ok {
+		return nil, transport.NotFound("agent chat not found")
+	}
+	if chat.AgentID != agent.ID || chat.AgentNodeID != nodeID {
+		return nil, transport.Forbidden("agent is not allowed to report error for this chat")
+	}
+	if chat.Status != "active" {
+		delete(s.agentChatBySession, sessionKey)
+		return nil, transport.NotFound("agent chat not found")
+	}
+
+	now := time.Now().UTC()
+	s.markAgentSeenUnsafe(agent.ID, now)
+	msg := model.AgentChatMessage{
+		ID:         newID(),
+		SenderType: "system",
+		Direction:  "inbound",
+		Content:    errMsg,
+		Status:     "error",
+		CreatedAt:  now,
+	}
+	chat.Messages = append(chat.Messages, msg)
+	chat.UpdatedAt = now
+	if err := s.persistAgentChatUnsafe(chat); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	if err := s.persistAgentGraphUnsafe(agent.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.publishAgentChatUnsafe(chat.ID)
+	detail := s.toAgentChatDetailUnsafe(chat)
+	return &detail, nil
+}
+
 func (s *Store) agentForUserUnsafe(userID, agentID string) (*model.Agent, *transport.AppError) {
 	agent, ok := s.agents[agentID]
 	if !ok || agent.UserID != userID {

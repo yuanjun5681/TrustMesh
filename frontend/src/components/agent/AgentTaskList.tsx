@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ClipboardList, Circle, CircleDot, CheckCircle2, XCircle, CircleSlash2, MessageSquareMore } from 'lucide-react'
+import { ClipboardList, Circle, CircleDot, CheckCircle2, XCircle, CircleSlash2, MessageSquareMore, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PriorityBadge } from '@/components/shared/StatusBadge'
 import { EmptyState } from '@/components/shared/EmptyState'
@@ -27,6 +27,7 @@ const statusIcon: Record<TaskStatus, { icon: typeof Circle; className: string }>
   done: { icon: CheckCircle2, className: 'text-success' },
   failed: { icon: XCircle, className: 'text-destructive' },
   canceled: { icon: CircleSlash2, className: 'text-muted-foreground' },
+  interrupted: { icon: AlertTriangle, className: 'text-warning' },
 }
 
 interface AgentTaskListProps {

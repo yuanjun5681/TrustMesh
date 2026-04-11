@@ -148,13 +148,16 @@ func (h *TaskHandler) createPlanningTask(c *gin.Context, userID, projectID, cont
 	transport.WriteData(c, http.StatusCreated, task)
 }
 
-// autoDispatchFirstTodo publishes a todo.assigned event for the first todo and records the dispatch.
+// autoDispatchFirstTodo publishes a todo.assigned event for the next dispatchable todo and records the dispatch.
 // It returns the updated task if dispatch succeeds, or the original task if it fails (non-fatal).
 func (h *TaskHandler) autoDispatchFirstTodo(ctx context.Context, userID string, task *model.TaskDetail) *model.TaskDetail {
 	if h.publisher == nil || len(task.Todos) == 0 {
 		return task
 	}
-	todo := &task.Todos[0]
+	todo := task.NextDispatchableTodo()
+	if todo == nil {
+		return task
+	}
 	payload := protocol.TodoAssignedPayload{
 		TaskID:      task.ID,
 		TodoID:      todo.ID,
@@ -222,65 +225,81 @@ func (h *TaskHandler) ListEvents(c *gin.Context) {
 	transport.WriteList(c, events, len(events))
 }
 
-func (h *TaskHandler) DispatchTodo(c *gin.Context) {
+// ResumeTask 把一个被 Agent 中断的 task 恢复到中断前阶段。
+//
+// 执行阶段中断：恢复 interrupted todo 并继续派发。
+// 规划/审核阶段中断：恢复到 planning/review，并把最近一次用户输入重新发送给 PM。
+func (h *TaskHandler) ResumeTask(c *gin.Context) {
 	userID, ok := currentUserID(c)
 	if !ok {
-		return
-	}
-
-	task, appErr := h.store.GetTask(userID, c.Param("id"))
-	if appErr != nil {
-		transport.WriteError(c, appErr)
-		return
-	}
-	if appErr := h.store.CheckTaskProjectActive(task.ID); appErr != nil {
-		transport.WriteError(c, appErr)
-		return
-	}
-
-	todo := findTaskTodo(task, c.Param("todoId"))
-	if todo == nil {
-		transport.WriteError(c, transport.NotFound("todo not found"))
-		return
-	}
-	if todo.Status != "pending" {
-		transport.WriteError(c, transport.Conflict("TODO_NOT_PENDING", "todo is not pending"))
-		return
-	}
-	if !task.CanDispatchTodo(todo.ID) {
-		transport.WriteError(c, transport.Conflict("TODO_BLOCKED_BY_PREVIOUS", "todo is blocked by previous todos"))
 		return
 	}
 	if h.publisher == nil {
 		transport.WriteError(c, transport.NewError(http.StatusServiceUnavailable, "CLAWSYNAPSE_DISABLED", "clawsynapse client is disabled"))
 		return
 	}
-
-	payload := protocol.TodoAssignedPayload{
-		TaskID:      task.ID,
-		TodoID:      todo.ID,
-		Title:       todo.Title,
-		Description: todo.Description,
-		Content:     "你收到了一个新的 Todo 任务。请使用 /tm-task-exec skill 执行此任务，按要求回报进度和结果。",
-		ExecBrief: &protocol.TodoExecBrief{
-			Objective:    "执行分派的 Todo 任务；及时回报进度；完成后提交结果，失败时说明原因。",
-			MustUseSkill: "tm-task-exec",
-		},
-	}
-	if _, err := h.publisher.Publish(context.Background(), todo.Assignee.NodeID, "todo.assigned", payload, task.ID, map[string]any{"source": "manual_dispatch"}); err != nil {
-		if h.log != nil {
-			h.log.Warn("manual todo dispatch failed", zap.String("task_id", task.ID), zap.String("todo_id", todo.ID), zap.String("target_node", todo.Assignee.NodeID), zap.Error(err))
-		}
-		transport.WriteError(c, transport.NewError(http.StatusBadGateway, "TODO_DISPATCH_FAILED", "failed to dispatch todo to agent"))
-		return
-	}
-
-	task, appErr = h.store.RecordTodoDispatch(userID, task.ID, todo.ID)
+	currentTask, appErr := h.store.GetTask(userID, c.Param("id"))
 	if appErr != nil {
 		transport.WriteError(c, appErr)
 		return
 	}
+	if currentTask.InterruptedFrom != nil && (*currentTask.InterruptedFrom == "planning" || *currentTask.InterruptedFrom == "review") {
+		project, appErr := h.store.GetProject(userID, currentTask.ProjectID)
+		if appErr != nil {
+			transport.WriteError(c, appErr)
+			return
+		}
+		if project.PMAgent.Status == "offline" {
+			transport.WriteError(c, transport.Conflict("PM_AGENT_OFFLINE", "project pm agent is offline"))
+			return
+		}
+	}
+
+	task, appErr := h.store.ResumeTaskByUser(userID, c.Param("id"))
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	switch task.Status {
+	case "planning", "review":
+		lastUserMessage := latestTaskUserMessage(task)
+		if lastUserMessage != nil {
+			if appErr := h.notifyPMTaskMessage(c, userID, task.ProjectID, task.ID, lastUserMessage.Content, isInitialTaskUserMessage(task, lastUserMessage.ID), lastUserMessage.UIResponse); appErr != nil {
+				transport.WriteError(c, appErr)
+				return
+			}
+		}
+	default:
+		if h.webhookHandler != nil {
+			task = h.webhookHandler.DispatchNextTodo(c.Request.Context(), task)
+		}
+	}
 	transport.WriteData(c, http.StatusOK, task)
+}
+
+func latestTaskUserMessage(task *model.TaskDetail) *model.TaskMessage {
+	if task == nil {
+		return nil
+	}
+	for i := len(task.Messages) - 1; i >= 0; i-- {
+		if task.Messages[i].Role == "user" {
+			return &task.Messages[i]
+		}
+	}
+	return nil
+}
+
+func isInitialTaskUserMessage(task *model.TaskDetail, messageID string) bool {
+	if task == nil || messageID == "" {
+		return false
+	}
+	for i := range task.Messages {
+		if task.Messages[i].ID == messageID {
+			return i == 0
+		}
+	}
+	return false
 }
 
 func (h *TaskHandler) AddComment(c *gin.Context) {
@@ -498,7 +517,7 @@ func (h *TaskHandler) RejectPlan(c *gin.Context) {
 		return
 	}
 
-	h.notifyPMTaskMessage(c, userID, task.ProjectID, task.ID, body.Feedback, false, nil)
+	_ = h.notifyPMTaskMessage(c, userID, task.ProjectID, task.ID, body.Feedback, false, nil)
 	transport.WriteData(c, http.StatusOK, task)
 }
 
@@ -523,7 +542,7 @@ func (h *TaskHandler) CreatePlanning(c *gin.Context) {
 		return
 	}
 
-	h.notifyPMTaskMessage(c, userID, projectID, task.ID, body.Content, true, nil)
+	_ = h.notifyPMTaskMessage(c, userID, projectID, task.ID, body.Content, true, nil)
 	transport.WriteData(c, http.StatusCreated, task)
 }
 
@@ -549,27 +568,29 @@ func (h *TaskHandler) AppendTaskMessage(c *gin.Context) {
 		return
 	}
 
-	h.notifyPMTaskMessage(c, userID, task.ProjectID, task.ID, body.Content, false, body.UIResponse)
+	_ = h.notifyPMTaskMessage(c, userID, task.ProjectID, task.ID, body.Content, false, body.UIResponse)
 	transport.WriteData(c, http.StatusOK, task)
 }
 
-func (h *TaskHandler) notifyPMTaskMessage(c *gin.Context, userID, projectID, taskID, content string, initial bool, uiResponse *model.UIResponse) {
+func (h *TaskHandler) notifyPMTaskMessage(c *gin.Context, userID, projectID, taskID, content string, initial bool, uiResponse *model.UIResponse) *transport.AppError {
 	if h.publisher == nil {
-		return
+		return transport.NewError(http.StatusServiceUnavailable, "CLAWSYNAPSE_DISABLED", "clawsynapse client is disabled")
 	}
 	pmNodeID, appErr := h.store.GetTaskPMPublishTarget(userID, taskID)
 	if appErr != nil {
 		if h.log != nil {
 			h.log.Warn("skip notify task.message", zap.String("task_id", taskID), zap.String("code", appErr.Code))
 		}
-		return
+		return appErr
 	}
 	payload := h.buildPMTaskMessage(userID, projectID, taskID, content, initial, uiResponse)
 	if _, err := h.publisher.Publish(c.Request.Context(), pmNodeID, "task.message", payload, taskID, nil); err != nil {
 		if h.log != nil {
 			h.log.Warn("notify task.message failed", zap.String("task_id", taskID), zap.Error(err))
 		}
+		return transport.NewError(http.StatusBadGateway, "TASK_MESSAGE_PUBLISH_FAILED", "failed to publish task.message to PM agent")
 	}
+	return nil
 }
 
 func (h *TaskHandler) buildPMTaskMessage(userID, projectID, taskID, userContent string, initial bool, uiResponse *model.UIResponse) protocol.PMTaskMessage {

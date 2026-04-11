@@ -81,6 +81,12 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 		h.handleTransferReceived(c, payload)
 	case "task.context.query":
 		h.handleContextQuery(c, payload)
+	case "chat.response", "task.response", "todo.response":
+		h.handleAgentResponseAck(c, payload)
+	case "task.error", "todo.error":
+		h.handleAgentInterrupt(c, payload)
+	case "chat.error":
+		h.handleChatError(c, payload)
 	default:
 		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "unsupported webhook type"))
 	}
@@ -722,6 +728,72 @@ func (h *WebhookHandler) knowledgeSearch(ctx context.Context, userID string, pay
 		})
 	}
 	return results, nil
+}
+
+// handleAgentResponseAck 处理 *.response 类回执，仅记录日志，不写入业务数据。
+func (h *WebhookHandler) handleAgentResponseAck(c *gin.Context, webhook protocol.WebhookPayload) {
+	if h.log != nil {
+		h.log.Info("clawsynapse response received",
+			zap.String("type", webhook.Type),
+			zap.String("from", webhook.From),
+			zap.String("session_key", webhook.SessionKey),
+			zap.String("message", webhook.Message),
+		)
+	}
+	transport.WriteData(c, http.StatusOK, gin.H{"status": "ok"})
+}
+
+// handleAgentInterrupt 处理 task.error / todo.error。
+//
+// 两类消息合并处理：从用户视角它们都是"任务被 Agent 中断"。
+// session_key 永远等于 task.ID（参考 publish 调用约定），所以无需 metadata。
+// 中断当前活跃的 todo 并把 task 标记为 interrupted，业务状态由
+// store.InterruptTaskByAgent 内部维护。
+func (h *WebhookHandler) handleAgentInterrupt(c *gin.Context, webhook protocol.WebhookPayload) {
+	taskID := strings.TrimSpace(webhook.SessionKey)
+	if h.log != nil {
+		h.log.Warn("clawsynapse agent error received",
+			zap.String("type", webhook.Type),
+			zap.String("from", webhook.From),
+			zap.String("task_id", taskID),
+			zap.String("message", webhook.Message),
+		)
+	}
+	if taskID == "" {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "missing session_key for agent error"))
+		return
+	}
+	task, appErr := h.store.InterruptTaskByAgent(webhook.From, taskID, webhook.Message)
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+	transport.WriteData(c, http.StatusOK, task)
+}
+
+// handleChatError 处理 chat.error。
+//
+// session_key 等于 AgentChat.SessionKey。在对话流中插入一条 system error
+// 消息让用户感知，并由前端提供"重新发送"按钮。
+func (h *WebhookHandler) handleChatError(c *gin.Context, webhook protocol.WebhookPayload) {
+	sessionKey := strings.TrimSpace(webhook.SessionKey)
+	if h.log != nil {
+		h.log.Warn("clawsynapse chat error received",
+			zap.String("from", webhook.From),
+			zap.String("session_key", sessionKey),
+			zap.String("message", webhook.Message),
+		)
+	}
+	if sessionKey == "" {
+		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "missing session_key for chat error"))
+		return
+	}
+	detail, appErr := h.store.AppendAgentChatSystemError(webhook.From, sessionKey, webhook.Message)
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+	transport.WriteData(c, http.StatusOK, detail)
 }
 
 func (h *WebhookHandler) sendKnowledgeError(targetNode string, payload protocol.KnowledgeQueryPayload, errMsg string) {

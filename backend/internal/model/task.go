@@ -26,20 +26,22 @@ type TodoResult struct {
 }
 
 type Todo struct {
-	ID           string       `json:"id" bson:"id"`
-	Order        int          `json:"order" bson:"order"`
-	Title        string       `json:"title" bson:"title"`
-	Description  string       `json:"description" bson:"description"`
-	Status       string       `json:"status" bson:"status"`
-	Assignee     TodoAssignee `json:"assignee" bson:"assignee"`
-	StartedAt    *time.Time   `json:"started_at" bson:"started_at"`
-	CompletedAt  *time.Time   `json:"completed_at" bson:"completed_at"`
-	FailedAt     *time.Time   `json:"failed_at" bson:"failed_at"`
-	CanceledAt   *time.Time   `json:"canceled_at" bson:"canceled_at"`
-	Error        *string      `json:"error" bson:"error"`
-	CancelReason *string      `json:"cancel_reason" bson:"cancel_reason"`
-	Result       TodoResult   `json:"result" bson:"result"`
-	CreatedAt    time.Time    `json:"created_at" bson:"created_at"`
+	ID              string       `json:"id" bson:"id"`
+	Order           int          `json:"order" bson:"order"`
+	Title           string       `json:"title" bson:"title"`
+	Description     string       `json:"description" bson:"description"`
+	Status          string       `json:"status" bson:"status"`
+	Assignee        TodoAssignee `json:"assignee" bson:"assignee"`
+	StartedAt       *time.Time   `json:"started_at" bson:"started_at"`
+	CompletedAt     *time.Time   `json:"completed_at" bson:"completed_at"`
+	FailedAt        *time.Time   `json:"failed_at" bson:"failed_at"`
+	CanceledAt      *time.Time   `json:"canceled_at" bson:"canceled_at"`
+	InterruptedAt   *time.Time   `json:"interrupted_at" bson:"interrupted_at"`
+	Error           *string      `json:"error" bson:"error"`
+	CancelReason    *string      `json:"cancel_reason" bson:"cancel_reason"`
+	InterruptReason *string      `json:"interrupt_reason" bson:"interrupt_reason"`
+	Result          TodoResult   `json:"result" bson:"result"`
+	CreatedAt       time.Time    `json:"created_at" bson:"created_at"`
 }
 
 type ActorRef struct {
@@ -84,25 +86,29 @@ type TaskListItem struct {
 }
 
 type TaskDetail struct {
-	ID           string         `json:"id" bson:"_id"`
-	UserID       string         `json:"-" bson:"user_id"`
-	ProjectID    string         `json:"project_id" bson:"project_id"`
-	Title        string         `json:"title" bson:"title"`
-	Description  string         `json:"description" bson:"description"`
-	Status       string         `json:"status" bson:"status"`
-	Priority     string         `json:"priority" bson:"priority"`
-	PMAgentID    string         `json:"-" bson:"pm_agent_id"`
-	PMAgent      PMAgentSummary `json:"pm_agent" bson:"pm_agent"`
-	Messages     []TaskMessage  `json:"messages,omitempty" bson:"messages,omitempty"`
-	Todos        []Todo         `json:"todos" bson:"todos"`
-	Artifacts    []TaskArtifact `json:"artifacts" bson:"-"`
-	Result       TaskResult     `json:"result" bson:"result"`
-	Version      int            `json:"version" bson:"version"`
-	CanceledAt   *time.Time     `json:"canceled_at" bson:"canceled_at"`
-	CanceledBy   *ActorRef      `json:"canceled_by" bson:"canceled_by"`
-	CancelReason *string        `json:"cancel_reason" bson:"cancel_reason"`
-	CreatedAt    time.Time      `json:"created_at" bson:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at" bson:"updated_at"`
+	ID              string         `json:"id" bson:"_id"`
+	UserID          string         `json:"-" bson:"user_id"`
+	ProjectID       string         `json:"project_id" bson:"project_id"`
+	Title           string         `json:"title" bson:"title"`
+	Description     string         `json:"description" bson:"description"`
+	Status          string         `json:"status" bson:"status"`
+	Priority        string         `json:"priority" bson:"priority"`
+	PMAgentID       string         `json:"-" bson:"pm_agent_id"`
+	PMAgent         PMAgentSummary `json:"pm_agent" bson:"pm_agent"`
+	Messages        []TaskMessage  `json:"messages,omitempty" bson:"messages,omitempty"`
+	Todos           []Todo         `json:"todos" bson:"todos"`
+	Artifacts       []TaskArtifact `json:"artifacts" bson:"-"`
+	Result          TaskResult     `json:"result" bson:"result"`
+	Version         int            `json:"version" bson:"version"`
+	CanceledAt      *time.Time     `json:"canceled_at" bson:"canceled_at"`
+	CanceledBy      *ActorRef      `json:"canceled_by" bson:"canceled_by"`
+	CancelReason    *string        `json:"cancel_reason" bson:"cancel_reason"`
+	InterruptedAt   *time.Time     `json:"interrupted_at" bson:"interrupted_at"`
+	InterruptReason *string        `json:"interrupt_reason" bson:"interrupt_reason"`
+	InterruptedFrom *string        `json:"interrupted_from_status,omitempty" bson:"interrupted_from_status,omitempty"`
+	InterruptCount  int            `json:"interrupt_count" bson:"interrupt_count"`
+	CreatedAt       time.Time      `json:"created_at" bson:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at" bson:"updated_at"`
 }
 
 func (t *TaskDetail) NextDispatchableTodo() *Todo {

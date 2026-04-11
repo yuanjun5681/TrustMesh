@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MessageSquareText, Plus } from 'lucide-react'
+import { MessageSquareText, Plus, AlertTriangle, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -154,7 +154,53 @@ export function AgentChatPanel({ agent }: AgentChatPanelProps) {
             </div>
           ) : (
             <div className="space-y-4">
-              {messages.map((message) => {
+              {messages.map((message, index) => {
+                if (message.sender_type === 'system') {
+                  const hasSubsequentUserMessage = messages.slice(index + 1).some((item) => item.sender_type === 'user')
+                  if (hasSubsequentUserMessage) {
+                    return null
+                  }
+                  // 找到最近一条用户消息（用于重发）
+                  let lastUserContent: string | null = null
+                  for (let i = index - 1; i >= 0; i -= 1) {
+                    if (messages[i].sender_type === 'user') {
+                      lastUserContent = messages[i].content
+                      break
+                    }
+                  }
+                  return (
+                    <div key={message.id} className="flex justify-center">
+                      <div className="max-w-[85%] rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-800 dark:text-amber-200">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="size-4 shrink-0 mt-0.5" />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium">PM Agent 处理消息时出错</p>
+                            <p className="mt-1 whitespace-pre-wrap wrap-break-word text-amber-700 dark:text-amber-300">
+                              {message.content}
+                            </p>
+                            <div className="mt-2 flex items-center gap-2">
+                              <span className="text-[11px] text-amber-700/80 dark:text-amber-300/80" title={formatDateTime(message.created_at)}>
+                                {formatRelativeTime(message.created_at)}
+                              </span>
+                              {lastUserContent && !disabled && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 gap-1 border-amber-500/40 bg-background/60 px-2 text-[11px] text-amber-800 hover:bg-amber-500/20 dark:text-amber-200"
+                                  disabled={sendMessage.isPending}
+                                  onClick={() => handleSend(lastUserContent!)}
+                                >
+                                  <RotateCcw className="size-3" />
+                                  重新发送
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                }
                 const isUser = message.sender_type === 'user'
                 return (
                   <div key={message.id} className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}>

@@ -145,7 +145,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	authed.POST("/tasks/:id/approve", taskHandler.ApprovePlan)
 	authed.POST("/tasks/:id/reject", taskHandler.RejectPlan)
 	authed.POST("/tasks/:id/cancel", taskHandler.Cancel)
-	authed.POST("/tasks/:id/todos/:todoId/dispatch", taskHandler.DispatchTodo)
+	authed.POST("/tasks/:id/resume", taskHandler.ResumeTask)
 	authed.GET("/tasks/:id/comments", taskHandler.ListComments)
 	authed.POST("/tasks/:id/comments", taskHandler.AddComment)
 	authed.GET("/tasks/:id/artifacts/:artifactId/content", transferHandler.GetTaskArtifactContent)

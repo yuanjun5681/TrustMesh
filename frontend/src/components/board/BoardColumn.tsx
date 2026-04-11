@@ -10,6 +10,7 @@ const columnConfig: Record<TaskStatus, { title: string; accent: string }> = {
   done: { title: '已完成', accent: 'border-t-success' },
   failed: { title: '失败', accent: 'border-t-destructive' },
   canceled: { title: '已取消', accent: 'border-t-slate-400' },
+  interrupted: { title: '已中断', accent: 'border-t-warning' },
 }
 
 interface BoardColumnProps {

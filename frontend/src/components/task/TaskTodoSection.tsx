@@ -15,6 +15,7 @@ function summarizeTodos(todos: Todo[]) {
   let failed = 0
   let pending = 0
   let canceled = 0
+  let interrupted = 0
 
   for (const todo of todos) {
     switch (todo.status) {
@@ -30,6 +31,9 @@ function summarizeTodos(todos: Todo[]) {
       case 'canceled':
         canceled += 1
         break
+      case 'interrupted':
+        interrupted += 1
+        break
       default:
         pending += 1
         break
@@ -40,6 +44,7 @@ function summarizeTodos(todos: Todo[]) {
   if (done > 0) parts.push(`${done} 完成`)
   if (inProgress > 0) parts.push(`${inProgress} 进行中`)
   if (pending > 0) parts.push(`${pending} 待处理`)
+  if (interrupted > 0) parts.push(`${interrupted} 已中断`)
   if (failed > 0) parts.push(`${failed} 失败`)
   if (canceled > 0) parts.push(`${canceled} 已取消`)
 

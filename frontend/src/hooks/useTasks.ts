@@ -152,15 +152,17 @@ export function useAppendTaskMessage() {
   })
 }
 
-export function useDispatchTodo() {
+export function useResumeTask() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ taskId, todoId }: { taskId: string; todoId: string }) =>
-      tasksApi.dispatchTodo(taskId, todoId),
-    onSuccess: (_res, { taskId }) => {
+    mutationFn: ({ taskId }: { taskId: string }) => tasksApi.resumeTask(taskId),
+    onSuccess: (res, { taskId }) => {
+      qc.setQueryData(['tasks', 'detail', taskId], normalizeTaskDetail(res.data))
       qc.invalidateQueries({ queryKey: ['tasks'] })
       qc.invalidateQueries({ queryKey: ['tasks', 'detail', taskId] })
       qc.invalidateQueries({ queryKey: ['tasks', 'events', taskId] })
+      qc.invalidateQueries({ queryKey: ['dashboard', 'tasks'] })
+      qc.invalidateQueries({ queryKey: ['dashboard', 'stats'] })
     },
   })
 }

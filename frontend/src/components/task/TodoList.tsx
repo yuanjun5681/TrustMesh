@@ -13,6 +13,7 @@ const statusIndicatorColors = {
   done: 'bg-emerald-500',
   failed: 'bg-rose-500',
   canceled: 'bg-slate-500/60',
+  interrupted: 'bg-amber-500',
 }
 
 interface TodoListProps {
@@ -53,7 +54,7 @@ function TodoItem({
 }) {
   const [expanded, setExpanded] = useState(false)
   const relatedArtifacts = (artifacts ?? []).filter((a) => a.todo_id === todo.id)
-  const hasDetails = todo.description || todo.error || relatedArtifacts.length > 0
+  const hasDetails = todo.description || todo.error || todo.interrupt_reason || relatedArtifacts.length > 0
   const isCard = variant === 'card'
 
   return (
@@ -113,6 +114,11 @@ function TodoItem({
           {todo.error && (
             <p className="rounded-md bg-destructive/10 p-2 text-xs text-destructive whitespace-pre-wrap">
               {normalizeEscapedText(todo.error)}
+            </p>
+          )}
+          {todo.interrupt_reason && (
+            <p className="rounded-md bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400 whitespace-pre-wrap">
+              中断原因：{normalizeEscapedText(todo.interrupt_reason)}
             </p>
           )}
           {relatedArtifacts.length > 0 && (

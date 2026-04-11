@@ -11,6 +11,7 @@ const taskStatusConfig: Record<TaskStatus, { label: string; variant: 'secondary'
   done: { label: '已完成', variant: 'success' },
   failed: { label: '失败', variant: 'destructive' },
   canceled: { label: '已取消', variant: 'secondary' },
+  interrupted: { label: '已中断', variant: 'warning' },
 }
 
 const priorityConfig: Record<TaskPriority, { label: string; className: string }> = {

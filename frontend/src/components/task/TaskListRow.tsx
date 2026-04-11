@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Circle, CheckCircle2, Loader2, XCircle, CircleSlash2, MessageSquareMore } from 'lucide-react'
+import { ChevronDown, ChevronRight, Circle, CheckCircle2, Loader2, XCircle, CircleSlash2, MessageSquareMore, AlertTriangle } from 'lucide-react'
 import { useTask } from '@/hooks/useTasks'
 import { TodoList } from './TodoList'
 import { cn, normalizeEscapedText } from '@/lib/utils'
@@ -16,6 +16,7 @@ const statusIcon: Record<TaskStatus, { icon: typeof Circle; className: string }>
   done: { icon: CheckCircle2, className: 'text-success' },
   failed: { icon: XCircle, className: 'text-destructive' },
   canceled: { icon: CircleSlash2, className: 'text-muted-foreground' },
+  interrupted: { icon: AlertTriangle, className: 'text-warning' },
 }
 
 interface TaskListRowProps {

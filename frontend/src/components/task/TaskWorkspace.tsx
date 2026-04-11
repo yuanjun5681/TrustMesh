@@ -1,4 +1,4 @@
-import { X, MessageSquare, PackageCheck } from 'lucide-react'
+import { X, MessageSquare, PackageCheck, AlertTriangle, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/StatusBadge'
@@ -12,7 +12,7 @@ import { CancelTaskDialog } from './CancelTaskDialog'
 import { MessageBubble } from '@/components/task-thread/MessageBubble'
 import { ThinkingIndicator } from '@/components/task-thread/ThinkingIndicator'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { useTask, useAddTaskComment, useAppendTaskMessage, useCreateTaskFromText, useApprovePlan, useRejectPlan } from '@/hooks/useTasks'
+import { useTask, useTaskEvents, useAddTaskComment, useAppendTaskMessage, useCreateTaskFromText, useApprovePlan, useRejectPlan, useResumeTask } from '@/hooks/useTasks'
 import { useAgents } from '@/hooks/useAgents'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ApiRequestError } from '@/api/client'
@@ -193,6 +193,7 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
   const taskId = 'taskId' in props ? props.taskId : undefined
   const projectId = 'projectId' in props ? props.projectId : undefined
   const { data: task } = useTask(taskId)
+  const { data: taskEvents } = useTaskEvents(taskId)
   const [chatOpen, setChatOpen] = useState(false)
   const [resultOpen, setResultOpen] = useState(false)
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
@@ -202,13 +203,52 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
   const createTaskFromText = useCreateTaskFromText()
   const approvePlan = useApprovePlan()
   const rejectPlan = useRejectPlan()
+  const resumeTask = useResumeTask()
   const { data: allAgents } = useAgents()
   const canCancelTask = task?.status === 'planning' || task?.status === 'review' || task?.status === 'pending' || task?.status === 'in_progress'
   const mentionCandidates = buildTaskMentionCandidates(task)
   const isPlanning = task?.status === 'planning'
   const isReview = task?.status === 'review'
+  const interruptedFromPlanning = task?.interrupted_from_status === 'planning' || task?.interrupted_from_status === 'review'
   const hasTaskThread = (task?.messages?.length ?? 0) > 0
   const mode: 'planning' | 'building' = task?.status === 'planning' || task?.status === 'review' || !task ? 'planning' : 'building'
+  const shouldShowInterruptedBanner = useMemo(() => {
+    if (!task || task.status !== 'interrupted') {
+      return false
+    }
+    if (!taskEvents || taskEvents.length === 0) {
+      return true
+    }
+
+    const latestInterruptedAt = taskEvents
+      .filter((event) => event.event_type === 'task_interrupted')
+      .reduce<string | null>((latest, event) => {
+        if (!latest || event.created_at > latest) {
+          return event.created_at
+        }
+        return latest
+      }, null)
+
+    if (!latestInterruptedAt) {
+      return true
+    }
+
+    const hasLaterRecoverySignal = taskEvents.some((event) => {
+      if (event.created_at <= latestInterruptedAt) {
+        return false
+      }
+      if (event.event_type === 'task_resumed' || event.event_type === 'todo_assigned' || event.event_type === 'todo_started' || event.event_type === 'todo_progress' || event.event_type === 'todo_completed') {
+        return true
+      }
+      if (event.event_type === 'task_status_changed') {
+        const to = typeof event.metadata.to === 'string' ? event.metadata.to : ''
+        return to === 'pending' || to === 'in_progress' || to === 'review' || to === 'planning' || to === 'done'
+      }
+      return false
+    })
+
+    return !hasLaterRecoverySignal
+  }, [task, taskEvents])
 
   const pendingUIBlocks = useMemo(() => {
     if (!isPlanning || !task?.messages?.length) {
@@ -281,6 +321,17 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
       await approvePlan.mutateAsync({ taskId })
     } catch (error) {
       const message = error instanceof ApiRequestError ? error.message : '确认规划失败'
+      toast.error(message)
+    }
+  }
+
+  const handleResumeTask = async () => {
+    if (!taskId) return
+    try {
+      await resumeTask.mutateAsync({ taskId })
+      toast.success(interruptedFromPlanning ? '已重新发送给 PM' : '已重新派发任务')
+    } catch (error) {
+      const message = error instanceof ApiRequestError ? error.message : interruptedFromPlanning ? '重新规划失败' : '重新执行失败'
       toast.error(message)
     }
   }
@@ -388,6 +439,38 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
           <p className="mt-2 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
             终止原因：{task.cancel_reason}
           </p>
+        )}
+        {shouldShowInterruptedBanner && (
+          <div className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-800 dark:text-amber-300">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="size-4 shrink-0 mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <p className="font-medium">
+                  任务已中断{task.interrupt_count > 1 ? `（已发生 ${task.interrupt_count} 次）` : ''}
+                </p>
+                {task.interrupt_reason && (
+                  <p className="mt-1 whitespace-pre-wrap wrap-break-word text-amber-700 dark:text-amber-200">
+                    原因：{task.interrupt_reason}
+                  </p>
+                )}
+                <p className="mt-1.5 text-amber-700/90 dark:text-amber-200/90">
+                  {interruptedFromPlanning
+                    ? '可以重新规划，系统会把最近一次用户输入重新发送给 PM。'
+                    : '可以重新执行，系统会从未完成的子任务继续派发。'}
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2 h-7 gap-1.5 border-amber-500/40 bg-background/60 text-amber-800 hover:bg-amber-500/20 dark:text-amber-200"
+                  disabled={resumeTask.isPending}
+                  onClick={handleResumeTask}
+                >
+                  <RotateCcw className="size-3.5" />
+                  {resumeTask.isPending ? '处理中...' : interruptedFromPlanning ? '重新规划' : '重新执行'}
+                </Button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 

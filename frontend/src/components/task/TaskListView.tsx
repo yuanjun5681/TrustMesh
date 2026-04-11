@@ -8,6 +8,7 @@ const statusGroups: { status: TaskStatus; label: string }[] = [
   { status: 'planning', label: '规划中' },
   { status: 'in_progress', label: '进行中' },
   { status: 'pending', label: '待处理' },
+  { status: 'interrupted', label: '已中断' },
   { status: 'done', label: '已完成' },
   { status: 'failed', label: '失败' },
   { status: 'canceled', label: '已取消' },

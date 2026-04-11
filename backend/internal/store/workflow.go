@@ -978,6 +978,14 @@ func (s *Store) updateTaskStatusUnsafe(task *model.TaskDetail, now time.Time) {
 		task.Version++
 		return
 	}
+	if task.Status == "interrupted" {
+		// 中断状态由 InterruptTaskByAgent / ResumeTaskByUser 显式管理，
+		// 此处不参与自动聚合，避免被 progress / complete 等流程误转。
+		task.Result = aggregateTaskResult(task.Todos, task.Status)
+		task.UpdatedAt = now
+		task.Version++
+		return
+	}
 	prev := task.Status
 	next := aggregateTaskStatus(*task)
 	result := aggregateTaskResult(task.Todos, next)
@@ -997,10 +1005,14 @@ func aggregateTaskStatus(task model.TaskDetail) string {
 	}
 	allDone := true
 	hasWork := false
+	hasInterrupted := false
 	for _, todo := range task.Todos {
 		switch todo.Status {
 		case "failed":
 			return "failed"
+		case "interrupted":
+			hasInterrupted = true
+			allDone = false
 		case "done":
 			hasWork = true
 		case "in_progress":
@@ -1011,6 +1023,9 @@ func aggregateTaskStatus(task model.TaskDetail) string {
 		default:
 			allDone = false
 		}
+	}
+	if hasInterrupted {
+		return "interrupted"
 	}
 	if allDone {
 		return "done"
@@ -1028,9 +1043,11 @@ func aggregateTaskResult(todos []model.Todo, status string) model.TaskResult {
 	inProgressCount := 0
 	pendingCount := 0
 	canceledCount := 0
+	interruptedCount := 0
 	completedSummaries := make([]string, 0)
 	completedOutputs := make([]string, 0)
 	failedMessages := make([]string, 0)
+	interruptedMessages := make([]string, 0)
 
 	for _, todo := range todos {
 		switch todo.Status {
@@ -1048,6 +1065,13 @@ func aggregateTaskResult(todos []model.Todo, status string) model.TaskResult {
 				failedMessages = append(failedMessages, fmt.Sprintf("%s: %s", todo.Title, strings.TrimSpace(*todo.Error)))
 			} else {
 				failedMessages = append(failedMessages, fmt.Sprintf("%s: failed", todo.Title))
+			}
+		case "interrupted":
+			interruptedCount++
+			if todo.InterruptReason != nil && strings.TrimSpace(*todo.InterruptReason) != "" {
+				interruptedMessages = append(interruptedMessages, fmt.Sprintf("%s: %s", todo.Title, strings.TrimSpace(*todo.InterruptReason)))
+			} else {
+				interruptedMessages = append(interruptedMessages, fmt.Sprintf("%s: interrupted", todo.Title))
 			}
 		case "in_progress":
 			inProgressCount++
@@ -1093,6 +1117,15 @@ func aggregateTaskResult(todos []model.Todo, status string) model.TaskResult {
 		if len(completedOutputs) > 0 {
 			finalOutput = strings.Join(completedOutputs, "\n\n")
 		}
+	case "interrupted":
+		if len(interruptedMessages) > 0 {
+			summary = "Task interrupted: " + strings.Join(interruptedMessages, "; ")
+		} else {
+			summary = fmt.Sprintf("Task interrupted: %d completed, %d interrupted, %d pending", doneCount, interruptedCount, pendingCount)
+		}
+		if len(completedOutputs) > 0 {
+			finalOutput = strings.Join(completedOutputs, "\n\n")
+		}
 	}
 
 	return model.TaskResult{
@@ -1106,6 +1139,7 @@ func aggregateTaskResult(todos []model.Todo, status string) model.TaskResult {
 			"in_progress_todo_count": inProgressCount,
 			"pending_todo_count":     pendingCount,
 			"canceled_todo_count":    canceledCount,
+			"interrupted_todo_count": interruptedCount,
 		},
 	}
 }
