@@ -147,6 +147,40 @@ func (h *WebhookHandler) NotifyClawHireTaskStarted(ctx context.Context, task *mo
 	}, ref.ExternalTaskID)
 }
 
+// NotifyClawHireConnectionEstablished publishes clawhire.connection.established after
+// a user successfully binds their ClawHire account on TrustMesh.
+func (h *WebhookHandler) NotifyClawHireConnectionEstablished(ctx context.Context, platformNodeID, remoteUserID string) {
+	selfNodeID, err := h.client.GetSelfNodeID(ctx)
+	if err != nil {
+		if h.log != nil {
+			h.log.Warn("clawhire.connection.established: cannot resolve self node ID", zap.Error(err))
+		}
+		return
+	}
+	h.publish(ctx, platformNodeID, "clawhire.connection.established", protocol.ClawHireConnectionEstablishedPayload{
+		TrustMeshNodeID: selfNodeID,
+		RemoteUserID:    remoteUserID,
+		LinkedAt:        time.Now().UTC().Format(time.RFC3339),
+	}, "")
+}
+
+// NotifyClawHireConnectionRemoved publishes clawhire.connection.removed after
+// a user unbinds their ClawHire account on TrustMesh.
+func (h *WebhookHandler) NotifyClawHireConnectionRemoved(ctx context.Context, platformNodeID, remoteUserID string) {
+	selfNodeID, err := h.client.GetSelfNodeID(ctx)
+	if err != nil {
+		if h.log != nil {
+			h.log.Warn("clawhire.connection.removed: cannot resolve self node ID", zap.Error(err))
+		}
+		return
+	}
+	h.publish(ctx, platformNodeID, "clawhire.connection.removed", protocol.ClawHireConnectionRemovedPayload{
+		TrustMeshNodeID: selfNodeID,
+		RemoteUserID:    remoteUserID,
+		RemovedAt:       time.Now().UTC().Format(time.RFC3339),
+	}, "")
+}
+
 // NotifyClawHireProgress publishes clawhire.progress.reported when a todo reports
 // progress on a task that originated from ClawHire.
 func (h *WebhookHandler) NotifyClawHireProgress(ctx context.Context, task *model.TaskDetail, message string) {

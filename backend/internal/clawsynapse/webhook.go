@@ -814,6 +814,32 @@ func (h *WebhookHandler) handleChatError(c *gin.Context, webhook protocol.Webhoo
 	transport.WriteData(c, http.StatusOK, detail)
 }
 
+// NotifyConnectionEstablished dispatches a platform-specific connection.established
+// notification. Implements handler.ConnectionNotifier.
+func (h *WebhookHandler) NotifyConnectionEstablished(ctx context.Context, platform, platformNodeID, remoteUserID string) {
+	switch platform {
+	case "clawhire":
+		h.NotifyClawHireConnectionEstablished(ctx, platformNodeID, remoteUserID)
+	default:
+		if h.log != nil {
+			h.log.Warn("NotifyConnectionEstablished: unknown platform", zap.String("platform", platform))
+		}
+	}
+}
+
+// NotifyConnectionRemoved dispatches a platform-specific connection.removed
+// notification. Implements handler.ConnectionNotifier.
+func (h *WebhookHandler) NotifyConnectionRemoved(ctx context.Context, platform, platformNodeID, remoteUserID string) {
+	switch platform {
+	case "clawhire":
+		h.NotifyClawHireConnectionRemoved(ctx, platformNodeID, remoteUserID)
+	default:
+		if h.log != nil {
+			h.log.Warn("NotifyConnectionRemoved: unknown platform", zap.String("platform", platform))
+		}
+	}
+}
+
 func (h *WebhookHandler) sendKnowledgeError(targetNode string, payload protocol.KnowledgeQueryPayload, errMsg string) {
 	h.publish(context.Background(), targetNode, "knowledge.result", protocol.KnowledgeResultPayload{
 		QueryID:   payload.QueryID,

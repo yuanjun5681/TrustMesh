@@ -83,3 +83,19 @@ type ClawHireProgressReportedPayload struct {
 	Summary    string  `json:"summary"`
 	ReportedAt string  `json:"reportedAt"`
 }
+
+// ClawHireConnectionEstablishedPayload is the message body of clawhire.connection.established.
+// Sent by TrustMesh after a user successfully binds their ClawHire account.
+type ClawHireConnectionEstablishedPayload struct {
+	TrustMeshNodeID string `json:"trustMeshNodeId"`
+	RemoteUserID    string `json:"remoteUserId"`
+	LinkedAt        string `json:"linkedAt"`
+}
+
+// ClawHireConnectionRemovedPayload is the message body of clawhire.connection.removed.
+// Sent by TrustMesh after a user unbinds their ClawHire account.
+type ClawHireConnectionRemovedPayload struct {
+	TrustMeshNodeID string `json:"trustMeshNodeId"`
+	RemoteUserID    string `json:"remoteUserId"`
+	RemovedAt       string `json:"removedAt"`
+}

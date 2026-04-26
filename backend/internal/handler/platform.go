@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -8,13 +9,20 @@ import (
 	"trustmesh/backend/internal/transport"
 )
 
-
-type PlatformHandler struct {
-	store *store.Store
+// ConnectionNotifier sends platform-specific connection lifecycle notifications
+// via the ClawSynapse network. Satisfied by *clawsynapse.WebhookHandler.
+type ConnectionNotifier interface {
+	NotifyConnectionEstablished(ctx context.Context, platform, platformNodeID, remoteUserID string)
+	NotifyConnectionRemoved(ctx context.Context, platform, platformNodeID, remoteUserID string)
 }
 
-func NewPlatformHandler(s *store.Store) *PlatformHandler {
-	return &PlatformHandler{store: s}
+type PlatformHandler struct {
+	store    *store.Store
+	notifier ConnectionNotifier
+}
+
+func NewPlatformHandler(s *store.Store, notifier ConnectionNotifier) *PlatformHandler {
+	return &PlatformHandler{store: s, notifier: notifier}
 }
 
 // Upsert godoc
@@ -46,6 +54,9 @@ func (h *PlatformHandler) Upsert(c *gin.Context) {
 		transport.WriteError(c, appErr)
 		return
 	}
+
+	go h.notifier.NotifyConnectionEstablished(context.Background(), conn.Platform, conn.PlatformNodeID, conn.RemoteUserID)
+
 	transport.WriteData(c, http.StatusOK, conn)
 }
 
@@ -70,9 +81,24 @@ func (h *PlatformHandler) Delete(c *gin.Context) {
 	platform := c.Param("platform")
 	platformNodeID := c.Param("platformNodeId")
 
+	// Fetch remoteUserID before deleting so we can notify with it.
+	conns := h.store.ListPlatformConnections(userID)
+	var remoteUserID string
+	for _, c := range conns {
+		if c.Platform == platform && c.PlatformNodeID == platformNodeID {
+			remoteUserID = c.RemoteUserID
+			break
+		}
+	}
+
 	if appErr := h.store.DeletePlatformConnection(userID, platform, platformNodeID); appErr != nil {
 		transport.WriteError(c, appErr)
 		return
 	}
+
+	if remoteUserID != "" {
+		go h.notifier.NotifyConnectionRemoved(context.Background(), platform, platformNodeID, remoteUserID)
+	}
+
 	c.Status(http.StatusNoContent)
 }

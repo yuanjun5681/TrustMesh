@@ -58,7 +58,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	clawSynapseHandler := handler.NewClawSynapseHandler(clawClient)
 	notificationHandler := handler.NewNotificationHandler(s)
 	joinRequestHandler := handler.NewJoinRequestHandler(s, clawClient, cfg)
-	platformHandler := handler.NewPlatformHandler(s)
+	platformHandler := handler.NewPlatformHandler(s, webhookHandler)
 	realtimeHandler := handler.NewRealtimeHandler(s)
 
 	// Knowledge base components (optional - requires EMBEDDING_API_KEY)
