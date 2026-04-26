@@ -41,6 +41,14 @@ type ClawHireSubmissionRejectedPayload struct {
 
 // ── Outbound: TrustMesh → ClawHire ────────────────────────────────────────
 
+// ClawHireTaskStartedPayload is the message body of clawhire.task.started.
+// Sent when TrustMesh dispatches the first execution agent after plan is finalized.
+type ClawHireTaskStartedPayload struct {
+	TaskID     string `json:"taskId"`
+	ContractID string `json:"contractId,omitempty"`
+	StartedAt  string `json:"startedAt"`
+}
+
 // ClawHireSubmissionArtifact is one deliverable referenced by a submission.
 type ClawHireSubmissionArtifact struct {
 	Type string `json:"type"`

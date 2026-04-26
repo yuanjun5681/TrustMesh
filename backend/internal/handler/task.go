@@ -492,6 +492,7 @@ func (h *TaskHandler) ApprovePlan(c *gin.Context) {
 	if h.webhookHandler != nil {
 		h.webhookHandler.PublishTaskCreated(task)
 		task = h.webhookHandler.DispatchNextTodo(c.Request.Context(), task)
+		h.webhookHandler.NotifyClawHireTaskStarted(c.Request.Context(), task)
 	}
 	transport.WriteData(c, http.StatusOK, task)
 }
@@ -620,7 +621,7 @@ func (h *TaskHandler) buildPMTaskMessage(userID, projectID, taskID, userContent 
 		return payload
 	}
 
-	candidates := buildCandidateAgents(project.PMAgent.ID, h.store.ListAgents(userID))
+	candidates := buildCandidateAgents(project.PMAgent.ID, h.store.ListAgents(userID), true)
 	payload.Project = &protocol.PMTaskProject{
 		Name:        project.Name,
 		Description: project.Description,
@@ -629,10 +630,10 @@ func (h *TaskHandler) buildPMTaskMessage(userID, projectID, taskID, userContent 
 	return payload
 }
 
-func buildCandidateAgents(pmAgentID string, agents []model.Agent) []protocol.PMTaskAgent {
+func buildCandidateAgents(pmAgentID string, agents []model.Agent, includePMSelf bool) []protocol.PMTaskAgent {
 	out := make([]protocol.PMTaskAgent, 0, len(agents))
 	for _, agent := range agents {
-		if agent.ID == pmAgentID {
+		if agent.ID == pmAgentID && !includePMSelf {
 			continue
 		}
 		out = append(out, protocol.PMTaskAgent{

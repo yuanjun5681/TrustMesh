@@ -167,6 +167,7 @@ func (h *WebhookHandler) handleTaskCreate(c *gin.Context, webhook protocol.Webho
 
 	h.publishTaskCreated(task)
 	task = h.dispatchNextTodo(context.Background(), task)
+	h.NotifyClawHireTaskStarted(context.Background(), task)
 	transport.WriteData(c, http.StatusOK, task)
 }
 

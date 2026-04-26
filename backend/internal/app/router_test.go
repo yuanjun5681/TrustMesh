@@ -574,7 +574,7 @@ func TestCreatePlanningTaskPublishesInitialPMBrief(t *testing.T) {
 	}
 
 	candidateAgents, ok := message["candidate_agents"].([]any)
-	if !ok || len(candidateAgents) != 2 {
+	if !ok || len(candidateAgents) != 3 {
 		t.Fatalf("unexpected candidate_agents: %#v", message["candidate_agents"])
 	}
 

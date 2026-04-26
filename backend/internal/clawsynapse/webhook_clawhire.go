@@ -133,6 +133,20 @@ func (h *WebhookHandler) NotifyClawHireSubmission(ctx context.Context, task *mod
 	}, ref.ExternalTaskID)
 }
 
+// NotifyClawHireTaskStarted publishes clawhire.task.started when the first execution
+// agent is dispatched on a task that originated from ClawHire.
+func (h *WebhookHandler) NotifyClawHireTaskStarted(ctx context.Context, task *model.TaskDetail) {
+	if task.ExternalRef == nil || task.ExternalRef.Platform != "clawhire" {
+		return
+	}
+	ref := task.ExternalRef
+	h.publish(ctx, ref.PlatformNodeID, "clawhire.task.started", protocol.ClawHireTaskStartedPayload{
+		TaskID:     ref.ExternalTaskID,
+		ContractID: ref.ContractID,
+		StartedAt:  time.Now().UTC().Format(time.RFC3339),
+	}, ref.ExternalTaskID)
+}
+
 // NotifyClawHireProgress publishes clawhire.progress.reported when a todo reports
 // progress on a task that originated from ClawHire.
 func (h *WebhookHandler) NotifyClawHireProgress(ctx context.Context, task *model.TaskDetail, message string) {
@@ -163,7 +177,7 @@ func (h *WebhookHandler) publishClawHirePMTaskMessage(ctx context.Context, userI
 		return
 	}
 
-	candidates := buildCandidateAgentsFromStore(project.PMAgent.ID, h.store.ListAgents(userID))
+	candidates := buildCandidateAgentsFromStore(project.PMAgent.ID, h.store.ListAgents(userID), true)
 	payload := protocol.PMTaskMessage{
 		SchemaVersion: "1.0",
 		TaskID:        task.ID,
@@ -184,10 +198,10 @@ func (h *WebhookHandler) publishClawHirePMTaskMessage(ctx context.Context, userI
 	}
 }
 
-func buildCandidateAgentsFromStore(pmAgentID string, agents []model.Agent) []protocol.PMTaskAgent {
+func buildCandidateAgentsFromStore(pmAgentID string, agents []model.Agent, includePMSelf bool) []protocol.PMTaskAgent {
 	out := make([]protocol.PMTaskAgent, 0, len(agents))
 	for _, agent := range agents {
-		if agent.ID == pmAgentID {
+		if agent.ID == pmAgentID && !includePMSelf {
 			continue
 		}
 		out = append(out, protocol.PMTaskAgent{
