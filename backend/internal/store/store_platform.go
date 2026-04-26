@@ -53,7 +53,7 @@ func (s *Store) UpsertPlatformConnection(userID string, in UpsertPlatformConnect
 		if c.Platform == in.Platform && c.PlatformNodeID == in.PlatformNodeID {
 			c.RemoteUserID = in.RemoteUserID
 			c.PMAgentID = in.PMAgentID
-			s.platformConnByNodeUser[platformConnKey(c.PlatformNodeID, c.UserID)] = c.ID
+			s.platformConnByNodeUser[platformConnKey(c.PlatformNodeID, c.RemoteUserID)] = c.ID
 
 			if err := s.persistPlatformConnectionUnsafe(c); err != nil {
 				return nil, mongoWriteError(err)
@@ -76,7 +76,7 @@ func (s *Store) UpsertPlatformConnection(userID string, in UpsertPlatformConnect
 	}
 	s.platformConns[conn.ID] = conn
 	s.userPlatformConns[userID] = append(s.userPlatformConns[userID], conn.ID)
-	s.platformConnByNodeUser[platformConnKey(conn.PlatformNodeID, conn.UserID)] = conn.ID
+	s.platformConnByNodeUser[platformConnKey(conn.PlatformNodeID, conn.RemoteUserID)] = conn.ID
 
 	if err := s.persistPlatformConnectionUnsafe(conn); err != nil {
 		return nil, mongoWriteError(err)
@@ -110,7 +110,7 @@ func (s *Store) DeletePlatformConnection(userID, platform, platformNodeID string
 			continue
 		}
 		delete(s.platformConns, id)
-		delete(s.platformConnByNodeUser, platformConnKey(c.PlatformNodeID, c.UserID))
+		delete(s.platformConnByNodeUser, platformConnKey(c.PlatformNodeID, c.RemoteUserID))
 		s.userPlatformConns[userID] = append(ids[:i], ids[i+1:]...)
 
 		if err := s.deletePlatformConnectionUnsafe(id); err != nil {

@@ -14,6 +14,7 @@ import { KnowledgePage } from '@/pages/KnowledgePage'
 import { MarketPage } from '@/pages/MarketPage'
 import { RoleDetailPage } from '@/pages/RoleDetailPage'
 import { SettingsPage } from '@/pages/SettingsPage'
+import { ConnectPage } from '@/pages/ConnectPage'
 import { useAuthStore } from '@/stores/authStore'
 import { Toaster } from '@/components/ui/sonner'
 import { RealtimeProvider } from '@/realtime/provider'
@@ -101,6 +102,9 @@ export default function App() {
 
             {/* Redirect */}
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
+
+            {/* Connect page: protected but no MainLayout */}
+            <Route path="/connect" element={<ConnectPage />} />
           </Routes>
         </BrowserRouter>
       </RealtimeProvider>

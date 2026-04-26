@@ -88,7 +88,8 @@
       "Bash(sed 's/-[^-]*$//')",
       "Bash(cat /Volumes/UWorks/Projects/TrustMesh/backend/internal/transport/*.go)",
       "Bash(rm:*)",
-      "Bash(python3 -c ':*)"
+      "Bash(python3 -c ':*)",
+      "mcp__Claude_in_Chrome__list_connected_browsers"
     ]
   }
 }

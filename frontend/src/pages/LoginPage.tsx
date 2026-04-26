@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuthStore } from '@/stores/authStore'
@@ -16,6 +16,8 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false)
   const setAuth = useAuthStore((s) => s.setAuth)
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const nextUrl = searchParams.get('next')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -24,7 +26,7 @@ export function LoginPage() {
     try {
       const res = await authApi.login({ email, password })
       setAuth(res.data.access_token, res.data.refresh_token, res.data.user)
-      navigate('/projects')
+      navigate(nextUrl ? decodeURIComponent(nextUrl) : '/projects')
     } catch (err) {
       const message = err instanceof ApiRequestError ? err.message : '登录失败，请重试'
       toast.error(message)
@@ -42,7 +44,7 @@ export function LoginPage() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(109,95,245,0.15),transparent_60%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,rgba(139,127,248,0.1),transparent_60%)]" />
         {/* Grid overlay */}
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(139,127,248,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(139,127,248,0.03)_1px,transparent_1px)] bg-[size:48px_48px]" />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(139,127,248,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(139,127,248,0.03)_1px,transparent_1px)] bg-size-[48px_48px]" />
 
         <div className="relative z-10 flex flex-col items-center px-12 max-w-lg">
           {/* Logo */}
@@ -60,7 +62,7 @@ export function LoginPage() {
           />
 
           {/* Bottom tagline */}
-          <div className="mt-10 flex items-center gap-3 text-sm text-[#71717a]">
+          <div className="mt-10 flex items-center gap-3 text-sm text-muted-foreground">
             <span className="inline-block size-2 rounded-full bg-[#22c55e] animate-pulse" />
             多 Agent 协作网络
           </div>

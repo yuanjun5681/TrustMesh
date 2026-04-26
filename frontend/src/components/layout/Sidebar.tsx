@@ -1,4 +1,4 @@
-import { Link, useLocation, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams, useNavigate } from 'react-router-dom'
 import {
   FolderKanban,
   Plus,
@@ -12,6 +12,7 @@ import {
   Briefcase,
   Loader2,
   Settings,
+  ChevronsUpDown,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -19,6 +20,15 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Avatar } from '@/components/ui/avatar'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
 import { AgentStatusIcon, ProjectWorkStatusDot } from '@/components/shared/StatusBadge'
 import { TrustMeshLogo } from '@/components/shared/TrustMeshLogo'
 import { useProjects } from '@/hooks/useProjects'
@@ -69,6 +79,7 @@ function ProjectSidebarStatus({ status }: { status: ProjectWorkStatus }) {
 
 export function Sidebar({ onCreateProject }: SidebarProps) {
   const location = useLocation()
+  const navigate = useNavigate()
   const { projectId } = useParams()
   const { data: projects } = useProjects()
   const { data: agents } = useAgents()
@@ -178,17 +189,6 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
           >
             <Briefcase className="size-4 shrink-0" />
             {!collapsed && <span>岗位市场</span>}
-          </Link>
-
-          <Link
-            to="/settings"
-            className={cn(
-              'flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-              isActive('/settings') && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-            )}
-          >
-            <Settings className="size-4 shrink-0" />
-            {!collapsed && <span>设置</span>}
           </Link>
         </div>
 
@@ -307,20 +307,53 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
 
       {/* Footer */}
       <div className="p-2">
-        <div className={cn('flex items-center gap-2', collapsed ? 'flex-col' : 'px-2')}>
-          {user && (
-            <div className={cn('flex items-center gap-2 min-w-0', collapsed ? '' : 'flex-1')}>
-              <Avatar fallback={user.name} seed={user.id} kind="user" size="sm" />
-              {!collapsed && <span className="truncate text-sm">{user.name}</span>}
-            </div>
-          )}
-          <Button variant="ghost" size="icon" className="size-7 shrink-0" onClick={toggleTheme}>
-            {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
-          </Button>
-          <Button variant="ghost" size="icon" className="size-7 shrink-0" onClick={logout}>
-            <LogOut className="size-4" />
-          </Button>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className={cn(
+              'flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground outline-none',
+              collapsed && 'justify-center px-0'
+            )}
+          >
+            {user && (
+              <>
+                <Avatar fallback={user.name} seed={user.id} kind="user" size="sm" className="shrink-0" />
+                {!collapsed && (
+                  <>
+                    <span className="truncate flex-1 text-left">{user.name}</span>
+                    <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
+                  </>
+                )}
+              </>
+            )}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-56">
+            {user && (
+              <>
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="pb-1.5">
+                    <div className="font-medium text-foreground">{user.name}</div>
+                    <div className="text-xs text-muted-foreground font-normal truncate">{user.email}</div>
+                  </DropdownMenuLabel>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            <DropdownMenuItem onClick={() => navigate('/settings')}>
+              <Settings />
+              设置
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={toggleTheme}>
+              {isDark ? <Sun /> : <Moon />}
+              {isDark ? '切换亮色模式' : '切换暗色模式'}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={logout}>
+              <LogOut />
+              退出登录
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </aside>
   )

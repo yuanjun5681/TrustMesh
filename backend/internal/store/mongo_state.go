@@ -864,7 +864,7 @@ func (s *Store) loadPlatformConnections() (map[string]*model.PlatformConnection,
 		c := conns[i]
 		items[c.ID] = &c
 		userConns[c.UserID] = append(userConns[c.UserID], c.ID)
-		byNodeUser[platformConnKey(c.PlatformNodeID, c.UserID)] = c.ID
+		byNodeUser[platformConnKey(c.PlatformNodeID, c.RemoteUserID)] = c.ID
 	}
 	return items, userConns, byNodeUser, nil
 }
