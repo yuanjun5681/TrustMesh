@@ -260,7 +260,14 @@ func (h *WebhookHandler) handleTodoComplete(c *gin.Context, webhook protocol.Web
 	h.publishTaskAndTodoStatusChanges(task, payload.TodoID, "completed", webhook.From, "todo.complete")
 	task = h.dispatchNextTodo(context.Background(), task)
 	if todo := findTodo(task, payload.TodoID); todo != nil {
-		h.NotifyClawHireSubmission(context.Background(), task, todo)
+		msg := todo.Result.Summary
+		if msg == "" {
+			msg = todo.Result.Output
+		}
+		h.NotifyClawHireProgress(context.Background(), task, msg)
+	}
+	if task.Status == "done" {
+		h.NotifyClawHireSubmission(context.Background(), task)
 	}
 	transport.WriteData(c, http.StatusOK, task)
 }

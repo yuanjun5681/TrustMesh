@@ -118,9 +118,9 @@ func (h *WebhookHandler) handleClawHireSubmissionRejected(c *gin.Context, webhoo
 
 // ── Outbound: TrustMesh → ClawHire ────────────────────────────────────────
 
-// NotifyClawHireSubmission publishes clawhire.submission.created when a todo completes
-// on a task that originated from ClawHire.
-func (h *WebhookHandler) NotifyClawHireSubmission(ctx context.Context, task *model.TaskDetail, todo *model.Todo) {
+// NotifyClawHireSubmission publishes clawhire.submission.created when a task reaches
+// "done" status on a task that originated from ClawHire.
+func (h *WebhookHandler) NotifyClawHireSubmission(ctx context.Context, task *model.TaskDetail) {
 	if task.ExternalRef == nil || task.ExternalRef.Platform != "clawhire" {
 		return
 	}
@@ -128,7 +128,7 @@ func (h *WebhookHandler) NotifyClawHireSubmission(ctx context.Context, task *mod
 	h.publish(ctx, ref.PlatformNodeID, "clawhire.submission.created", protocol.ClawHireSubmissionCreatedPayload{
 		TaskID:      ref.ExternalTaskID,
 		ContractID:  ref.ContractID,
-		Summary:     todo.Result.Output,
+		Summary:     task.Result.Summary,
 		SubmittedAt: time.Now().UTC().Format(time.RFC3339),
 	}, ref.ExternalTaskID)
 }
