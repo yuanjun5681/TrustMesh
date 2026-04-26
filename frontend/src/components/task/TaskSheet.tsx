@@ -39,6 +39,11 @@ function TaskSheetBody({ task }: { task: TaskDetail }) {
         <div className="flex items-center gap-2 flex-wrap pr-8">
           <TaskStatusBadge status={task.status} />
           <PriorityBadge priority={task.priority} />
+          {task.external_ref?.platform === 'clawhire' && (
+            <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium bg-amber-500/10 text-amber-600 border border-amber-500/20">
+              <span className="font-bold">CH</span> ClawHire 任务
+            </span>
+          )}
         </div>
         <SheetTitle className="text-lg mt-1">{task.title}</SheetTitle>
         {task.description && (

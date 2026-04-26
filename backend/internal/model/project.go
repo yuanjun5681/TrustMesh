@@ -20,8 +20,10 @@ type Project struct {
 	Description string             `json:"description" bson:"description"`
 	Status      string             `json:"status" bson:"status"`
 	TaskSummary ProjectTaskSummary `json:"task_summary" bson:"task_summary"`
-	PMAgentID   string             `json:"-" bson:"pm_agent_id"`
-	PMAgent     PMAgentSummary     `json:"pm_agent" bson:"pm_agent"`
-	CreatedAt   time.Time          `json:"created_at" bson:"created_at"`
-	UpdatedAt   time.Time          `json:"updated_at" bson:"updated_at"`
+	PMAgentID            string             `json:"-" bson:"pm_agent_id"`
+	PMAgent              PMAgentSummary     `json:"pm_agent" bson:"pm_agent"`
+	SourcePlatform       string             `json:"source_platform,omitempty"         bson:"source_platform,omitempty"`
+	SourcePlatformNodeID string             `json:"source_platform_node_id,omitempty" bson:"source_platform_node_id,omitempty"`
+	CreatedAt            time.Time          `json:"created_at" bson:"created_at"`
+	UpdatedAt            time.Time          `json:"updated_at" bson:"updated_at"`
 }

@@ -50,6 +50,10 @@ type Store struct {
 	knowledgeDocs     map[string]*model.KnowledgeDocument
 	userKnowledgeDocs map[string][]string // userID → []docID
 
+	platformConns        map[string]*model.PlatformConnection // connID → conn
+	userPlatformConns    map[string][]string                  // userID → []connID
+	platformConnByNodeUser map[string]string                  // platformNodeID+":"+remoteUserID → connID
+
 	mongoEnabled           bool
 	mongoClient            *mongo.Client
 	mongoUsers             *mongo.Collection
@@ -63,9 +67,10 @@ type Store struct {
 	mongoProcessedMessages *mongo.Collection
 	mongoNotifications     *mongo.Collection
 	mongoArtifacts         *mongo.Collection
-	mongoKnowledgeDocs     *mongo.Collection
-	mongoKnowledgeChunks   *mongo.Collection
-	mongoTimeout           time.Duration
+	mongoKnowledgeDocs       *mongo.Collection
+	mongoKnowledgeChunks     *mongo.Collection
+	mongoPlatformConnections *mongo.Collection
+	mongoTimeout             time.Duration
 	log                    *zap.Logger
 
 	userSubscribers map[string]map[chan model.UserStreamEvent]struct{}
@@ -104,9 +109,12 @@ func New() *Store {
 		joinRequests:       make(map[string]*model.JoinRequest),
 		userJoinRequests:   make(map[string][]string),
 		trustRequestIndex:  make(map[string]string),
-		knowledgeDocs:      make(map[string]*model.KnowledgeDocument),
-		userKnowledgeDocs:  make(map[string][]string),
-		userSubscribers:    make(map[string]map[chan model.UserStreamEvent]struct{}),
+		knowledgeDocs:          make(map[string]*model.KnowledgeDocument),
+		userKnowledgeDocs:      make(map[string][]string),
+		platformConns:          make(map[string]*model.PlatformConnection),
+		userPlatformConns:      make(map[string][]string),
+		platformConnByNodeUser: make(map[string]string),
+		userSubscribers:        make(map[string]map[chan model.UserStreamEvent]struct{}),
 	}
 }
 

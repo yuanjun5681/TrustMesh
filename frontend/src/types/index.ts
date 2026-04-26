@@ -59,6 +59,8 @@ export interface Project {
   status: ProjectStatus
   task_summary: ProjectTaskSummary
   pm_agent: PMAgentSummary
+  source_platform?: string
+  source_platform_node_id?: string
   created_at: string
   updated_at: string
 }
@@ -281,6 +283,13 @@ export interface TaskListItem {
   updated_at: string
 }
 
+export interface ExternalTaskRef {
+  platform: string
+  external_task_id: string
+  remote_user_id: string
+  platform_node_id: string
+}
+
 export interface TaskDetail {
   id: string
   project_id: string
@@ -301,6 +310,7 @@ export interface TaskDetail {
   interrupt_reason: string | null
   interrupted_from_status?: TaskStatus | null
   interrupt_count: number
+  external_ref?: ExternalTaskRef
   created_at: string
   updated_at: string
 }
@@ -742,4 +752,22 @@ export interface MarketRoleDetail extends MarketRoleListItem {
   identity_content: string
   soul_content: string
   agents_content: string
+}
+
+// ─── 平台连接 ───
+
+export interface PlatformConnection {
+  id: string
+  platform: string
+  platform_node_id: string
+  remote_user_id: string
+  pm_agent_id: string
+  linked_at: string
+}
+
+export interface UpsertPlatformConnectionRequest {
+  platform: string
+  platform_node_id: string
+  remote_user_id: string
+  pm_agent_id: string
 }

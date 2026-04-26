@@ -48,6 +48,7 @@ func (s *Store) enableMongo(cfg config.Config, log *zap.Logger) error {
 	s.mongoArtifacts = db.Collection("artifacts")
 	s.mongoKnowledgeDocs = db.Collection("knowledge_documents")
 	s.mongoKnowledgeChunks = db.Collection("knowledge_chunks")
+	s.mongoPlatformConnections = db.Collection("platform_connections")
 	s.mongoTimeout = cfg.MongoTimeout
 	if log != nil {
 		s.log = log
@@ -96,6 +97,7 @@ func (s *Store) clearMongoCollections() {
 	s.mongoArtifacts = nil
 	s.mongoKnowledgeDocs = nil
 	s.mongoKnowledgeChunks = nil
+	s.mongoPlatformConnections = nil
 }
 
 func (s *Store) mongoContext() (context.Context, context.CancelFunc) {
@@ -157,6 +159,10 @@ func (s *Store) ensureMongoIndexes() error {
 		s.mongoKnowledgeChunks: {
 			{Keys: bson.D{{Key: "document_id", Value: 1}, {Key: "chunk_index", Value: 1}}},
 			{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "project_id", Value: 1}}},
+		},
+		s.mongoPlatformConnections: {
+			{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "platform", Value: 1}, {Key: "platform_node_id", Value: 1}}, Options: options.Index().SetUnique(true)},
+			{Keys: bson.D{{Key: "platform_node_id", Value: 1}, {Key: "remote_user_id", Value: 1}}},
 		},
 	}
 
@@ -229,6 +235,10 @@ func (s *Store) loadMongoState() error {
 	if err != nil {
 		return err
 	}
+	platformConns, userPlatformConns, platformConnByNodeUser, err := s.loadPlatformConnections()
+	if err != nil {
+		return err
+	}
 	usersByMail := make(map[string]string, len(users))
 	for id, user := range users {
 		usersByMail[user.Email] = id
@@ -265,6 +275,9 @@ func (s *Store) loadMongoState() error {
 	s.userNotifications = userNotifications
 	s.knowledgeDocs = knowledgeDocs
 	s.userKnowledgeDocs = userKnowledgeDocs
+	s.platformConns = platformConns
+	s.userPlatformConns = userPlatformConns
+	s.platformConnByNodeUser = platformConnByNodeUser
 	return nil
 }
 
@@ -826,4 +839,57 @@ func (s *Store) persistArtifactUnsafe(artifact *model.TaskArtifact) error {
 	defer cancel()
 	_, err := s.mongoArtifacts.ReplaceOne(ctx, bson.M{"_id": artifact.TransferID}, artifact, options.Replace().SetUpsert(true))
 	return err
+}
+
+func (s *Store) loadPlatformConnections() (map[string]*model.PlatformConnection, map[string][]string, map[string]string, error) {
+	items := make(map[string]*model.PlatformConnection)
+	userConns := make(map[string][]string)
+	byNodeUser := make(map[string]string)
+	if s.mongoPlatformConnections == nil {
+		return items, userConns, byNodeUser, nil
+	}
+	ctx, cancel := s.mongoContext()
+	defer cancel()
+	cursor, err := s.mongoPlatformConnections.Find(ctx, bson.D{})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var conns []model.PlatformConnection
+	if err := cursor.All(ctx, &conns); err != nil {
+		return nil, nil, nil, err
+	}
+	for i := range conns {
+		c := conns[i]
+		items[c.ID] = &c
+		userConns[c.UserID] = append(userConns[c.UserID], c.ID)
+		byNodeUser[platformConnKey(c.PlatformNodeID, c.UserID)] = c.ID
+	}
+	return items, userConns, byNodeUser, nil
+}
+
+func (s *Store) persistPlatformConnectionUnsafe(conn *model.PlatformConnection) error {
+	if !s.mongoEnabled || s.mongoPlatformConnections == nil || conn == nil {
+		return nil
+	}
+	ctx, cancel := s.mongoContext()
+	defer cancel()
+	clone := *conn
+	_, err := s.mongoPlatformConnections.ReplaceOne(ctx, bson.M{"_id": conn.ID}, clone, options.Replace().SetUpsert(true))
+	return err
+}
+
+func (s *Store) deletePlatformConnectionUnsafe(connID string) error {
+	if !s.mongoEnabled || s.mongoPlatformConnections == nil || connID == "" {
+		return nil
+	}
+	ctx, cancel := s.mongoContext()
+	defer cancel()
+	_, err := s.mongoPlatformConnections.DeleteOne(ctx, bson.M{"_id": connID})
+	return err
+}
+
+func platformConnKey(platformNodeID, remoteUserID string) string {
+	return platformNodeID + ":" + remoteUserID
 }

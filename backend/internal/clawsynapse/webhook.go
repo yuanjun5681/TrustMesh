@@ -87,6 +87,12 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 		h.handleAgentInterrupt(c, payload)
 	case "chat.error":
 		h.handleChatError(c, payload)
+	case "clawhire.task.awarded":
+		h.handleClawHireTaskAwarded(c, payload)
+	case "clawhire.submission.accepted":
+		h.handleClawHireSubmissionAccepted(c, payload)
+	case "clawhire.submission.rejected":
+		h.handleClawHireSubmissionRejected(c, payload)
 	default:
 		transport.WriteError(c, transport.BadRequest("BAD_PAYLOAD", "unsupported webhook type"))
 	}
@@ -230,6 +236,7 @@ func (h *WebhookHandler) handleTodoProgress(c *gin.Context, webhook protocol.Web
 	}
 
 	h.publishTaskAndTodoStatusChanges(task, payload.TodoID, payload.Message, webhook.From, "todo.progress")
+	h.NotifyClawHireProgress(context.Background(), task, payload.Message)
 	transport.WriteData(c, http.StatusOK, task)
 }
 
@@ -251,6 +258,9 @@ func (h *WebhookHandler) handleTodoComplete(c *gin.Context, webhook protocol.Web
 
 	h.publishTaskAndTodoStatusChanges(task, payload.TodoID, "completed", webhook.From, "todo.complete")
 	task = h.dispatchNextTodo(context.Background(), task)
+	if todo := findTodo(task, payload.TodoID); todo != nil {
+		h.NotifyClawHireSubmission(context.Background(), task, todo)
+	}
 	transport.WriteData(c, http.StatusOK, task)
 }
 

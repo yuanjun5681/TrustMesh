@@ -11,6 +11,7 @@ import {
   BookOpen,
   Briefcase,
   Loader2,
+  Settings,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -178,6 +179,17 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
             <Briefcase className="size-4 shrink-0" />
             {!collapsed && <span>岗位市场</span>}
           </Link>
+
+          <Link
+            to="/settings"
+            className={cn(
+              'flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+              isActive('/settings') && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+            )}
+          >
+            <Settings className="size-4 shrink-0" />
+            {!collapsed && <span>设置</span>}
+          </Link>
         </div>
 
         <Separator className="my-2" />
@@ -209,8 +221,15 @@ export function Sidebar({ onCreateProject }: SidebarProps) {
                 'flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                 projectId === project.id && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
               )}
+              title={collapsed ? project.name : undefined}
             >
-              <FolderKanban className="size-4 shrink-0" />
+              {project.source_platform === 'clawhire' ? (
+                <span className="size-4 shrink-0 flex items-center justify-center rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 leading-none select-none">
+                  CH
+                </span>
+              ) : (
+                <FolderKanban className="size-4 shrink-0" />
+              )}
               {!collapsed && (
                 <>
                   <span className="truncate">{project.name}</span>

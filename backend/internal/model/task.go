@@ -106,9 +106,10 @@ type TaskDetail struct {
 	InterruptedAt   *time.Time     `json:"interrupted_at" bson:"interrupted_at"`
 	InterruptReason *string        `json:"interrupt_reason" bson:"interrupt_reason"`
 	InterruptedFrom *string        `json:"interrupted_from_status,omitempty" bson:"interrupted_from_status,omitempty"`
-	InterruptCount  int            `json:"interrupt_count" bson:"interrupt_count"`
-	CreatedAt       time.Time      `json:"created_at" bson:"created_at"`
-	UpdatedAt       time.Time      `json:"updated_at" bson:"updated_at"`
+	InterruptCount  int              `json:"interrupt_count" bson:"interrupt_count"`
+	ExternalRef     *ExternalTaskRef `json:"external_ref,omitempty" bson:"external_ref,omitempty"`
+	CreatedAt       time.Time        `json:"created_at" bson:"created_at"`
+	UpdatedAt       time.Time        `json:"updated_at" bson:"updated_at"`
 }
 
 func (t *TaskDetail) NextDispatchableTodo() *Todo {
