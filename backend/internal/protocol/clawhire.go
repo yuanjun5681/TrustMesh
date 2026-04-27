@@ -68,6 +68,7 @@ type ClawHireSubmissionCreatedPayload struct {
 	TaskID      string                       `json:"taskId"`
 	ContractID  string                       `json:"contractId,omitempty"`
 	Summary     string                       `json:"summary"`
+	FinalOutput string                       `json:"finalOutput,omitempty"`
 	Artifacts   []ClawHireSubmissionArtifact `json:"artifacts,omitempty"`
 	Evidence    *ClawHireSubmissionEvidence  `json:"evidence,omitempty"`
 	SubmittedAt string                       `json:"submittedAt"`

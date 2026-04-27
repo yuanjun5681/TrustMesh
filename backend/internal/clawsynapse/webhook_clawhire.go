@@ -129,6 +129,7 @@ func (h *WebhookHandler) NotifyClawHireSubmission(ctx context.Context, task *mod
 		TaskID:      ref.ExternalTaskID,
 		ContractID:  ref.ContractID,
 		Summary:     task.Result.Summary,
+		FinalOutput: task.Result.FinalOutput,
 		SubmittedAt: time.Now().UTC().Format(time.RFC3339),
 	}, ref.ExternalTaskID)
 }
