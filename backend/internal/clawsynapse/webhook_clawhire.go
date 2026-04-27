@@ -2,6 +2,7 @@ package clawsynapse
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -130,6 +131,7 @@ func (h *WebhookHandler) NotifyClawHireSubmission(ctx context.Context, task *mod
 		ContractID:  ref.ContractID,
 		Summary:     task.Result.Summary,
 		FinalOutput: task.Result.FinalOutput,
+		Artifacts:   h.buildSubmissionArtifacts(task),
 		SubmittedAt: time.Now().UTC().Format(time.RFC3339),
 	}, ref.ExternalTaskID)
 }
@@ -261,4 +263,23 @@ func remoteUserIDFromMetadata(metadata map[string]any) string {
 		}
 	}
 	return ""
+}
+
+// buildSubmissionArtifacts maps task artifacts to ClawHire submission artifacts.
+// Each artifact is exposed via the public download endpoint using PUBLIC_BASE_URL.
+// Artifacts are omitted when PUBLIC_BASE_URL is not configured.
+func (h *WebhookHandler) buildSubmissionArtifacts(task *model.TaskDetail) []protocol.ClawHireSubmissionArtifact {
+	if h.publicBaseURL == "" || len(task.Artifacts) == 0 {
+		return nil
+	}
+	base := strings.TrimRight(h.publicBaseURL, "/")
+	artifacts := make([]protocol.ClawHireSubmissionArtifact, 0, len(task.Artifacts))
+	for _, a := range task.Artifacts {
+		artifacts = append(artifacts, protocol.ClawHireSubmissionArtifact{
+			Type: "url",
+			URL:  fmt.Sprintf("%s/public/tasks/%s/artifacts/%s/content", base, task.ID, a.TransferID),
+			Name: a.FileName,
+		})
+	}
+	return artifacts
 }

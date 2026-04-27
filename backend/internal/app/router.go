@@ -37,7 +37,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	}
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 	clawClient := clawsynapse.NewClient(cfg.ClawSynapseAPIURL, cfg.ClawSynapseTimeout)
-	webhookHandler := clawsynapse.NewWebhookHandler(s, clawClient, log)
+	webhookHandler := clawsynapse.NewWebhookHandler(s, clawClient, log, cfg.PublicBaseURL)
 	peerSyncer := clawsynapse.NewPeerSyncer(clawClient, s, cfg.ClawSynapsePeerSync, log)
 	if peerSyncer != nil {
 		peerSyncer.Start()
@@ -92,6 +92,7 @@ func New(cfg config.Config, log *zap.Logger) (*App, error) {
 	}
 
 	engine.GET("/healthz", handler.Health)
+	engine.GET("/public/tasks/:id/artifacts/:artifactId/content", transferHandler.GetTaskArtifactContentPublic)
 	engine.GET("/webhook/clawsynapse", func(c *gin.Context) { c.Status(200) })
 	engine.POST("/webhook/clawsynapse", webhookHandler.HandleWebhook)
 

@@ -18,18 +18,20 @@ import (
 )
 
 type WebhookHandler struct {
-	store    *store.Store
-	client   *Client
-	log      *zap.Logger
-	embedder embedding.Client
-	qdrant   *knowledge.QdrantClient
+	store         *store.Store
+	client        *Client
+	log           *zap.Logger
+	embedder      embedding.Client
+	qdrant        *knowledge.QdrantClient
+	publicBaseURL string
 }
 
-func NewWebhookHandler(st *store.Store, client *Client, log *zap.Logger) *WebhookHandler {
+func NewWebhookHandler(st *store.Store, client *Client, log *zap.Logger, publicBaseURL string) *WebhookHandler {
 	return &WebhookHandler{
-		store:  st,
-		client: client,
-		log:    log,
+		store:         st,
+		client:        client,
+		log:           log,
+		publicBaseURL: publicBaseURL,
 	}
 }
 

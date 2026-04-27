@@ -17,6 +17,7 @@ services:
       - mongo
       - qdrant
     environment:
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       PORT: ${PORT:-8080}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       ALLOW_ALL_CORS: ${ALLOW_ALL_CORS:-false}

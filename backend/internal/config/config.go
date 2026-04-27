@@ -39,6 +39,9 @@ type Config struct {
 
 	// Market
 	MarketDataPath string
+
+	// Public artifact access
+	PublicBaseURL string
 }
 
 func Load() Config {
@@ -72,6 +75,8 @@ func Load() Config {
 		AssistantModel:  getEnv("ASSISTANT_MODEL", "gpt-4o-mini"),
 
 		MarketDataPath: getEnv("MARKET_DATA_PATH", "data/roles_index.json"),
+
+		PublicBaseURL: getEnv("PUBLIC_BASE_URL", ""),
 	}
 }
 

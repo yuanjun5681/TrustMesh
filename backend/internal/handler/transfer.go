@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"trustmesh/backend/internal/model"
 	"trustmesh/backend/internal/store"
 	"trustmesh/backend/internal/transport"
 )
@@ -43,6 +44,26 @@ func (h *TransferHandler) GetTaskArtifactContent(c *gin.Context) {
 		return
 	}
 
+	h.serveArtifact(c, artifact)
+}
+
+// GetTaskArtifactContentPublic serves artifact content without authentication.
+// Intended for external platforms (e.g. ClawHire) that receive artifact URLs
+// via outbound messages and need direct file access.
+func (h *TransferHandler) GetTaskArtifactContentPublic(c *gin.Context) {
+	taskID := c.Param("id")
+	artifactID := c.Param("artifactId")
+
+	artifact, appErr := h.store.GetArtifact(taskID, artifactID)
+	if appErr != nil {
+		transport.WriteError(c, appErr)
+		return
+	}
+
+	h.serveArtifact(c, artifact)
+}
+
+func (h *TransferHandler) serveArtifact(c *gin.Context, artifact *model.TaskArtifact) {
 	if artifact.LocalPath == "" {
 		transport.WriteError(c, transport.NotFound("artifact file path unavailable"))
 		return
