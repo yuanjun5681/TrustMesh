@@ -42,6 +42,8 @@ services:
       ASSISTANT_API_KEY: ${ASSISTANT_API_KEY:-}
       ASSISTANT_MODEL: ${ASSISTANT_MODEL:-gpt-4o-mini}
       MARKET_DATA_PATH: ${MARKET_DATA_PATH:-/app/data/roles_index.json}
+    ports:
+      - "8080:8080"
     volumes:
       - trustmesh-transfer-data:/var/lib/trustmesh-transfers:ro
       - trustmesh-knowledge-data:/var/lib/trustmesh-knowledge
