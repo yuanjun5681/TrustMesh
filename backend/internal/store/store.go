@@ -50,28 +50,28 @@ type Store struct {
 	knowledgeDocs     map[string]*model.KnowledgeDocument
 	userKnowledgeDocs map[string][]string // userID → []docID
 
-	platformConns        map[string]*model.PlatformConnection // connID → conn
-	userPlatformConns    map[string][]string                  // userID → []connID
-	platformConnByNodeUser map[string]string                  // platformNodeID+":"+remoteUserID → connID
+	platformConns          map[string]*model.PlatformConnection // connID → conn
+	userPlatformConns      map[string][]string                  // userID → []connID
+	platformConnByNodeUser map[string]string                    // platformNodeID+":"+remoteUserID → connID
 
-	mongoEnabled           bool
-	mongoClient            *mongo.Client
-	mongoUsers             *mongo.Collection
-	mongoAgents            *mongo.Collection
-	mongoJoinRequests      *mongo.Collection
-	mongoProjects          *mongo.Collection
-	mongoAgentChats        *mongo.Collection
-	mongoTasks             *mongo.Collection
-	mongoEvents            *mongo.Collection
-	mongoComments          *mongo.Collection
-	mongoProcessedMessages *mongo.Collection
-	mongoNotifications     *mongo.Collection
-	mongoArtifacts         *mongo.Collection
+	mongoEnabled             bool
+	mongoClient              *mongo.Client
+	mongoUsers               *mongo.Collection
+	mongoAgents              *mongo.Collection
+	mongoJoinRequests        *mongo.Collection
+	mongoProjects            *mongo.Collection
+	mongoAgentChats          *mongo.Collection
+	mongoTasks               *mongo.Collection
+	mongoEvents              *mongo.Collection
+	mongoComments            *mongo.Collection
+	mongoProcessedMessages   *mongo.Collection
+	mongoNotifications       *mongo.Collection
+	mongoArtifacts           *mongo.Collection
 	mongoKnowledgeDocs       *mongo.Collection
 	mongoKnowledgeChunks     *mongo.Collection
 	mongoPlatformConnections *mongo.Collection
 	mongoTimeout             time.Duration
-	log                    *zap.Logger
+	log                      *zap.Logger
 
 	userSubscribers map[string]map[chan model.UserStreamEvent]struct{}
 }
@@ -88,27 +88,27 @@ type AgentPresence struct {
 
 func New() *Store {
 	return &Store{
-		users:              make(map[string]*model.User),
-		usersByMail:        make(map[string]string),
-		agents:             make(map[string]*model.Agent),
-		agentByNode:        make(map[string]string),
-		projects:           make(map[string]*model.Project),
-		agentChats:         make(map[string]*model.AgentChat),
-		activeAgentChats:   make(map[string]string),
-		agentChatBySession: make(map[string]string),
-		tasks:              make(map[string]*model.TaskDetail),
-		projectTasks:       make(map[string][]string),
-		taskEvents:         make(map[string][]model.Event),
-		userEvents:         make(map[string][]*model.Event),
-		agentEvents:        make(map[string][]*model.Event),
-		processedMessages:  make(map[string]processedMessage),
-		taskArtifacts:      make(map[string][]model.TaskArtifact),
-		taskComments:       make(map[string][]model.Comment),
-		notifications:      make(map[string]*model.Notification),
-		userNotifications:  make(map[string][]string),
-		joinRequests:       make(map[string]*model.JoinRequest),
-		userJoinRequests:   make(map[string][]string),
-		trustRequestIndex:  make(map[string]string),
+		users:                  make(map[string]*model.User),
+		usersByMail:            make(map[string]string),
+		agents:                 make(map[string]*model.Agent),
+		agentByNode:            make(map[string]string),
+		projects:               make(map[string]*model.Project),
+		agentChats:             make(map[string]*model.AgentChat),
+		activeAgentChats:       make(map[string]string),
+		agentChatBySession:     make(map[string]string),
+		tasks:                  make(map[string]*model.TaskDetail),
+		projectTasks:           make(map[string][]string),
+		taskEvents:             make(map[string][]model.Event),
+		userEvents:             make(map[string][]*model.Event),
+		agentEvents:            make(map[string][]*model.Event),
+		processedMessages:      make(map[string]processedMessage),
+		taskArtifacts:          make(map[string][]model.TaskArtifact),
+		taskComments:           make(map[string][]model.Comment),
+		notifications:          make(map[string]*model.Notification),
+		userNotifications:      make(map[string][]string),
+		joinRequests:           make(map[string]*model.JoinRequest),
+		userJoinRequests:       make(map[string][]string),
+		trustRequestIndex:      make(map[string]string),
 		knowledgeDocs:          make(map[string]*model.KnowledgeDocument),
 		userKnowledgeDocs:      make(map[string][]string),
 		platformConns:          make(map[string]*model.PlatformConnection),
@@ -213,6 +213,7 @@ func copyTask(t *model.TaskDetail) *model.TaskDetail {
 			clone.Todos[i].CancelReason = &reason
 		}
 		clone.Todos[i].Result.Metadata = copyMap(clone.Todos[i].Result.Metadata)
+		clone.Todos[i].Result.ArtifactRefs = append([]model.TodoResultArtifactRef(nil), clone.Todos[i].Result.ArtifactRefs...)
 	}
 	return &clone
 }

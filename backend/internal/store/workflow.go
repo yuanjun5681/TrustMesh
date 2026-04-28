@@ -622,9 +622,10 @@ func (s *Store) CompleteTodoByNodeWithMessageID(nodeID, messageID string, in Tod
 	todo.Error = nil
 	todo.CancelReason = nil
 	todo.Result = model.TodoResult{
-		Summary:  strings.TrimSpace(in.Result.Summary),
-		Output:   strings.TrimSpace(in.Result.Output),
-		Metadata: copyMap(in.Result.Metadata),
+		Summary:      strings.TrimSpace(in.Result.Summary),
+		Output:       strings.TrimSpace(in.Result.Output),
+		ArtifactRefs: normalizeTodoResultArtifactRefs(in.Result.ArtifactRefs),
+		Metadata:     copyMap(in.Result.Metadata),
 	}
 	completed := fmt.Sprintf("todo completed: %s", todo.Title)
 	s.addEventUnsafe(task.UserID, task.ProjectID, task.ID, todo.ID, "agent", agent.ID, agent.Name, "todo_completed", &completed, map[string]any{"todo_id": todo.ID, "task_title": task.Title, "todo_title": todo.Title}, now)
@@ -1142,6 +1143,29 @@ func aggregateTaskResult(todos []model.Todo, status string) model.TaskResult {
 			"interrupted_todo_count": interruptedCount,
 		},
 	}
+}
+
+func normalizeTodoResultArtifactRefs(refs []model.TodoResultArtifactRef) []model.TodoResultArtifactRef {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]model.TodoResultArtifactRef, 0, len(refs))
+	for _, ref := range refs {
+		normalized := model.TodoResultArtifactRef{
+			ArtifactID: strings.TrimSpace(ref.ArtifactID),
+			TransferID: strings.TrimSpace(ref.TransferID),
+			Kind:       strings.TrimSpace(ref.Kind),
+			Label:      strings.TrimSpace(ref.Label),
+		}
+		if normalized.ArtifactID == "" && normalized.TransferID == "" && normalized.Label == "" {
+			continue
+		}
+		out = append(out, normalized)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func ensureTaskAcceptingUpdates(task *model.TaskDetail) *transport.AppError {

@@ -20,9 +20,17 @@ type TodoAssignee struct {
 }
 
 type TodoResult struct {
-	Summary  string         `json:"summary" bson:"summary"`
-	Output   string         `json:"output" bson:"output"`
-	Metadata map[string]any `json:"metadata" bson:"metadata"`
+	Summary      string                  `json:"summary" bson:"summary"`
+	Output       string                  `json:"output" bson:"output"`
+	ArtifactRefs []TodoResultArtifactRef `json:"artifact_refs,omitempty" bson:"artifact_refs,omitempty"`
+	Metadata     map[string]any          `json:"metadata" bson:"metadata"`
+}
+
+type TodoResultArtifactRef struct {
+	ArtifactID string `json:"artifact_id" bson:"artifact_id"`
+	TransferID string `json:"transfer_id,omitempty" bson:"transfer_id,omitempty"`
+	Kind       string `json:"kind" bson:"kind"`
+	Label      string `json:"label" bson:"label"`
 }
 
 type Todo struct {
@@ -86,26 +94,26 @@ type TaskListItem struct {
 }
 
 type TaskDetail struct {
-	ID              string         `json:"id" bson:"_id"`
-	UserID          string         `json:"-" bson:"user_id"`
-	ProjectID       string         `json:"project_id" bson:"project_id"`
-	Title           string         `json:"title" bson:"title"`
-	Description     string         `json:"description" bson:"description"`
-	Status          string         `json:"status" bson:"status"`
-	Priority        string         `json:"priority" bson:"priority"`
-	PMAgentID       string         `json:"-" bson:"pm_agent_id"`
-	PMAgent         PMAgentSummary `json:"pm_agent" bson:"pm_agent"`
-	Messages        []TaskMessage  `json:"messages,omitempty" bson:"messages,omitempty"`
-	Todos           []Todo         `json:"todos" bson:"todos"`
-	Artifacts       []TaskArtifact `json:"artifacts" bson:"-"`
-	Result          TaskResult     `json:"result" bson:"result"`
-	Version         int            `json:"version" bson:"version"`
-	CanceledAt      *time.Time     `json:"canceled_at" bson:"canceled_at"`
-	CanceledBy      *ActorRef      `json:"canceled_by" bson:"canceled_by"`
-	CancelReason    *string        `json:"cancel_reason" bson:"cancel_reason"`
-	InterruptedAt   *time.Time     `json:"interrupted_at" bson:"interrupted_at"`
-	InterruptReason *string        `json:"interrupt_reason" bson:"interrupt_reason"`
-	InterruptedFrom *string        `json:"interrupted_from_status,omitempty" bson:"interrupted_from_status,omitempty"`
+	ID              string           `json:"id" bson:"_id"`
+	UserID          string           `json:"-" bson:"user_id"`
+	ProjectID       string           `json:"project_id" bson:"project_id"`
+	Title           string           `json:"title" bson:"title"`
+	Description     string           `json:"description" bson:"description"`
+	Status          string           `json:"status" bson:"status"`
+	Priority        string           `json:"priority" bson:"priority"`
+	PMAgentID       string           `json:"-" bson:"pm_agent_id"`
+	PMAgent         PMAgentSummary   `json:"pm_agent" bson:"pm_agent"`
+	Messages        []TaskMessage    `json:"messages,omitempty" bson:"messages,omitempty"`
+	Todos           []Todo           `json:"todos" bson:"todos"`
+	Artifacts       []TaskArtifact   `json:"artifacts" bson:"-"`
+	Result          TaskResult       `json:"result" bson:"result"`
+	Version         int              `json:"version" bson:"version"`
+	CanceledAt      *time.Time       `json:"canceled_at" bson:"canceled_at"`
+	CanceledBy      *ActorRef        `json:"canceled_by" bson:"canceled_by"`
+	CancelReason    *string          `json:"cancel_reason" bson:"cancel_reason"`
+	InterruptedAt   *time.Time       `json:"interrupted_at" bson:"interrupted_at"`
+	InterruptReason *string          `json:"interrupt_reason" bson:"interrupt_reason"`
+	InterruptedFrom *string          `json:"interrupted_from_status,omitempty" bson:"interrupted_from_status,omitempty"`
 	InterruptCount  int              `json:"interrupt_count" bson:"interrupt_count"`
 	ExternalRef     *ExternalTaskRef `json:"external_ref,omitempty" bson:"external_ref,omitempty"`
 	CreatedAt       time.Time        `json:"created_at" bson:"created_at"`

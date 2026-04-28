@@ -303,6 +303,78 @@ func (s *Store) RecordExternalPlatformEvent(platform, externalTaskID, eventType,
 	return nil
 }
 
+func (s *Store) GetTaskForSystem(taskID string) (*model.TaskDetail, *transport.AppError) {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return nil, transport.NotFound("task not found")
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	task, ok := s.tasks[taskID]
+	if !ok {
+		return nil, transport.NotFound("task not found")
+	}
+	return s.copyTaskWithArtifactsUnsafe(task), nil
+}
+
+func (s *Store) MarkClawHireSubmissionPending(taskID string, missingTransferIDs []string) (*model.TaskDetail, *transport.AppError) {
+	taskID = strings.TrimSpace(taskID)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[taskID]
+	if !ok {
+		return nil, transport.NotFound("task not found")
+	}
+	if task.Result.Metadata == nil {
+		task.Result.Metadata = map[string]any{}
+	}
+	task.Result.Metadata["clawhire_submission_pending"] = true
+	task.Result.Metadata["clawhire_submission_missing_transfer_ids"] = append([]string(nil), missingTransferIDs...)
+	delete(task.Result.Metadata, "clawhire_submission_ready_at")
+	task.UpdatedAt = time.Now().UTC()
+	task.Version++
+
+	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.publishTaskUnsafe(task.ID)
+	return s.copyTaskWithArtifactsUnsafe(task), nil
+}
+
+func (s *Store) MarkClawHireSubmissionSent(taskID string, sentAt time.Time) (*model.TaskDetail, *transport.AppError) {
+	taskID = strings.TrimSpace(taskID)
+	if sentAt.IsZero() {
+		sentAt = time.Now().UTC()
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[taskID]
+	if !ok {
+		return nil, transport.NotFound("task not found")
+	}
+	if task.Result.Metadata == nil {
+		task.Result.Metadata = map[string]any{}
+	}
+	task.Result.Metadata["clawhire_submission_pending"] = false
+	task.Result.Metadata["clawhire_submission_sent_at"] = sentAt.UTC().Format(time.RFC3339)
+	delete(task.Result.Metadata, "clawhire_submission_missing_transfer_ids")
+	delete(task.Result.Metadata, "clawhire_submission_ready_at")
+	task.UpdatedAt = sentAt.UTC()
+	task.Version++
+
+	if err := s.persistTaskBundleUnsafe(task.ID); err != nil {
+		return nil, mongoWriteError(err)
+	}
+	s.publishTaskUnsafe(task.ID)
+	return s.copyTaskWithArtifactsUnsafe(task), nil
+}
+
 // GetTaskByExternalRef finds a task by its external platform reference.
 func (s *Store) GetTaskByExternalRef(platform, externalTaskID string) (*model.TaskDetail, *transport.AppError) {
 	s.mu.RLock()

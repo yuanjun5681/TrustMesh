@@ -63,7 +63,7 @@ type ClawHireSubmissionEvidence struct {
 }
 
 // ClawHireSubmissionCreatedPayload is the message body of clawhire.submission.created.
-// Sent when a todo in an externally-linked task completes.
+// Sent when an externally-linked task is done and declared artifacts are ready.
 type ClawHireSubmissionCreatedPayload struct {
 	TaskID      string                       `json:"taskId"`
 	ContractID  string                       `json:"contractId,omitempty"`

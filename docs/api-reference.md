@@ -316,6 +316,7 @@ export interface ApiListResponse<T> {
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `artifact_id` | `string` | 交付物 ID |
+| `transfer_id` | `string \| null` | ClawSynapse transfer ID；文件类交付物建议显式携带 |
 | `kind` | `"file" \| "link" \| "log" \| "report"` | 交付物类型 |
 | `label` | `string` | 展示名称 |
 

@@ -607,6 +607,14 @@ func (h *WebhookHandler) handleTransferReceived(c *gin.Context, webhook protocol
 		transport.WriteError(c, appErr)
 		return
 	}
+	if task, appErr := h.store.GetTaskForSystem(taskID); appErr == nil {
+		h.NotifyClawHireSubmission(context.Background(), task)
+	} else if h.log != nil {
+		h.log.Warn("transfer.received: cannot reload task for submission readiness check",
+			zap.String("task_id", taskID),
+			zap.Error(appErr),
+		)
+	}
 
 	transport.WriteData(c, http.StatusOK, gin.H{
 		"transfer_id": msg.TransferID,

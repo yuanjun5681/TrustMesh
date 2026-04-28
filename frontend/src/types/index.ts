@@ -219,7 +219,15 @@ export interface TodoAssignee {
 export interface TodoResult {
   summary: string
   output: string
+  artifact_refs?: TodoResultArtifactRef[]
   metadata: Record<string, unknown>
+}
+
+export interface TodoResultArtifactRef {
+  artifact_id: string
+  transfer_id?: string
+  kind: string
+  label: string
 }
 
 export type TaskStatus = 'planning' | 'review' | 'pending' | 'in_progress' | 'done' | 'failed' | 'canceled' | 'interrupted'

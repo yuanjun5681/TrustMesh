@@ -259,7 +259,7 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
       return lastMessage.ui_blocks
     }
     return null
-  }, [isPlanning, task?.messages])
+  }, [isPlanning, task])
 
   useEffect(() => {
     if (!isPlanning && !isReview) {

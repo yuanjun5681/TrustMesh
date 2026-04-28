@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -122,18 +123,63 @@ func (h *WebhookHandler) handleClawHireSubmissionRejected(c *gin.Context, webhoo
 // NotifyClawHireSubmission publishes clawhire.submission.created when a task reaches
 // "done" status on a task that originated from ClawHire.
 func (h *WebhookHandler) NotifyClawHireSubmission(ctx context.Context, task *model.TaskDetail) {
-	if task.ExternalRef == nil || task.ExternalRef.Platform != "clawhire" {
+	h.notifyClawHireSubmissionIfReady(ctx, task)
+}
+
+func (h *WebhookHandler) notifyClawHireSubmissionIfReady(ctx context.Context, task *model.TaskDetail) {
+	if task == nil || task.ExternalRef == nil || task.ExternalRef.Platform != "clawhire" {
+		return
+	}
+	if task.Status != "done" || clawHireSubmissionAlreadySent(task) {
+		return
+	}
+	missing := missingSubmissionTransferIDs(task)
+	if len(missing) > 0 {
+		if _, appErr := h.store.MarkClawHireSubmissionPending(task.ID, missing); appErr != nil && h.log != nil {
+			h.log.Warn("clawhire.submission.created: failed to mark pending",
+				zap.String("task_id", task.ID),
+				zap.Strings("missing_transfer_ids", missing),
+				zap.Error(appErr),
+			)
+		}
+		if h.log != nil {
+			h.log.Info("clawhire.submission.created delayed until declared artifacts arrive",
+				zap.String("task_id", task.ID),
+				zap.Strings("missing_transfer_ids", missing),
+			)
+		}
+		return
+	}
+	if h.client == nil {
 		return
 	}
 	ref := task.ExternalRef
-	h.publish(ctx, ref.PlatformNodeID, "clawhire.submission.created", protocol.ClawHireSubmissionCreatedPayload{
+	submittedAt := time.Now().UTC()
+	payload := protocol.ClawHireSubmissionCreatedPayload{
 		TaskID:      ref.ExternalTaskID,
 		ContractID:  ref.ContractID,
 		Summary:     task.Result.Summary,
 		FinalOutput: task.Result.FinalOutput,
 		Artifacts:   h.buildSubmissionArtifacts(task),
-		SubmittedAt: time.Now().UTC().Format(time.RFC3339),
-	}, ref.ExternalTaskID)
+		SubmittedAt: submittedAt.Format(time.RFC3339),
+	}
+	if _, err := h.client.Publish(ctx, ref.PlatformNodeID, "clawhire.submission.created", payload, ref.ExternalTaskID, h.clawHireOutboundMetadata(task)); err != nil {
+		if h.log != nil {
+			h.log.Warn("clawhire.submission.created publish failed",
+				zap.String("task_id", task.ID),
+				zap.String("external_task_id", ref.ExternalTaskID),
+				zap.Error(err),
+			)
+		}
+		return
+	}
+	if _, appErr := h.store.MarkClawHireSubmissionSent(task.ID, submittedAt); appErr != nil && h.log != nil {
+		h.log.Warn("clawhire.submission.created: failed to mark sent",
+			zap.String("task_id", task.ID),
+			zap.String("external_task_id", ref.ExternalTaskID),
+			zap.Error(appErr),
+		)
+	}
 }
 
 // NotifyClawHireTaskStarted publishes clawhire.task.started when the first execution
@@ -282,4 +328,135 @@ func (h *WebhookHandler) buildSubmissionArtifacts(task *model.TaskDetail) []prot
 		})
 	}
 	return artifacts
+}
+
+func (h *WebhookHandler) clawHireOutboundMetadata(task *model.TaskDetail) map[string]any {
+	metadata := map[string]any{
+		"trustmeshUserId": task.UserID,
+		"platform":        "clawhire",
+	}
+	if task.ExternalRef != nil && task.ExternalRef.RemoteUserID != "" {
+		metadata["clawhireAccountId"] = task.ExternalRef.RemoteUserID
+	}
+	return metadata
+}
+
+func clawHireSubmissionAlreadySent(task *model.TaskDetail) bool {
+	if task == nil || task.Result.Metadata == nil {
+		return false
+	}
+	sentAt, ok := task.Result.Metadata["clawhire_submission_sent_at"].(string)
+	return ok && strings.TrimSpace(sentAt) != ""
+}
+
+func missingSubmissionTransferIDs(task *model.TaskDetail) []string {
+	required := requiredSubmissionTransferIDs(task)
+	if len(required) == 0 {
+		return nil
+	}
+	received := make(map[string]struct{}, len(task.Artifacts))
+	for _, artifact := range task.Artifacts {
+		if id := strings.TrimSpace(artifact.TransferID); id != "" {
+			received[id] = struct{}{}
+		}
+	}
+	missing := make([]string, 0)
+	for _, id := range required {
+		if _, ok := received[id]; !ok {
+			missing = append(missing, id)
+		}
+	}
+	return missing
+}
+
+func requiredSubmissionTransferIDs(task *model.TaskDetail) []string {
+	if task == nil {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	out := make([]string, 0)
+	add := func(id string) {
+		id = strings.TrimSpace(strings.TrimPrefix(id, "transfer://"))
+		if id == "" {
+			return
+		}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	for _, todo := range task.Todos {
+		if todo.Status != "done" {
+			continue
+		}
+		for _, ref := range todo.Result.ArtifactRefs {
+			if ref.TransferID != "" {
+				add(ref.TransferID)
+				continue
+			}
+			if strings.EqualFold(strings.TrimSpace(ref.Kind), "file") {
+				add(ref.ArtifactID)
+			}
+		}
+		addTransferIDsFromMetadata(todo.Result.Metadata, add)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func addTransferIDsFromMetadata(metadata map[string]any, add func(string)) {
+	if metadata == nil {
+		return
+	}
+	for _, key := range []string{"transfer_ids", "transferIds"} {
+		if values, ok := metadata[key].([]any); ok {
+			for _, value := range values {
+				if id, ok := value.(string); ok {
+					add(id)
+				}
+			}
+		}
+		if values, ok := metadata[key].([]string); ok {
+			for _, id := range values {
+				add(id)
+			}
+		}
+	}
+	for _, key := range []string{"transfers", "artifact_transfers"} {
+		switch values := metadata[key].(type) {
+		case []any:
+			for _, value := range values {
+				switch v := value.(type) {
+				case string:
+					add(v)
+				case map[string]any:
+					if id, ok := v["transfer_id"].(string); ok {
+						add(id)
+					}
+					if id, ok := v["transferId"].(string); ok {
+						add(id)
+					}
+				}
+			}
+		case []map[string]any:
+			for _, value := range values {
+				if id, ok := value["transfer_id"].(string); ok {
+					add(id)
+				}
+				if id, ok := value["transferId"].(string); ok {
+					add(id)
+				}
+			}
+		case []map[string]string:
+			for _, value := range values {
+				add(value["transfer_id"])
+				add(value["transferId"])
+			}
+		case []string:
+			for _, id := range values {
+				add(id)
+			}
+		}
+	}
 }
